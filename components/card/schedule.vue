@@ -1,26 +1,46 @@
 <script setup>
     defineProps(["organizer", "event", "round", "race", "group", "date", "circuit"])
 
-    const getCardStyle = (organizer) => {
-        let style = "rounded-tr-3xl border-r-4 border-t-4 p-6 bg-white shadow-lg "
-        if(organizer === "ACI"){
+    const getCardStyle = (event) => {
+        let style = "rounded-tr-3xl border-r-4 border-t-4 p-2 lg:p-6 bg-white shadow-lg "
+        if(event === "MX-5 Cup Asia"){
             style += "border-red-500 shadow-red-500/20"
-        }else if(organizer === "97S"){
-            style += "border-black shadow-black/20"
-        }else if(organizer === "CRC"){
+        }else if(event === "1 Hour Series"){
+            style += "border-blue-800 shadow-blue-800/20"
+        }else if(event === "Open Wheel Series"){
+            style += "border-purple-800 shadow-purple-800/20"
+        }else if(event === "Sprint Series"){
             style += "border-yellow-500 shadow-yellow-500/20"
+        }else if(event === "Endurance Championship"){
+            style += "border-red-800 shadow-red-800/20"
+        }else if(event === "V8 Masters League"){
+            style += "border-blue-500 shadow-blue-500/20"
+        }else if(event === "BEGO Balap Cup"){
+            style += "border-orange-500 shadow-orange-500/20"
+        }else if(event === "Sprint Rally Challenge"){
+            style += "border-purple-500 shadow-purple-500/20"
         }
         return style
     }
 
-    const getTextStyle = (organizer) => {
+    const getTextStyle = (event) => {
         let style = " "
-        if(organizer === "ACI"){
+        if(event === "MX-5 Cup Asia"){
             style += "text-red-500"
-        }else if(organizer === "97S"){
-            style += "text-black"
-        }else if(organizer === "CRC"){
+        }else if(event === "1 Hour Series"){
+            style += "text-blue-800"
+        }else if(event === "Open Wheel Series"){
+            style += "text-purple-800"
+        }else if(event === "Sprint Series"){
             style += "text-yellow-500"
+        }else if(event === "Endurance Championship"){
+            style += "text-red-800"
+        }else if(event === "V8 Masters League"){
+            style += "text-blue-500"
+        }else if(event === "BEGO Balap Cup"){
+            style += "text-orange-500"
+        }else if(event === "Sprint Rally Challenge"){
+            style += "text-purple-500"
         }
         return style
     }
@@ -56,17 +76,17 @@
 </script>
 
 <template>
-    <div :class="getCardStyle(organizer)">
-        <div class="text-xl">
+    <div :class="getCardStyle(event)">
+        <div class="text-base lg:text-xl">
             {{ formatDate(date) }}
         </div>
-        <div :class="getTextStyle(organizer)">
-            <span class="font-bold text-xl">{{ organizer }} {{ event }} <span v-if="group != null">- {{ group }}</span></span>
+        <div :class="getTextStyle(event)">
+            <span class="font-bold text-base lg:text-xl">{{ organizer }} {{ event }} <span v-if="group != null">- {{ group }}</span></span>
         </div>
-        <div>
+        <div class="text-sm lg:text-base">
             Round {{ round }}: {{ circuit }}
         </div>
-        <div class="w-fit px-2 py-1 mt-2 bg-black text-white font-bold rounded-md">
+        <div class="w-fit px-2 py-1 mt-2 bg-black text-white font-bold rounded-md text-sm lg:text-base">
             {{ getStatus(date) }}
         </div>
     </div>
