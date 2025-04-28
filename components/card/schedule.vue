@@ -73,6 +73,16 @@
         }
     }
 
+    const getStatusStyle = (status) => {
+        let style = "w-fit px-2 py-1 mt-2 font-bold rounded-md text-sm lg:text-base text-white "
+        if(status === "Selesai"){
+            style += "bg-red-900"
+        }else{
+            style += "bg-red-500"
+        }
+        return style
+    }
+
 </script>
 
 <template>
@@ -86,7 +96,7 @@
         <div class="text-sm lg:text-base">
             Round {{ round }}: {{ circuit }}
         </div>
-        <div class="w-fit px-2 py-1 mt-2 bg-black text-white font-bold rounded-md text-sm lg:text-base">
+        <div :class="getStatusStyle(getStatus(date))">
             {{ getStatus(date) }}
         </div>
     </div>
