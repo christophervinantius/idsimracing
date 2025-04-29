@@ -17,7 +17,18 @@
     const { data: schedule, error } = await useAsyncData("schedule", async () => {
         const { data, error } = await $supabase
             .from("schedule")
-            .select("*")
+            .select(`
+                id,
+                round,
+                date,
+                circuit,
+                events (
+                    name,
+                    organizers (
+                        abbreviation
+                    )
+                )
+            `)
             .order("date", { ascending: true })
         if(error){
             throw error
@@ -32,6 +43,7 @@
     }
 
     onMounted(() => {
+        console.log(schedule.value)
         window.addEventListener("scroll", handleScrollTop)
     })
 
@@ -51,20 +63,21 @@
 
     const eventList = computed(() => {
         let events = []
-        events = schedule.value.map(item => item.event)
+        events = schedule.value.map(item => item.events.name)
+        events.sort()
         return ["Semua", ...new Set(events)]
     })
 
     const filteredSchedule = computed(() => {
         if(selectedStatus.value === "Semua"){
-            return schedule.value.filter(item => selectedEvent.value === "Semua" ? true : item.event === selectedEvent.value)
+            return schedule.value.filter(item => selectedEvent.value === "Semua" ? true : item.events.name === selectedEvent.value)
         }else if(selectedStatus.value === "Selesai"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.date)
                 const todayDate = new Date()
                 eventDate.setHours(0, 0, 0, 0)
                 todayDate.setHours(0, 0, 0, 0)
-                return eventDate < todayDate && (selectedEvent.value === "Semua" ? true : item.event === selectedEvent.value)
+                return eventDate < todayDate && (selectedEvent.value === "Semua" ? true : item.events.name === selectedEvent.value)
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
@@ -72,10 +85,10 @@
                 const todayDate = new Date()
                 eventDate.setHours(0, 0, 0, 0)
                 todayDate.setHours(0, 0, 0, 0)
-                return eventDate >= todayDate && (selectedEvent.value === "Semua" ? true : item.event === selectedEvent.value)
+                return eventDate >= todayDate && (selectedEvent.value === "Semua" ? true : item.events.name === selectedEvent.value)
             })
         }
-        return schedule.value.filter(item => item.event === selectedEvent.value)
+        return schedule.value.filter(item => item.events.name === selectedEvent.value)
     })
 
     const nextThreeRaces = computed(() => {
@@ -101,9 +114,8 @@
                 <div v-for="event in nextThreeRaces" :key="event.id">
                     <CardSchedule
                         :date="event.date"
-                        :organizer="event.organizer"
-                        :event="event.event"
-                        :group="event.group"
+                        :organizer="event.events.organizers.abbreviation"
+                        :event="event.events.name"
                         :round="event.round"
                         :circuit="event.circuit"
                     />
@@ -141,10 +153,9 @@
             <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
                 <div v-for="event in filteredSchedule" :id="event.id">
                     <CardSchedule
-                        :organizer="event.organizer"
-                        :event="event.event" 
+                        :event="event.events.name"
+                        :organizer="event.events.organizers.abbreviation"
                         :round="event.round"
-                        :group="event.group"
                         :date="event.date"
                         :circuit="event.circuit"
                     />

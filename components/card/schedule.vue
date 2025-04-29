@@ -1,15 +1,15 @@
 <script setup>
-    defineProps(["organizer", "event", "round", "race", "group", "date", "circuit"])
+    defineProps(["organizer", "event", "round", "race", "date", "circuit"])
 
     const getCardStyle = (event) => {
         let style = "rounded-tr-3xl border-r-4 border-t-4 p-2 lg:p-6 bg-white shadow-lg "
-        if(event === "MX-5 Cup Asia"){
+        if(event.startsWith("MX-5 Cup Asia")){
             style += "border-red-500 shadow-red-500/20"
-        }else if(event === "1 Hour Series"){
+        }else if(event.startsWith("1 Hour Series")){
             style += "border-blue-800 shadow-blue-800/20"
         }else if(event === "Open Wheel Series"){
             style += "border-purple-800 shadow-purple-800/20"
-        }else if(event === "Sprint Series"){
+        }else if(event.startsWith("Sprint Series")){
             style += "border-yellow-500 shadow-yellow-500/20"
         }else if(event === "Endurance Championship"){
             style += "border-red-800 shadow-red-800/20"
@@ -25,13 +25,13 @@
 
     const getTextStyle = (event) => {
         let style = " "
-        if(event === "MX-5 Cup Asia"){
+        if(event.startsWith("MX-5 Cup Asia")){
             style += "text-red-500"
-        }else if(event === "1 Hour Series"){
+        }else if(event.startsWith("1 Hour Series")){
             style += "text-blue-800"
         }else if(event === "Open Wheel Series"){
             style += "text-purple-800"
-        }else if(event === "Sprint Series"){
+        }else if(event.startsWith("Sprint Series")){
             style += "text-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "text-red-800"
@@ -91,7 +91,7 @@
             {{ formatDate(date) }}
         </div>
         <div :class="getTextStyle(event)">
-            <span class="font-bold text-base lg:text-xl">{{ organizer }} {{ event }} <span v-if="group != null">- {{ group }}</span></span>
+            <span class="font-bold text-base lg:text-xl">{{ organizer }} {{ event }}</span>
         </div>
         <div class="text-sm lg:text-base">
             Round {{ round }}: {{ circuit }}
