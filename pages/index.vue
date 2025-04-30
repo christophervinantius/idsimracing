@@ -1,4 +1,5 @@
 <script setup>
+
     useHead({
         title: "Indonesia Sim Racing",
         meta: [
@@ -43,7 +44,6 @@
     }
 
     onMounted(() => {
-        console.log(schedule.value)
         window.addEventListener("scroll", handleScrollTop)
     })
 
@@ -58,26 +58,29 @@
         })
     }
 
-    const selectedEvent = ref("Semua")
+    const selectedEvents = ref([])
+    const totalEvents = ref(0)
     const selectedStatus = ref("Semua")
 
     const eventList = computed(() => {
-        let events = []
-        events = schedule.value.map(item => item.events.name)
-        events.sort()
-        return ["Semua", ...new Set(events)]
+        const events = [...new Set(
+            schedule.value.map(item => item.events.name).sort()
+        )]
+        selectedEvents.value = [...new Set(events)]
+        totalEvents.value = events.length
+        return [...new Set(events)]
     })
 
     const filteredSchedule = computed(() => {
         if(selectedStatus.value === "Semua"){
-            return schedule.value.filter(item => selectedEvent.value === "Semua" ? true : item.events.name === selectedEvent.value)
+            return schedule.value.filter(item => selectedEvents.value.includes(item.events.name))
         }else if(selectedStatus.value === "Selesai"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.date)
                 const todayDate = new Date()
                 eventDate.setHours(0, 0, 0, 0)
                 todayDate.setHours(0, 0, 0, 0)
-                return eventDate < todayDate && (selectedEvent.value === "Semua" ? true : item.events.name === selectedEvent.value)
+                return eventDate < todayDate && (selectedEvents.value.includes(item.events.name))
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
@@ -85,20 +88,20 @@
                 const todayDate = new Date()
                 eventDate.setHours(0, 0, 0, 0)
                 todayDate.setHours(0, 0, 0, 0)
-                return eventDate >= todayDate && (selectedEvent.value === "Semua" ? true : item.events.name === selectedEvent.value)
+                return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name))
             })
         }
-        return schedule.value.filter(item => item.events.name === selectedEvent.value)
+        return schedule.value.filter(item => selectedEvents.value.includes(item.events.name))
     })
 
     const nextThreeRaces = computed(() => {
         const todayDate = new Date()
         todayDate.setHours(0, 0, 0, 0)
-        return schedule.value.filter(item => new Date(item.date) >= todayDate).slice(0, 3)
+        return schedule.value.filter(item => (new Date(item.date) >= todayDate && selectedEvents.value.includes(item.events.name))).slice(0, 3)
     })
 
     const resetFilter = () => {
-        selectedEvent.value = "Semua"
+        selectedEvents.value = [...eventList.value]
         selectedStatus.value = "Semua"
     }
 
@@ -106,11 +109,47 @@
 
 <template>
     <div>
+        <div class="px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+            <div class="text-center text-lg lg:text-2xl font-bold leading-6">
+                Kalender Indonesia Sim Racing 2025
+            </div>
+            <div v-if="schedule" class="mx-auto">
+                <div class="flex flex-col justify-center items-center gap-6 lg:gap-8">
+                    <div class="bg-red-50 p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-500 grid grid-cols-2 lg:grid-cols-5 gap-2">
+                        <label v-for="event in eventList" :key="event" class="flex items-center gap-2 text-sm lg:text-base">
+                            <input
+                                type="checkbox"
+                                :value="event"
+                                v-model="selectedEvents"
+                                class="accent-red-500"
+                            />
+                            {{ event }}
+                        </label>
+                    </div>
+                    <div class="flex flex-col lg:flex-row gap-2 items-center text-sm lg:text-base">
+                        <label for="status" name="status">Status:</label>
+                        <select id="status" name="status" class="border-2 border-gray-300 rounded-md p-2" v-model="selectedStatus">
+                            <option value="Semua">Semua</option>
+                            <option value="Selesai">Selesai</option>
+                            <option value="Mendatang">Mendatang</option>
+                        </select>
+                    </div>
+                    <div
+                        v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Semua'"
+                        class="text-white bg-red-500 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
+                        Reset Filter
+                    </div>
+                </div>
+            </div>
+            <div v-if="schedule && filteredSchedule.length > 0" class="text-center text-base lg:text-lg">
+                <label for="status" name="status">Total: {{ filteredSchedule.length }} balapan</label>
+            </div>
+        </div>
         <div class="bg-black px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
             <div class="text-white text-center text-lg lg:text-2xl font-bold leading-6">
                 Jadwal Balapan Terdekat
             </div>
-            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+            <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
                 <div v-for="event in nextThreeRaces" :key="event.id">
                     <CardSchedule
                         :date="event.date"
@@ -121,34 +160,13 @@
                     />
                 </div>
             </div>
+            <div v-if="filteredSchedule.length === 0" class="text-center text-white text-base lg:text-lg leading-6">
+                Tidak ada jadwal balapan yang ditemukan dengan filter ini.
+            </div>
         </div>
         <div class="px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
             <div class="text-black text-center text-lg lg:text-2xl font-bold leading-6">
-                Jadwal Lengkap Indonesia Sim Racing 2025
-            </div>
-            <div v-if="schedule" class="mx-auto">
-                <div class="flex flex-col lg:flex-row justify-center items-center gap-2 lg:gap-4">
-                    <div class="flex flex-col lg:flex-row gap-2 items-center text-sm lg:text-base">
-                        <label for="event" name="event">Event:</label>
-                        <select id="event" name="event" class="border-2 border-gray-300 rounded-md p-2" v-model="selectedEvent">
-                            <option v-for="event in eventList" :key="event" :value="event">
-                                {{ event }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="flex flex-col lg:flex-row gap-2 items-center text-sm lg:text-base">
-                        <label for="status" name="status">Status:</label>
-                        <select id="status" name="status" class="border-2 border-gray-300 rounded-md p-2" v-model="selectedStatus">
-                            <option value="Semua">Semua</option>
-                            <option value="Selesai">Selesai</option>
-                            <option value="Mendatang">Mendatang</option>
-                        </select>
-                    </div>
-                    <button v-if="selectedEvent !== 'Semua' || selectedStatus !== 'Semua'" @click="resetFilter" class="text-white bg-red-500 px-4 py-2 text-sm lg:text-base font-bold rounded-md cursor-pointer">Hapus Filter</button>
-                </div>
-            </div>
-            <div v-if="schedule && filteredSchedule.length > 0" class="text-center text-base lg:text-lg">
-                <label for="status" name="status">Total: {{ filteredSchedule.length }} balapan</label>
+                Jadwal Lengkap
             </div>
             <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
                 <div v-for="event in filteredSchedule" :id="event.id">
