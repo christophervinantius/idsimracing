@@ -1,26 +1,26 @@
 <script setup>
-    defineProps(["organizer", "event", "round", "race", "date", "circuit"])
+    defineProps(["organizer", "event", "round", "race", "date", "circuit", "link", "country", "country_2"])
 
     const { locale, t } = useI18n()
 
     const getCardStyle = (event) => {
-        let style = "rounded-tr-3xl border-r-4 border-t-4 p-2 lg:p-6 bg-white shadow-lg "
+        let style = "rounded-tr-3xl border-r-4 border-t-4 p-4 lg:p-6 bg-red-50 "
         if(event.startsWith("MX-5 Cup Asia")){
-            style += "border-red-500 shadow-red-500/20"
+            style += "border-red-500"
         }else if(event.startsWith("1 Hour Series")){
-            style += "border-blue-800 shadow-blue-800/20"
+            style += "border-blue-800"
         }else if(event === "Open Wheel Series"){
-            style += "border-purple-800 shadow-purple-800/20"
+            style += "border-purple-800"
         }else if(event.startsWith("Sprint Series")){
-            style += "border-yellow-500 shadow-yellow-500/20"
+            style += "border-yellow-500"
         }else if(event === "Endurance Championship"){
-            style += "border-red-800 shadow-red-800/20"
+            style += "border-red-800"
         }else if(event === "V8 Masters League"){
-            style += "border-blue-500 shadow-blue-500/20"
+            style += "border-blue-500"
         }else if(event === "B.E.G.O Balap Cup"){
-            style += "border-orange-500 shadow-orange-500/20"
+            style += "border-orange-500"
         }else if(event === "Sprint Rally Challenge"){
-            style += "border-purple-500 shadow-purple-500/20"
+            style += "border-purple-500"
         }
         return style
     }
@@ -55,7 +55,7 @@
             weekday: "long"
         }
         
-        newDate = newDate.toLocaleDateString(locale.value === "en" ? "en-US" : "id-ID", options)
+        newDate = newDate.toLocaleDateString(locale.value === "en" ? "en-UK" : "id-ID", options)
 
         return newDate
     }
@@ -78,7 +78,7 @@
     }
 
     const getStatusStyle = (status) => {
-        let style = "w-fit px-2 py-1 mt-2 font-bold rounded-md text-sm lg:text-base text-white "
+        let style = "w-fit px-2 py-1 font-bold rounded-md text-sm lg:text-base text-white "
         if(status === t("finished")){
             style += "bg-red-900"
         }else{
@@ -91,8 +91,17 @@
 
 <template>
     <div :class="getCardStyle(event)">
-        <div class="text-base lg:text-xl">
-            {{ formatDate(date) }}
+        <div class="flex items-center justify-between">
+            <div class="text-base lg:text-xl">
+                {{ formatDate(date) }}
+            </div>
+            <div v-if="country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
+                <Icon :name="`flag-${ country }-4x3`" mode="svg" />
+                <Icon :name="`flag-${ country_2 }-4x3`" mode="svg" />
+            </div>
+            <div v-else class="text-2xl lg:text-3xl">
+                <Icon :name="`flag-${ country }-4x3`" mode="svg" />
+            </div>
         </div>
         <div :class="getTextStyle(event)">
             <span class="font-bold text-base lg:text-xl">{{ organizer }} {{ event }}</span>
@@ -100,8 +109,18 @@
         <div class="text-sm lg:text-base">
             Round {{ round }}: {{ circuit }}
         </div>
-        <div :class="getStatusStyle(getStatus(date))">
-            {{ getStatus(date) }}
+        <div class="flex gap-2 items-center mt-2">
+            <div :class="getStatusStyle(getStatus(date))">
+                {{ getStatus(date) }}
+            </div>
+            <NuxtLink v-if="link" :to="link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 px-2 py-1 rounded-md font-bold cursor-pointer">
+                <div v-if="getStatus(date) === t('today') + '!'">
+                    <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
+                </div>
+                <div v-else="getStatus(date) === t('today')">
+                    <span class="text-sm lg:text-base">{{ $t("watchReplay") }}</span>
+                </div>
+            </NuxtLink>
         </div>
     </div>
 </template>

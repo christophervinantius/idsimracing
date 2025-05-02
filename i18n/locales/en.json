@@ -3,11 +3,14 @@
     "nearestRaces": "Nearest Upcoming Races",
     "fullCalendar": "Full Schedule",
     "noRacesFound": "No schedules found with this filter.",
+    "resetFilter": "Reset Filter",
     "all": "All",
     "finished": "Finished",
     "upcoming": "Upcoming",
     "totalRaces": "Total: {total} races",
     "today": "Today",
     "tomorrow": "Tomorrow",
-    "daysLeft": "{days} days to go"
+    "daysLeft": "{days} days to go",
+    "watchLive": "Watch Live",
+    "watchReplay": "Watch Replay"
 }

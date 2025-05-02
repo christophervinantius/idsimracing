@@ -3,11 +3,14 @@
     "nearestRaces": "Jadwal Balapan Terdekat",
     "fullCalendar": "Jadwal Lengkap",
     "noRacesFound": "Tidak ada jadwal balapan yang ditemukan dengan filter ini.",
+    "resetFilter": "Atur Ulang Filter",
     "all": "Semua",
     "finished": "Selesai",
     "upcoming": "Mendatang",
     "totalRaces": "Total: {total} balapan",
     "today": "Hari ini",
     "tomorrow": "Besok",
-    "daysLeft": "{days} hari lagi"
+    "daysLeft": "{days} hari lagi",
+    "watchLive": "Tonton Siaran Langsung",
+    "watchReplay": "Tonton Siaran Ulang"
 }

@@ -23,6 +23,9 @@
                 round,
                 date,
                 circuit,
+                stream_link,
+                country,
+                country_2,
                 events (
                     name,
                     organizers (
@@ -140,7 +143,7 @@
                     <div
                         v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Semua'"
                         class="text-white bg-red-500 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
-                        Reset Filter
+                        {{ $t('resetFilter') }}
                     </div>
                 </div>
             </div>
@@ -160,6 +163,9 @@
                         :event="event.events.name"
                         :round="event.round"
                         :circuit="event.circuit"
+                        :link="event.stream_link"
+                        :country="event.country"
+                        :country_2="event.country_2"
                     />
                 </div>
             </div>
@@ -179,6 +185,9 @@
                         :round="event.round"
                         :date="event.date"
                         :circuit="event.circuit"
+                        :link="event.stream_link"
+                        :country="event.country"
+                        :country_2="event.country_2"
                     />
                 </div>
             </div>
