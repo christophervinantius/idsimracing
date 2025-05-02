@@ -62,6 +62,9 @@
     const totalEvents = ref(0)
     const selectedStatus = ref("Semua")
 
+    const date = new Date()
+    const year = date.getFullYear()
+
     const eventList = computed(() => {
         const events = [...new Set(
             schedule.value.map(item => item.events.name).sort()
@@ -111,7 +114,7 @@
     <div>
         <div class="px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
             <div class="text-center text-lg lg:text-2xl font-bold leading-6">
-                Kalender Indonesia Sim Racing 2025
+                {{ $t('calendarTitle', {year: year}) }}
             </div>
             <div v-if="schedule" class="mx-auto">
                 <div class="flex flex-col justify-center items-center gap-6 lg:gap-8">
@@ -129,9 +132,9 @@
                     <div class="flex flex-col lg:flex-row gap-2 items-center text-sm lg:text-base">
                         <label for="status" name="status">Status:</label>
                         <select id="status" name="status" class="border-2 border-gray-300 rounded-md p-2" v-model="selectedStatus">
-                            <option value="Semua">Semua</option>
-                            <option value="Selesai">Selesai</option>
-                            <option value="Mendatang">Mendatang</option>
+                            <option value="Semua">{{ $t('all') }}</option>
+                            <option value="Selesai">{{ $t('finished') }}</option>
+                            <option value="Mendatang">{{ $t('upcoming') }}</option>
                         </select>
                     </div>
                     <div
@@ -142,12 +145,12 @@
                 </div>
             </div>
             <div v-if="schedule && filteredSchedule.length > 0" class="text-center text-base lg:text-lg">
-                <label for="status" name="status">Total: {{ filteredSchedule.length }} balapan</label>
+                <label for="status" name="status">{{ $t('totalRaces', {total: filteredSchedule.length}) }}</label>
             </div>
         </div>
         <div class="bg-black px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
             <div class="text-white text-center text-lg lg:text-2xl font-bold leading-6">
-                Jadwal Balapan Terdekat
+                {{ $t('nearestRaces') }}
             </div>
             <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
                 <div v-for="event in nextThreeRaces" :key="event.id">
@@ -161,12 +164,12 @@
                 </div>
             </div>
             <div v-if="filteredSchedule.length === 0" class="text-center text-white text-base lg:text-lg leading-6">
-                Tidak ada jadwal balapan yang ditemukan dengan filter ini.
+                {{ $t('noRacesFound') }}
             </div>
         </div>
         <div class="px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
             <div class="text-black text-center text-lg lg:text-2xl font-bold leading-6">
-                Jadwal Lengkap
+                {{ $t('fullCalendar') }}
             </div>
             <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
                 <div v-for="event in filteredSchedule" :id="event.id">
@@ -180,7 +183,7 @@
                 </div>
             </div>
             <div v-if="filteredSchedule.length === 0" class="text-center text-base lg:text-lg leading-6">
-                Tidak ada jadwal balapan yang ditemukan dengan filter ini.
+                {{ $t('noRacesFound') }}
             </div>
             <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-500 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
                 <Icon name="mi:arrow-up" size="2.5em"  mode="svg" />

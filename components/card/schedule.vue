@@ -1,6 +1,8 @@
 <script setup>
     defineProps(["organizer", "event", "round", "race", "date", "circuit"])
 
+    const { locale, t } = useI18n()
+
     const getCardStyle = (event) => {
         let style = "rounded-tr-3xl border-r-4 border-t-4 p-2 lg:p-6 bg-white shadow-lg "
         if(event.startsWith("MX-5 Cup Asia")){
@@ -15,7 +17,7 @@
             style += "border-red-800 shadow-red-800/20"
         }else if(event === "V8 Masters League"){
             style += "border-blue-500 shadow-blue-500/20"
-        }else if(event === "B.E.G.O. Balap Cup"){
+        }else if(event === "B.E.G.O Balap Cup"){
             style += "border-orange-500 shadow-orange-500/20"
         }else if(event === "Sprint Rally Challenge"){
             style += "border-purple-500 shadow-purple-500/20"
@@ -37,7 +39,7 @@
             style += "text-red-800"
         }else if(event === "V8 Masters League"){
             style += "text-blue-500"
-        }else if(event === "B.E.G.O. Balap Cup"){
+        }else if(event === "B.E.G.O Balap Cup"){
             style += "text-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "text-purple-500"
@@ -52,7 +54,9 @@
             day: "numeric",
             weekday: "long"
         }
-        newDate = newDate.toLocaleDateString("id-ID", options)
+        
+        newDate = newDate.toLocaleDateString(locale.value === "en" ? "en-US" : "id-ID", options)
+
         return newDate
     }
 
@@ -63,19 +67,19 @@
         todayDate.setHours(0, 0, 0, 0)
         const remainingDays = Math.ceil((eventDate.getTime() - todayDate.getTime()) / (1000 * 3600 * 24))
         if(remainingDays < 0){
-            return "Selesai"
+            return t("finished")
         }else if(remainingDays === 0){
-            return "Hari ini!"
+            return t("today") + "!"
         }else if(remainingDays === 1){
-            return "Besok"
+            return t("tomorrow")
         }else{
-            return `${remainingDays} hari lagi`
+            return t("daysLeft", {days: remainingDays})
         }
     }
 
     const getStatusStyle = (status) => {
         let style = "w-fit px-2 py-1 mt-2 font-bold rounded-md text-sm lg:text-base text-white "
-        if(status === "Selesai"){
+        if(status === t("finished")){
             style += "bg-red-900"
         }else{
             style += "bg-red-500"

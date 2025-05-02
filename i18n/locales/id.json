@@ -1,0 +1,13 @@
+{
+    "calendarTitle": "Kalender Indonesia Sim Racing {year}",
+    "nearestRaces": "Jadwal Balapan Terdekat",
+    "fullCalendar": "Jadwal Lengkap",
+    "noRacesFound": "Tidak ada jadwal balapan yang ditemukan dengan filter ini.",
+    "all": "Semua",
+    "finished": "Selesai",
+    "upcoming": "Mendatang",
+    "totalRaces": "Total: {total} balapan",
+    "today": "Hari ini",
+    "tomorrow": "Besok",
+    "daysLeft": "{days} hari lagi"
+}
