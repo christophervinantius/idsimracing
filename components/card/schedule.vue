@@ -1,10 +1,10 @@
 <script setup>
-    defineProps(["organizer", "event", "round", "race", "date", "circuit", "link", "country", "country_2"])
+    defineProps(["organizer", "event", "round", "race", "date", "circuit", "link", "country", "country_2", "discord"])
 
     const { locale, t } = useI18n()
 
     const getCardStyle = (event) => {
-        let style = "rounded-tr-3xl border-r-4 border-t-4 p-4 lg:p-6 bg-red-50 "
+        let style = "rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 p-4 lg:p-6 bg-red-50 "
         if(event.startsWith("MX-5 Cup Asia")){
             style += "border-red-500"
         }else if(event.startsWith("1 Hour Series")){
@@ -21,6 +21,18 @@
             style += "border-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "border-purple-500"
+        }
+        return style
+    }
+
+    const getOrganizerStyle = (organizer) => {
+        let style = "px-2 py-1 font-bold rounded-md text-sm lg:text-base cursor-pointer "
+        if(organizer === "ACI"){
+            style += "bg-red-500 hover:bg-red-400 text-white"
+        }else if(organizer === "97SRC"){
+            style += "bg-black hover:bg-neutral-600 text-white"
+        }else if(organizer === "CRC"){
+            style += "bg-yellow-500 hover:bg-yellow-400 text-black"
         }
         return style
     }
@@ -91,29 +103,32 @@
 
 <template>
     <div :class="getCardStyle(event)">
-        <div class="flex items-center justify-between">
-            <div class="text-base lg:text-xl">
-                {{ formatDate(date) }}
-            </div>
+        <div class="flex items-center justify-between mb-2">
+            <NuxtLink :to="discord" target="_blank" :class="getOrganizerStyle(organizer)">
+                {{ organizer }}
+            </NuxtLink>
             <div v-if="country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
-                <Icon :name="`flag-${ country }-4x3`" mode="svg" />
-                <Icon :name="`flag-${ country_2 }-4x3`" mode="svg" />
+                <Icon :name="`flag-${ country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
+                <Icon :name="`flag-${ country_2 }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
             </div>
-            <div v-else class="text-2xl lg:text-3xl">
-                <Icon :name="`flag-${ country }-4x3`" mode="svg" />
+            <div v-else-if="country_2 === null && country" class="text-2xl lg:text-3xl">
+                <Icon :name="`flag-${ country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
             </div>
         </div>
+        <div class="text-base lg:text-xl">
+            {{ formatDate(date) }}
+        </div>
         <div :class="getTextStyle(event)">
-            <span class="font-bold text-base lg:text-xl">{{ organizer }} {{ event }}</span>
+            <span class="font-bold text-base lg:text-xl">{{ event }}</span>
         </div>
         <div class="text-sm lg:text-base">
             Round {{ round }}: {{ circuit }}
         </div>
-        <div class="flex gap-2 items-center mt-2">
+        <div class="flex gap-1 lg:gap-2 items-center mt-2">
             <div :class="getStatusStyle(getStatus(date))">
                 {{ getStatus(date) }}
             </div>
-            <NuxtLink v-if="link" :to="link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 px-2 py-1 rounded-md font-bold cursor-pointer">
+            <NuxtLink v-if="link" :to="link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 hover:bg-blue-400 px-2 py-1 rounded-md font-bold cursor-pointer">
                 <div v-if="getStatus(date) === t('today') + '!'">
                     <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
                 </div>

@@ -1,7 +1,7 @@
 <template>
-    <div class="font-display">
+    <div class="container-fluid font-display">
         <Navbar />
-        <main class="container min-h-screen">
+        <main class="min-h-screen">
             <slot></slot>
         </main>
         <Footer />

@@ -29,7 +29,8 @@
                 events (
                     name,
                     organizers (
-                        abbreviation
+                        abbreviation,
+                        discord
                     )
                 )
             `)
@@ -166,6 +167,7 @@
                         :link="event.stream_link"
                         :country="event.country"
                         :country_2="event.country_2"
+                        :discord="event.events.organizers.discord"
                     />
                 </div>
             </div>
@@ -188,6 +190,7 @@
                         :link="event.stream_link"
                         :country="event.country"
                         :country_2="event.country_2"
+                        :discord="event.events.organizers.discord"
                     />
                 </div>
             </div>
