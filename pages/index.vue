@@ -104,7 +104,13 @@
     const nextThreeRaces = computed(() => {
         const todayDate = new Date()
         todayDate.setHours(0, 0, 0, 0)
-        return schedule.value.filter(item => (new Date(item.date) >= todayDate && selectedEvents.value.includes(item.events.name))).slice(0, 3)
+        return schedule.value.filter(item => {
+            const eventDate = new Date(item.date)
+            const todayDate = new Date()
+            eventDate.setHours(0, 0, 0, 0)
+            todayDate.setHours(0, 0, 0, 0)
+            return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name))  
+        }).slice(0, 3)
     })
 
     const resetFilter = () => {
