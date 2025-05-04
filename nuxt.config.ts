@@ -22,11 +22,12 @@ export default defineNuxtConfig({
   modules: ['@nuxt/icon', '@nuxtjs/i18n'],
 
   i18n: {
+    detectBrowserLanguage: false,
     defaultLocale: 'id',
     langDir: 'locales/',
     locales: [
-      { code: 'en', name: 'English', file: 'en.json' },
-      { code: 'id', name: 'Bahasa Indonesia', file: 'id.json' }
+      { code: 'id', name: 'Bahasa Indonesia', file: 'id.json' },
+      { code: 'en', name: 'English', file: 'en.json' }
     ]
   }
 })
