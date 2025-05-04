@@ -102,7 +102,6 @@
     })
 
     const nextThreeRaces = computed(() => {
-        console.log(schedule.value)
         return schedule.value.filter(item => {
             const eventDate = new Date(item.date)
             const todayDate = new Date()
