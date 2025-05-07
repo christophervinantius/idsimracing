@@ -4,20 +4,20 @@
     const { locale, t } = useI18n()
 
     const getCardStyle = (event) => {
-        let style = "rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 p-4 lg:p-6 bg-red-50 "
+        let style = "rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 p-4 lg:p-6 bg-red-50 dark:bg-slate-950 text-black dark:text-white "
         if(event.startsWith("MX-5 Cup Asia")){
             style += "border-red-500"
         }else if(event.startsWith("1 Hour Series")){
-            style += "border-blue-800"
+            style += "border-emerald-500"
         }else if(event === "Open Wheel Series"){
-            style += "border-purple-800"
+            style += "border-cyan-500"
         }else if(event.startsWith("Sprint Series")){
             style += "border-yellow-500"
         }else if(event === "Endurance Championship"){
-            style += "border-red-800"
+            style += "border-pink-500"
         }else if(event === "V8 Masters League"){
             style += "border-blue-500"
-        }else if(event === "B.E.G.O Balap Cup"){
+        }else if(event === "B.E.G.O. Balap Cup"){
             style += "border-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "border-purple-500"
@@ -30,7 +30,7 @@
         if(organizer === "ACI"){
             style += "bg-red-500 hover:bg-red-400 text-white"
         }else if(organizer === "97SRC"){
-            style += "bg-black hover:bg-neutral-600 text-white"
+            style += "bg-black dark:bg-white hover:bg-neutral-600 text-white dark:text-black"
         }else if(organizer === "CRC"){
             style += "bg-yellow-500 hover:bg-yellow-400 text-black"
         }
@@ -42,16 +42,16 @@
         if(event.startsWith("MX-5 Cup Asia")){
             style += "text-red-500"
         }else if(event.startsWith("1 Hour Series")){
-            style += "text-blue-800"
+            style += "text-emerald-500"
         }else if(event === "Open Wheel Series"){
-            style += "text-purple-800"
+            style += "text-cyan-500"
         }else if(event.startsWith("Sprint Series")){
             style += "text-yellow-500"
         }else if(event === "Endurance Championship"){
-            style += "text-red-800"
+            style += "text-pink-500"
         }else if(event === "V8 Masters League"){
             style += "text-blue-500"
-        }else if(event === "B.E.G.O Balap Cup"){
+        }else if(event === "B.E.G.O. Balap Cup"){
             style += "text-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "text-purple-500"
@@ -67,7 +67,7 @@
             weekday: "long"
         }
         
-        newDate = newDate.toLocaleDateString(locale.value === "en" ? "en-UK" : "id-ID", options)
+        newDate = newDate.toLocaleDateString(locale.value === "en" ? "en-US" : "id-ID", options)
 
         return newDate
     }
