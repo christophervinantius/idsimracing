@@ -19,7 +19,7 @@ export default defineNuxtConfig({
     }
   },
 
-  modules: ['@nuxt/icon', '@nuxtjs/i18n'],
+  modules: ['@nuxt/icon', '@nuxtjs/i18n', '@nuxt/image'],
 
   i18n: {
     detectBrowserLanguage: false,

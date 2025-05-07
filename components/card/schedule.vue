@@ -28,11 +28,11 @@
     const getOrganizerStyle = (organizer) => {
         let style = "px-2 py-1 font-bold rounded-md text-sm lg:text-base cursor-pointer "
         if(organizer === "ACI"){
-            style += "bg-red-500 hover:bg-red-400 text-white"
+            style += "bg-red-500 hover:bg-red-600 text-white"
         }else if(organizer === "97SRC"){
-            style += "bg-black dark:bg-white hover:bg-neutral-600 text-white dark:text-black"
+            style += "bg-black dark:bg-white hover:bg-neutral-600 dark:hover:bg-neutral-300 text-white dark:text-black"
         }else if(organizer === "CRC"){
-            style += "bg-yellow-500 hover:bg-yellow-400 text-black"
+            style += "bg-yellow-500 hover:bg-yellow-600 text-black"
         }
         return style
     }
