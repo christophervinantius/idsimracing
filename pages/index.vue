@@ -85,16 +85,12 @@
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.date)
                 const todayDate = new Date()
-                eventDate.setHours(0, 0, 0, 0)
-                todayDate.setHours(0, 0, 0, 0)
                 return eventDate < todayDate && (selectedEvents.value.includes(item.events.name))
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.date)
                 const todayDate = new Date()
-                eventDate.setHours(0, 0, 0, 0)
-                todayDate.setHours(0, 0, 0, 0)
                 return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name))
             })
         }
@@ -105,8 +101,6 @@
         return schedule.value.filter(item => {
             const eventDate = new Date(item.date)
             const todayDate = new Date()
-            eventDate.setHours(0, 0, 0, 0)
-            todayDate.setHours(0, 0, 0, 0)
             return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name))  
         }).slice(0, 3)
     })
@@ -153,7 +147,8 @@
                 </div>
             </div>
             <div v-if="schedule && filteredSchedule.length > 0" class="text-black dark:text-white text-center text-base lg:text-lg">
-                <label for="status" name="status">{{ $t('totalRaces', {total: filteredSchedule.length}) }}</label>
+                <div>{{ $t('totalRaces', {total: filteredSchedule.length}) }}</div>
+                <div>{{ $t('allTimesInYourTimezone') }}</div>
             </div>
         </div>
         <div class="bg-red-700 dark:bg-red-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">

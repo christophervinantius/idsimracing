@@ -61,23 +61,35 @@
 
     const formatDate = (date) => {
         let newDate = new Date(date)
-        let options = {
+
+        let dateOptions = {
             month: "long",
             day: "numeric",
             weekday: "long"
         }
         
-        newDate = newDate.toLocaleDateString(locale.value === "en" ? "en-US" : "id-ID", options)
+        newDate = newDate.toLocaleDateString(locale.value === "en" ? "en-US" : "id-ID", dateOptions)
 
         return newDate
+    }
+
+    const formatTime = (date) => {
+        let newTime = new Date(date)
+
+        let timeOptions = {
+            hour: "2-digit",
+            minute: "2-digit"
+        }
+
+        newTime = newTime.toLocaleTimeString(locale.value === "en" ? "en-US" : "id-ID", timeOptions)
+
+        return newTime
     }
 
     const getStatus = (date) => {
         let eventDate = new Date(date)
         let todayDate = new Date()
-        eventDate.setHours(0, 0, 0, 0)
-        todayDate.setHours(0, 0, 0, 0)
-        const remainingDays = Math.ceil((eventDate.getTime() - todayDate.getTime()) / (1000 * 3600 * 24))
+        let remainingDays = Math.floor((eventDate - todayDate) / (1000 * 60 * 60 * 24))
         if(remainingDays < 0){
             return t("finished")
         }else if(remainingDays === 0){
@@ -116,7 +128,7 @@
             </div>
         </div>
         <div class="text-base lg:text-xl">
-            {{ formatDate(date) }}
+            {{ formatDate(date) }} - {{  formatTime(date) }}
         </div>
         <div :class="getTextStyle(event)">
             <span class="font-bold text-base lg:text-xl">{{ event }}</span>

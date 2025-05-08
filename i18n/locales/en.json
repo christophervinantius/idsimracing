@@ -12,5 +12,6 @@
     "tomorrow": "Tomorrow",
     "daysLeft": "{days} days to go",
     "watchLive": "Watch live",
-    "watchReplay": "Watch replay"
+    "watchReplay": "Watch replay",
+    "allTimesInYourTimezone": "Date and time are displayed in your time zone—and may still change at any time."
 }
