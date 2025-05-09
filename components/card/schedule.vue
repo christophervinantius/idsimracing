@@ -1,5 +1,19 @@
 <script setup>
-    defineProps(["organizer", "event", "round", "race", "date", "circuit", "link", "country", "country_2", "discord"])
+    defineProps(
+        [
+            "organizer",
+            "event",
+            "round",
+            "race",
+            "date",
+            "finish_date",
+            "circuit",
+            "link",
+            "country",
+            "country_2",
+            "discord"
+    ]
+    )
 
     const { locale, t } = useI18n()
 

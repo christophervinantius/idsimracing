@@ -22,6 +22,7 @@
                 id,
                 round,
                 date,
+                finish_date,
                 circuit,
                 stream_link,
                 country,
@@ -83,13 +84,13 @@
             return schedule.value.filter(item => selectedEvents.value.includes(item.events.name))
         }else if(selectedStatus.value === "Selesai"){
             return schedule.value.filter(item => {
-                const eventDate = new Date(item.date)
+                const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
                 return eventDate < todayDate && (selectedEvents.value.includes(item.events.name))
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
-                const eventDate = new Date(item.date)
+                const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
                 return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name))
             })
@@ -99,7 +100,7 @@
 
     const nextThreeRaces = computed(() => {
         return schedule.value.filter(item => {
-            const eventDate = new Date(item.date)
+            const eventDate = new Date(item.finish_date)
             const todayDate = new Date()
             return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name))  
         }).slice(0, 3)
@@ -159,6 +160,7 @@
                 <div v-for="event in nextThreeRaces" :key="event.id">
                     <CardSchedule
                         :date="event.date"
+                        :finish_date="event.finish_date"
                         :organizer="event.events.organizers.abbreviation"
                         :event="event.events.name"
                         :round="event.round"
@@ -182,6 +184,7 @@
                 <div v-for="event in filteredSchedule" :id="event.id">
                     <CardSchedule
                         :event="event.events.name"
+                        :finish_date="event.finish_date"
                         :organizer="event.events.organizers.abbreviation"
                         :round="event.round"
                         :date="event.date"
