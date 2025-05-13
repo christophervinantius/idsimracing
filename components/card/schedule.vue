@@ -100,18 +100,23 @@
         return newTime
     }
 
-    const getStatus = (date) => {
+    const getStatus = (date, finish_date) => {
         let eventDate = new Date(date)
         let todayDate = new Date()
-        let remainingDays = Math.floor((eventDate - todayDate) / (1000 * 60 * 60 * 24))
-        if(remainingDays < 0){
+        let finishDate = new Date(finish_date)
+        let remainingEventDays = Math.floor((eventDate - todayDate) / (1000 * 60 * 60 * 24))
+        let remainingFinishDays = Math.floor((finishDate - todayDate) / (1000 * 60 * 60 * 24))
+        console.log(remainingEventDays, remainingFinishDays)
+        if(remainingEventDays < 0 && remainingFinishDays === remainingEventDays){
             return t("finished")
-        }else if(remainingDays === 0){
-            return t("today") + "!"
-        }else if(remainingDays === 1){
+        }else if(remainingEventDays < 0 && remainingFinishDays !== remainingEventDays){
+            return t("started")
+        }else if(remainingEventDays === 0){
+            return t("today")
+        }else if(remainingEventDays === 1){
             return t("tomorrow")
         }else{
-            return t("daysLeft", {days: remainingDays})
+            return t("daysLeft", {days: remainingEventDays})
         }
     }
 
@@ -151,14 +156,14 @@
             Round {{ round }}: {{ circuit }}
         </div>
         <div class="flex gap-1 lg:gap-2 items-center mt-2">
-            <div :class="getStatusStyle(getStatus(date))">
-                {{ getStatus(date) }}
+            <div :class="getStatusStyle(getStatus(date, finish_date))">
+                {{ getStatus(date, finish_date) }}
             </div>
             <NuxtLink v-if="link" :to="link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 hover:bg-blue-400 px-2 py-1 rounded-md font-bold cursor-pointer">
-                <div v-if="getStatus(date) === t('today') + '!'">
+                <div v-if="getStatus(date, finish_date) === t('today') || getStatus(date, finish_date) === t('started')">
                     <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
                 </div>
-                <div v-else="getStatus(date) === t('today')">
+                <div v-else="getStatus(date, finish_date) === t('today') || getStatus(date, finish_date) === t('started')">
                     <span class="text-sm lg:text-base">{{ $t("watchReplay") }}</span>
                 </div>
             </NuxtLink>
