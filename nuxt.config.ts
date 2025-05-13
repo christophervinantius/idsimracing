@@ -23,6 +23,7 @@ export default defineNuxtConfig({
 
   i18n: {
     detectBrowserLanguage: false,
+    strategy: 'no_prefix',
     defaultLocale: 'id',
     langDir: 'locales/',
     locales: [

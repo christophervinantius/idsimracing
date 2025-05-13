@@ -14,5 +14,17 @@
     "daysLeft": "{days} hari lagi",
     "watchLive": "Tonton siaran langsung",
     "watchReplay": "Tonton siaran ulang",
-    "allTimesInYourTimezone": "Tanggal dan waktu ditampilkan dalam zona waktu Anda—dan masih dapat berubah sewaktu-waktu."
+    "allTimesInYourTimezone": "Tanggal dan waktu ditampilkan dalam zona waktu Anda—dan masih dapat berubah sewaktu-waktu.",
+    "january": "Januari",
+    "february": "Februari",
+    "march": "Maret",
+    "april": "April",
+    "may": "Mei",
+    "june": "Juni",
+    "july": "Juli",
+    "august": "Agustus",
+    "september": "September",
+    "october": "Oktober",
+    "november": "November",
+    "december": "Desember"
 }

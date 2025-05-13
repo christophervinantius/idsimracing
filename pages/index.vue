@@ -1,6 +1,8 @@
 <script setup>
-
     useHead({
+        htmlAttrs: {
+            lang: "id"
+        },
         title: "Indonesia Sim Racing",
         meta: [
             {
@@ -11,7 +13,15 @@
     })
     useSeoMeta({
         title: "Indonesia Sim Racing",
-        description: "Jadwal Lengkap Indonesia Sim Racing 2025 - Assetto Corsa Indonesia, Croco Racing Community, 97th Sim Racing Community"
+        ogTitle: "Indonesia Sim Racing",
+        twitterTitle: "Indonesia Sim Racing",
+        description: "Jadwal Lengkap Indonesia Sim Racing 2025 - Assetto Corsa Indonesia, Croco Racing Community, 97th Sim Racing Community",
+        ogDescription: "Jadwal Lengkap Indonesia Sim Racing 2025 - Assetto Corsa Indonesia, Croco Racing Community, 97th Sim Racing Community",
+        twitterDescription: "Jadwal Lengkap Indonesia Sim Racing 2025 - Assetto Corsa Indonesia, Croco Racing Community, 97th Sim Racing Community",
+        ogImage: "https://idsimracing.pages.dev/images/1.png",
+        twitterImage: "https://idsimracing.pages.dev/images/1.png",
+        ogUrl: "https://idsimracing.pages.dev",
+        twitterCard: "summary_large_image",
     })
 
     const { $supabase } = useNuxtApp()
@@ -42,19 +52,22 @@
         return data
     })
 
+    const { locale, t } = useI18n()
+
     const showTopButton = ref(false)
 
     const handleScrollTop = () => {
         showTopButton.value = window.scrollY > 100
     }
 
-    onMounted(() => {
-        window.addEventListener("scroll", handleScrollTop)
-    })
+    const selectedEvents = ref([])
+    const selectedMonths = ref([])
+    const totalEvents = ref(0)
+    const totalMonths = ref(0)
+    const selectedStatus = ref("Semua")
 
-    onUnmounted(() => {
-        window.removeEventListener("scroll", handleScrollTop)
-    })
+    const date = new Date()
+    const year = date.getFullYear()
 
     const scrollToTop = () => {
         window.scrollTo({
@@ -63,51 +76,93 @@
         })
     }
 
-    const selectedEvents = ref([])
-    const totalEvents = ref(0)
-    const selectedStatus = ref("Semua")
-
-    const date = new Date()
-    const year = date.getFullYear()
-
     const eventList = computed(() => {
         const events = [...new Set(
             schedule.value.map(item => item.events.name).sort()
         )]
         selectedEvents.value = [...new Set(events)]
         totalEvents.value = events.length
-        return [...new Set(events)]
+        return events
+    })
+
+    const monthsList = computed(() => {
+        const months = [...new Set(
+            schedule.value.map(item => {
+                const month = new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" })
+                return month
+            })
+        )]
+        selectedMonths.value = [...new Set(months)]
+        totalMonths.value = months.length
+        return months
+    })
+
+    onMounted(() => {
+        const savedEvents = localStorage.getItem("selectedEvents")
+        const savedMonths = localStorage.getItem("selectedMonths")
+        const savedStatus = localStorage.getItem("selectedStatus")
+
+        if(savedEvents){
+            selectedEvents.value = JSON.parse(savedEvents)
+        }
+
+        if(savedMonths){
+            selectedMonths.value = JSON.parse(savedMonths)
+        }
+
+        if(savedStatus){
+            selectedStatus.value = savedStatus
+        }
+
+        window.addEventListener("scroll", handleScrollTop)
+
+        watch(selectedEvents, (newValue) => {
+            localStorage.setItem("selectedEvents", JSON.stringify(newValue))
+        })
+
+        watch(selectedMonths, (newValue) => {
+            localStorage.setItem("selectedMonths", JSON.stringify(newValue))
+        })
+
+        watch(selectedStatus, (newValue) => {
+            localStorage.setItem("selectedStatus", newValue)
+        })
+    })
+
+    onUnmounted(() => {
+        window.removeEventListener("scroll", handleScrollTop)
     })
 
     const filteredSchedule = computed(() => {
         if(selectedStatus.value === "Semua"){
-            return schedule.value.filter(item => selectedEvents.value.includes(item.events.name))
+            return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))))
         }else if(selectedStatus.value === "Selesai"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate < todayDate && (selectedEvents.value.includes(item.events.name))
+                return eventDate < todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))))
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name))
+                return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))))
             })
         }
-        return schedule.value.filter(item => selectedEvents.value.includes(item.events.name))
+        return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))))
     })
 
     const nextThreeRaces = computed(() => {
         return schedule.value.filter(item => {
             const eventDate = new Date(item.finish_date)
             const todayDate = new Date()
-            return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name))  
+            return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" })))
         }).slice(0, 3)
     })
 
     const resetFilter = () => {
         selectedEvents.value = [...eventList.value]
+        selectedMonths.value = [...monthsList.value]
         selectedStatus.value = "Semua"
     }
 
@@ -132,6 +187,17 @@
                             {{ event }}
                         </label>
                     </div>
+                    <div class="bg-red-50 dark:bg-slate-950 text-black dark:text-white p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-700 dark:border-red-900 grid grid-cols-2 lg:grid-cols-4 gap-2">
+                        <label v-for="month in monthsList" :key="month" class="flex items-center gap-2 text-sm lg:text-base">
+                            <input
+                                type="checkbox"
+                                :value="month"
+                                v-model="selectedMonths"
+                                class="accent-red-700 dark:accent-red-900"
+                            />
+                            {{ month }}
+                        </label>
+                    </div>
                     <div class="flex flex-col lg:flex-row gap-2 items-center text-sm lg:text-base">
                         <label for="status" name="status" class="text-black dark:text-white">Status:</label>
                         <select id="status" name="status" class="border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white" v-model="selectedStatus">
@@ -141,7 +207,7 @@
                         </select>
                     </div>
                     <div
-                        v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Semua'"
+                        v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Semua' || selectedMonths.length < totalMonths"
                         class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
                         {{ $t('resetFilter') }}
                     </div>
@@ -196,7 +262,7 @@
                     />
                 </div>
             </div>
-            <div v-if="filteredSchedule.length === 0" class="text-center text-base lg:text-lg leading-6">
+            <div v-if="filteredSchedule.length === 0" class="text-black dark:text-white text-center text-base lg:text-lg leading-6">
                 {{ $t('noRacesFound') }}
             </div>
             <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">

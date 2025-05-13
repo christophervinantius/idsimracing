@@ -1,13 +1,40 @@
 <script setup>
-    const mode = ref("light")
+    const { locale, setLocale } = useI18n()
+
+    const mode = ref(null)
+
+    onMounted(() => {
+        const savedMode = localStorage.getItem("mode")
+        
+        if(savedMode === "dark"){
+            mode.value = "dark"
+            document.documentElement.classList.add("dark")
+        }else{
+            mode.value = "light"
+            document.documentElement.classList.remove("dark")
+        }
+
+        const savedLocale = localStorage.getItem("locale")
+
+        if(savedLocale){
+            setLocale(savedLocale)
+        }else{
+            setLocale("id")
+        }
+    })
 
     const toggleMode = () => {
         const html = document.documentElement
         mode.value = mode.value === "light" ? "dark" : "light"
         html.classList.toggle("dark")
+        localStorage.setItem("mode", mode.value)
     }
 
-    const { locale } = useI18n();
+    const toggleLocale = () => {
+        const newLocale = locale.value === "id" ? "en" : "id"
+        setLocale(newLocale)
+        localStorage.setItem("locale", newLocale)
+    }
 </script>
 
 <template>
@@ -17,9 +44,9 @@
             <ul class="flex gap-4 lg:gap-16 text-sm lg:text-lg items-center">
                 <Icon v-if="mode === 'dark'" @click="toggleMode" class="cursor-pointer" name="material-symbols:dark-mode-rounded" size="1.5em" /> 
                 <Icon v-if="mode === 'light'" @click="toggleMode" class="cursor-pointer" name="material-symbols:light-mode-rounded" size="1.5em" />
-                <NuxtLink :to="$switchLocalePath(locale === 'id' ? 'en' : 'id')">
-                    {{ locale === 'id' ? 'ID' : 'EN' }}
-                </NuxtLink>
+                <div @click="toggleLocale" class="cursor-pointer">
+                    {{  locale === 'id' ? 'ID' : 'EN' }}
+                </div>
             </ul>
         </nav>
     </div>

@@ -12,7 +12,7 @@
             "country",
             "country_2",
             "discord"
-    ]
+        ]
     )
 
     const { locale, t } = useI18n()
@@ -106,7 +106,6 @@
         let finishDate = new Date(finish_date)
         let remainingEventDays = Math.floor((eventDate - todayDate) / (1000 * 60 * 60 * 24))
         let remainingFinishDays = Math.floor((finishDate - todayDate) / (1000 * 60 * 60 * 24))
-        console.log(remainingEventDays, remainingFinishDays)
         if(remainingEventDays < 0 && remainingFinishDays === remainingEventDays){
             return t("finished")
         }else if(remainingEventDays < 0 && remainingFinishDays !== remainingEventDays){
