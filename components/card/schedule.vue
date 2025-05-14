@@ -11,7 +11,9 @@
             "link",
             "country",
             "country_2",
-            "discord"
+            "discord",
+            "game",
+            "game_link"
         ]
     )
 
@@ -44,9 +46,21 @@
         if(organizer === "ACI"){
             style += "bg-red-500 hover:bg-red-600 text-white"
         }else if(organizer === "97SRC"){
-            style += "bg-black dark:bg-white hover:bg-neutral-600 dark:hover:bg-neutral-300 text-white dark:text-black"
+            style += "bg-white hover:bg-neutral-300 text-black"
         }else if(organizer === "CRC"){
             style += "bg-yellow-500 hover:bg-yellow-600 text-black"
+        }
+        return style
+    }
+
+    const getGameStyle = (game) => {
+        let style = "px-2 py-1 font-bold rounded-md text-sm lg:text-base cursor-pointer "
+        if(game === "AC"){
+            style += "bg-red-500 hover:bg-red-600 text-white"
+        }else if(game === "ACC"){
+            style += "bg-white hover:bg-neutral-300 text-red-600"
+        }else if(game === "RBR"){
+            style += "bg-black hover:bg-neutral-600 text-white"
         }
         return style
     }
@@ -134,9 +148,14 @@
 <template>
     <div :class="getCardStyle(event)">
         <div class="flex items-center justify-between mb-2">
-            <NuxtLink :to="discord" target="_blank" :class="getOrganizerStyle(organizer)">
-                {{ organizer }}
-            </NuxtLink>
+            <div class="flex items-center gap-1">
+                <NuxtLink :to="discord" target="_blank" :class="getOrganizerStyle(organizer)">
+                    {{ organizer }}
+                </NuxtLink>
+                <NuxtLink :to="game_link" target="_blank" :class="getGameStyle(game)">
+                    {{ game }}
+                </NuxtLink>
+            </div>
             <div v-if="country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
                 <Icon :name="`flag-${ country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
                 <Icon :name="`flag-${ country_2 }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />

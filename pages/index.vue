@@ -39,6 +39,10 @@
                 country_2,
                 events (
                     name,
+                    games (
+                        abbreviation,
+                        link
+                    ),
                     organizers (
                         abbreviation,
                         discord
@@ -52,7 +56,7 @@
         return data
     })
 
-    const { locale, t } = useI18n()
+    const { locale } = useI18n()
 
     const showTopButton = ref(false)
 
@@ -235,6 +239,8 @@
                         :country="event.country"
                         :country_2="event.country_2"
                         :discord="event.events.organizers.discord"
+                        :game="event.events.games.abbreviation"
+                        :game_link="event.events.games.link"
                     />
                 </div>
             </div>
@@ -259,6 +265,8 @@
                         :country="event.country"
                         :country_2="event.country_2"
                         :discord="event.events.organizers.discord"
+                        :game="event.events.games.abbreviation"
+                        :game_link="event.events.games.link"
                     />
                 </div>
             </div>
