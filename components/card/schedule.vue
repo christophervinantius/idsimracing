@@ -33,6 +33,8 @@
             style += "border-pink-500"
         }else if(event === "V8 Masters League"){
             style += "border-blue-500"
+        }else if(event === "Juniors"){
+            style += "border-lime-500"
         }else if(event === "B.E.G.O. Balap Cup"){
             style += "border-orange-500"
         }else if(event === "Sprint Rally Challenge"){
@@ -79,6 +81,8 @@
             style += "text-pink-500"
         }else if(event === "V8 Masters League"){
             style += "text-blue-500"
+        }else if(event === "Juniors"){
+            style += "text-lime-500"
         }else if(event === "B.E.G.O. Balap Cup"){
             style += "text-orange-500"
         }else if(event === "Sprint Rally Challenge"){
