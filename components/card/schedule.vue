@@ -138,7 +138,6 @@
         let finishDate = new Date(finish_date)
         let remainingEventDays = Math.floor((eventDate - todayDate) / (1000 * 60 * 60 * 24))
         let remainingFinishDays = Math.floor((finishDate - todayDate) / (1000 * 60 * 60 * 24))
-        console.log(remainingEventDays, remainingFinishDays)
         if(remainingEventDays < 0 && remainingFinishDays < 0){
             return t("finished")
         }else if(remainingEventDays < 0 && remainingFinishDays === 0){
