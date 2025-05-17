@@ -1,7 +1,6 @@
 <script setup>
     defineProps(
         [
-            "organizer",
             "event",
             "round",
             "race",
@@ -11,9 +10,24 @@
             "link",
             "country",
             "country_2",
+            "organizer",
+            "organizer_name",
+            "organizer_description",
             "discord",
+            "youtube",
+            "instagram",
+            "twitter",
+            "facebook",
+            "tiktok",
             "game",
             "game_link"
+        ]
+    )
+
+    const emits = defineEmits(
+        [
+            "organizerClick",
+            "gameClick"
         ]
     )
 
@@ -124,9 +138,10 @@
         let finishDate = new Date(finish_date)
         let remainingEventDays = Math.floor((eventDate - todayDate) / (1000 * 60 * 60 * 24))
         let remainingFinishDays = Math.floor((finishDate - todayDate) / (1000 * 60 * 60 * 24))
-        if(remainingEventDays < 0 && remainingFinishDays === remainingEventDays){
+        console.log(remainingEventDays, remainingFinishDays)
+        if(remainingEventDays < 0 && remainingFinishDays < 0){
             return t("finished")
-        }else if(remainingEventDays < 0 && remainingFinishDays !== remainingEventDays){
+        }else if(remainingEventDays < 0 && remainingFinishDays === 0){
             return t("started")
         }else if(remainingEventDays === 0){
             return t("today")
@@ -153,12 +168,28 @@
     <div :class="getCardStyle(event)">
         <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-1">
-                <NuxtLink :to="discord" target="_blank" :class="getOrganizerStyle(organizer)">
+                <!-- <NuxtLink :to="discord" target="_blank" :class="getOrganizerStyle(organizer)">
                     {{ organizer }}
-                </NuxtLink>
-                <NuxtLink :to="game_link" target="_blank" :class="getGameStyle(game)">
+                </NuxtLink> -->
+                <button
+                    data-modal-toggle="organizationModal"
+                    data-modal-target="organizationModal"
+                    :class="getOrganizerStyle(organizer)"
+                    @click="emits('organizerClick')"
+                >
+                    {{ organizer }}
+                </button>
+                <!-- <NuxtLink :to="game_link" target="_blank" :class="getGameStyle(game)">
                     {{ game }}
-                </NuxtLink>
+                </NuxtLink> -->
+                <button
+                    data-modal-toggle="gameModal"
+                    data-modal-target="gameModal"
+                    :class="getGameStyle(game)"
+                    @click="emits('gameClick')"
+                >
+                    {{ game }}
+                </button>
             </div>
             <div v-if="country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
                 <Icon :name="`flag-${ country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
