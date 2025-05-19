@@ -1,4 +1,5 @@
 <script setup>
+
     useHead({
         htmlAttrs: {
             lang: "id"
@@ -11,6 +12,7 @@
             }
         ]
     })
+
     useSeoMeta({
         title: "Indonesia Sim Racing",
         ogTitle: "Indonesia Sim Racing",
@@ -41,11 +43,19 @@
                     name,
                     games (
                         abbreviation,
+                        name,
                         link
                     ),
                     organizers (
                         abbreviation,
-                        discord
+                        name,
+                        description,
+                        discord,
+                        youtube,
+                        instagram,
+                        twitter,
+                        facebook,
+                        tiktok
                     )
                 )
             `)
@@ -102,6 +112,10 @@
     })
 
     onMounted(() => {
+        useFlowbite(() => {
+            initFlowbite();
+        })
+
         const savedEvents = localStorage.getItem("selectedEvents")
         const savedMonths = localStorage.getItem("selectedMonths")
         const savedStatus = localStorage.getItem("selectedStatus")
@@ -170,10 +184,42 @@
         selectedStatus.value = "Semua"
     }
 
+    const organizationData = reactive({
+        organizer: "",
+        name: "",
+        description: "",
+        youtube: "",
+        discord: "",
+        instagram: "",
+        twitter: "",
+        facebook: "",
+        tiktok: ""
+    })
+
+    const setOrganizationData = (organizer, name, description, youtube, discord, instagram, twitter, facebook, tiktok) => {
+        organizationData.organizer = organizer
+        organizationData.name = name
+        organizationData.description = description
+        organizationData.youtube = youtube
+        organizationData.discord = discord
+        organizationData.instagram = instagram
+        organizationData.twitter = twitter
+        organizationData.facebook = facebook
+        organizationData.tiktok = tiktok
+    }
+
+    provide("organizationData", organizationData)
+
 </script>
 
 <template>
     <div>
+        <div id="organizationModal" data-modal-backdrop="static" tabindex="-1" aria-hidden="true" class="fixed top-0 left-0 right-0 z-50 hidden w-full p-4 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-1rem)] max-h-full">
+            <ModalOrganization />
+        </div>
+        <div id="gameModal" data-modal-backdrop="static" tabindex="-1" aria-hidden="true" class="fixed top-0 left-0 right-0 z-50 hidden w-full p-4 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-1rem)] max-h-full">
+            <ModalGame />
+        </div>
         <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
             <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
                 {{ $t('calendarTitle', {year: year}) }}
@@ -186,7 +232,7 @@
                                 type="checkbox"
                                 :value="event"
                                 v-model="selectedEvents"
-                                class="accent-red-700 dark:accent-red-900"
+                                class="rounded-sm text-red-700 dark:text-red-900"
                             />
                             {{ event }}
                         </label>
@@ -197,7 +243,7 @@
                                 type="checkbox"
                                 :value="month"
                                 v-model="selectedMonths"
-                                class="accent-red-700 dark:accent-red-900"
+                                class="rounded-sm text-red-700 dark:text-red-900"
                             />
                             {{ month }}
                         </label>
@@ -231,16 +277,24 @@
                     <CardSchedule
                         :date="event.date"
                         :finish_date="event.finish_date"
-                        :organizer="event.events.organizers.abbreviation"
                         :event="event.events.name"
                         :round="event.round"
                         :circuit="event.circuit"
                         :link="event.stream_link"
                         :country="event.country"
                         :country_2="event.country_2"
+                        :organizer="event.events.organizers.abbreviation"
+                        :organizer_name="event.events.organizers.name"
+                        :organizer_description="event.events.organizers.description"
                         :discord="event.events.organizers.discord"
+                        :youtube="event.events.organizers.youtube"
+                        :instagram="event.events.organizers.instagram"
+                        :twitter="event.events.organizers.twitter"
+                        :facebook="event.events.organizers.facebook"
+                        :tiktok="event.events.organizers.tiktok"
                         :game="event.events.games.abbreviation"
                         :game_link="event.events.games.link"
+                        @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
                     />
                 </div>
             </div>
@@ -255,18 +309,26 @@
             <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
                 <div v-for="event in filteredSchedule" :id="event.id">
                     <CardSchedule
-                        :event="event.events.name"
-                        :finish_date="event.finish_date"
-                        :organizer="event.events.organizers.abbreviation"
-                        :round="event.round"
                         :date="event.date"
+                        :finish_date="event.finish_date"
+                        :event="event.events.name"
+                        :round="event.round"
                         :circuit="event.circuit"
                         :link="event.stream_link"
                         :country="event.country"
                         :country_2="event.country_2"
+                        :organizer="event.events.organizers.abbreviation"
+                        :organizer_name="event.events.organizers.name"
+                        :organizer_description="event.events.organizers.description"
                         :discord="event.events.organizers.discord"
+                        :youtube="event.events.organizers.youtube"
+                        :instagram="event.events.organizers.instagram"
+                        :twitter="event.events.organizers.twitter"
+                        :facebook="event.events.organizers.facebook"
+                        :tiktok="event.events.organizers.tiktok"
                         :game="event.events.games.abbreviation"
                         :game_link="event.events.games.link"
+                        @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
                     />
                 </div>
             </div>
@@ -277,5 +339,5 @@
                 <Icon name="mi:arrow-up" size="2.5em"  mode="svg" />
             </button>
         </div>
-    </div>
+    </div> 
 </template>

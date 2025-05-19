@@ -15,16 +15,5 @@
     "watchLive": "Watch live",
     "watchReplay": "Watch replay",
     "allTimesInYourTimezone": "Date and time are displayed in your time zone—and may still change at any time.",
-    "january": "January",
-    "february": "February",
-    "march": "March",
-    "april": "April",
-    "may": "May",
-    "june": "June",
-    "july": "July",
-    "august": "August",
-    "september": "September",
-    "october": "October",
-    "november": "November",
-    "december": "December"
+    "noDescription": "No description available yet."
 }
