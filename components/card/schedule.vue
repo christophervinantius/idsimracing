@@ -11,16 +11,7 @@
             "country",
             "country_2",
             "organizer",
-            "organizer_name",
-            "organizer_description",
-            "discord",
-            "youtube",
-            "instagram",
-            "twitter",
-            "facebook",
-            "tiktok",
             "game",
-            "game_link"
         ]
     )
 
@@ -178,17 +169,17 @@
                 >
                     {{ organizer }}
                 </button>
-                <NuxtLink :to="game_link" target="_blank" :class="getGameStyle(game)">
+                <!-- <NuxtLink :to="game_link" target="_blank" :class="getGameStyle(game)">
                     {{ game }}
-                </NuxtLink>
-                <!-- <button
+                </NuxtLink> -->
+                <button
                     data-modal-toggle="gameModal"
                     data-modal-target="gameModal"
                     :class="getGameStyle(game)"
                     @click="emits('gameClick')"
                 >
                     {{ game }}
-                </button> -->
+                </button>
             </div>
             <div v-if="country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
                 <Icon :name="`flag-${ country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />

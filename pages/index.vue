@@ -44,12 +44,16 @@
                     games (
                         abbreviation,
                         name,
-                        link
+                        description_en,
+                        description_id,
+                        steam_link,
+                        other_link
                     ),
                     organizers (
                         abbreviation,
                         name,
-                        description,
+                        description_en,
+                        description_id,
                         discord,
                         youtube,
                         instagram,
@@ -187,7 +191,8 @@
     const organizationData = reactive({
         organizer: "",
         name: "",
-        description: "",
+        description_en: "",
+        description_id: "",
         youtube: "",
         discord: "",
         instagram: "",
@@ -196,10 +201,11 @@
         tiktok: ""
     })
 
-    const setOrganizationData = (organizer, name, description, youtube, discord, instagram, twitter, facebook, tiktok) => {
+    const setOrganizationData = (organizer, name, description_en, description_id, youtube, discord, instagram, twitter, facebook, tiktok) => {
         organizationData.organizer = organizer
         organizationData.name = name
-        organizationData.description = description
+        organizationData.description_en = description_en
+        organizationData.description_id = description_id
         organizationData.youtube = youtube
         organizationData.discord = discord
         organizationData.instagram = instagram
@@ -209,6 +215,26 @@
     }
 
     provide("organizationData", organizationData)
+
+    const gameData = reactive({
+        game: "",
+        name: "",
+        description_en: "",
+        description_id: "",
+        steam_link: "",
+        other_link: ""
+    })
+
+    const setGameData = (game, name, description_en, description_id, steam_link, other_link) => {
+        gameData.game = game
+        gameData.name = name
+        gameData.description_en = description_en
+        gameData.description_id = description_id
+        gameData.steam_link = steam_link
+        gameData.other_link = other_link
+    }
+
+    provide("gameData", gameData)
 
 </script>
 
@@ -284,17 +310,9 @@
                         :country="event.country"
                         :country_2="event.country_2"
                         :organizer="event.events.organizers.abbreviation"
-                        :organizer_name="event.events.organizers.name"
-                        :organizer_description="event.events.organizers.description"
-                        :discord="event.events.organizers.discord"
-                        :youtube="event.events.organizers.youtube"
-                        :instagram="event.events.organizers.instagram"
-                        :twitter="event.events.organizers.twitter"
-                        :facebook="event.events.organizers.facebook"
-                        :tiktok="event.events.organizers.tiktok"
                         :game="event.events.games.abbreviation"
-                        :game_link="event.events.games.link"
-                        @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
+                        @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
+                        @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
                     />
                 </div>
             </div>
@@ -318,17 +336,9 @@
                         :country="event.country"
                         :country_2="event.country_2"
                         :organizer="event.events.organizers.abbreviation"
-                        :organizer_name="event.events.organizers.name"
-                        :organizer_description="event.events.organizers.description"
-                        :discord="event.events.organizers.discord"
-                        :youtube="event.events.organizers.youtube"
-                        :instagram="event.events.organizers.instagram"
-                        :twitter="event.events.organizers.twitter"
-                        :facebook="event.events.organizers.facebook"
-                        :tiktok="event.events.organizers.tiktok"
                         :game="event.events.games.abbreviation"
-                        :game_link="event.events.games.link"
-                        @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
+                        @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
+                        @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
                     />
                 </div>
             </div>
