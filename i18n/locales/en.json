@@ -12,6 +12,8 @@
     "today": "Today",
     "tomorrow": "Tomorrow",
     "daysLeft": "{days} days to go",
+    "hoursLeft": "{hours} hour to go | {hours} hours to go",
+    "oneDayAndHoursLeft": "1 day and {hours} hour to go | 1 day and {hours} hours to go",
     "watchLive": "Watch live",
     "watchReplay": "Watch replay",
     "allTimesInYourTimezone": "Date and time are displayed in your time zone—and may still change at any time.",

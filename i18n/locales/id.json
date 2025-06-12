@@ -12,6 +12,8 @@
     "today": "Hari ini",
     "tomorrow": "Besok",
     "daysLeft": "{days} hari lagi",
+    "hoursLeft": "{hours} jam lagi",
+    "oneDayAndHoursLeft": "1 hari dan {hours} jam lagi",
     "watchLive": "Tonton siaran langsung",
     "watchReplay": "Tonton siaran ulang",
     "allTimesInYourTimezone": "Tanggal dan waktu ditampilkan dalam zona waktu Anda—dan masih dapat berubah sewaktu-waktu.",

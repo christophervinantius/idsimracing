@@ -133,10 +133,14 @@
             return t("finished")
         }else if(remainingEventDays < 0 && remainingFinishDays === 0){
             return t("started")
-        }else if(remainingEventDays === 0){
-            return t("today")
-        }else if(remainingEventDays === 1){
-            return t("tomorrow")
+        }else if(remainingEventDays <= 1){
+            let remainingHours = Math.floor((eventDate - todayDate) / (1000 * 60 * 60))
+            if(remainingHours > 24){
+                remainingHours -= 24
+                return t("oneDayAndHoursLeft", {hours: remainingHours})
+            }else{
+                return t("hoursLeft", {hours: remainingHours})
+            }
         }else{
             return t("daysLeft", {days: remainingEventDays})
         }
