@@ -80,12 +80,11 @@
 
     const selectedEvents = ref([])
     const selectedMonths = ref([])
+    const selectedYears = ref([])
     const totalEvents = ref(0)
     const totalMonths = ref(0)
+    const totalYears = ref(0)
     const selectedStatus = ref("Semua")
-
-    const date = new Date()
-    const year = date.getFullYear()
 
     const scrollToTop = () => {
         window.scrollTo({
@@ -103,14 +102,26 @@
         return events
     })
 
-    const monthsList = computed(() => {
-        const months = [...new Set(
-            schedule.value.map(item => {
-                const month = new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" })
-                return month
-            })
+    const yearsList = computed(() => {
+        const years = [...new Set(
+            schedule.value.map(item => new Date(item.date).getFullYear())
         )]
-        selectedMonths.value = [...new Set(months)]
+        selectedYears.value = [...new Set(years)]
+        totalYears.value = years.length
+        return years
+    })
+    
+    const monthsList = computed(() => {
+        const monthIndices = [...new Set(
+            schedule.value.map(item => new Date(item.date).getMonth())
+        )].sort((a, b) => a - b)
+
+        const months = monthIndices.map(index => {
+            const date = new Date(2025, index, 1)
+            return date.toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" })
+        })
+
+        selectedMonths.value = [...months]
         totalMonths.value = months.length
         return months
     })
@@ -122,6 +133,7 @@
 
         const savedEvents = localStorage.getItem("selectedEvents")
         const savedMonths = localStorage.getItem("selectedMonths")
+        const savedYears = localStorage.getItem("selectedYears")
         const savedStatus = localStorage.getItem("selectedStatus")
 
         if(savedEvents){
@@ -130,6 +142,10 @@
 
         if(savedMonths){
             selectedMonths.value = JSON.parse(savedMonths)
+        }
+        
+        if(savedYears){
+            selectedYears.value = JSON.parse(savedYears)
         }
 
         if(savedStatus){
@@ -146,6 +162,10 @@
             localStorage.setItem("selectedMonths", JSON.stringify(newValue))
         })
 
+        watch(selectedYears, (newValue) => {
+            localStorage.setItem("selectedYears", JSON.stringify(newValue))
+        })
+
         watch(selectedStatus, (newValue) => {
             localStorage.setItem("selectedStatus", newValue)
         })
@@ -157,21 +177,21 @@
 
     const filteredSchedule = computed(() => {
         if(selectedStatus.value === "Semua"){
-            return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))))
+            return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && (selectedYears.value.includes(new Date(item.date).getFullYear())))
         }else if(selectedStatus.value === "Selesai"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate < todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))))
+                return eventDate < todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && (selectedYears.value.includes(new Date(item.date).getFullYear())))
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))))
+                return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && (selectedYears.value.includes(new Date(item.date).getFullYear())))
             })
         }
-        return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))))
+        return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && (selectedYears.value.includes(new Date(item.date).getFullYear())))
     })
 
     const nextThreeRaces = computed(() => {
@@ -185,6 +205,7 @@
     const resetFilter = () => {
         selectedEvents.value = [...eventList.value]
         selectedMonths.value = [...monthsList.value]
+        selectedYears.value = [...yearsList.value]
         selectedStatus.value = "Semua"
     }
 
@@ -248,19 +269,19 @@
         </div>
         <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
             <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
-                {{ $t('calendarTitle', {year: year}) }}
+                {{ $t('calendarTitle') }}
             </div>
             <div v-if="schedule" class="mx-auto">
                 <div class="flex flex-col justify-center items-center gap-6 lg:gap-8">
-                    <div class="bg-red-50 dark:bg-slate-950 text-black dark:text-white p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-700 dark:border-red-900 grid grid-cols-2 lg:grid-cols-5 gap-2">
-                        <label v-for="event in eventList" :key="event" class="flex items-center gap-2 text-sm lg:text-base">
+                    <div class="bg-red-50 dark:bg-slate-950 text-black dark:text-white p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-700 dark:border-red-900 grid grid-cols-2 lg:grid-cols-4 gap-2">
+                        <label v-for="year in yearsList" :key="year" class="flex items-center gap-2 text-sm lg:text-base">
                             <input
                                 type="checkbox"
-                                :value="event"
-                                v-model="selectedEvents"
+                                :value="year"
+                                v-model="selectedYears"
                                 class="rounded-sm text-red-700 dark:text-red-900"
                             />
-                            {{ event }}
+                            {{ year }}
                         </label>
                     </div>
                     <div class="bg-red-50 dark:bg-slate-950 text-black dark:text-white p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-700 dark:border-red-900 grid grid-cols-2 lg:grid-cols-4 gap-2">
@@ -272,6 +293,17 @@
                                 class="rounded-sm text-red-700 dark:text-red-900"
                             />
                             {{ month }}
+                        </label>
+                    </div>
+                    <div class="bg-red-50 dark:bg-slate-950 text-black dark:text-white p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-700 dark:border-red-900 grid grid-cols-2 lg:grid-cols-5 gap-2">
+                        <label v-for="event in eventList" :key="event" class="flex items-center gap-2 text-sm lg:text-base">
+                            <input
+                                type="checkbox"
+                                :value="event"
+                                v-model="selectedEvents"
+                                class="rounded-sm text-red-700 dark:text-red-900"
+                            />
+                            {{ event }}
                         </label>
                     </div>
                     <div class="flex flex-col lg:flex-row gap-2 items-center text-sm lg:text-base">

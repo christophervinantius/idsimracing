@@ -32,18 +32,20 @@
             style += "border-emerald-500"
         }else if(event === "Open Wheel Series"){
             style += "border-cyan-500"
-        }else if(event.startsWith("Sprint Series")){
+        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open")){
             style += "border-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "border-pink-500"
-        }else if(event === "V8 Masters League"){
+        }else if(event === "V8 Masters League" || event === "Praga Cup"){
             style += "border-blue-500"
         }else if(event === "Juniors"){
             style += "border-lime-500"
-        }else if(event === "B.E.G.O. Balap Cup"){
+        }else if(event === "B.E.G.O. Balap Cup" || event === "Sportscar Challenge"){
             style += "border-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "border-purple-500"
+        }else if(event === "Ramadhan Ya Balapan"){
+            style += "border-green-500"
         }
         return style
     }
@@ -68,6 +70,8 @@
             style += "bg-white hover:bg-neutral-300 text-red-600"
         }else if(game === "RBR"){
             style += "bg-black hover:bg-neutral-600 text-white"
+        }else if(game === "rF2"){
+            style += "bg-orange-500 hover:bg-orange-600 text-white"
         }
         return style
     }
@@ -80,18 +84,20 @@
             style += "text-emerald-500"
         }else if(event === "Open Wheel Series"){
             style += "text-cyan-500"
-        }else if(event.startsWith("Sprint Series")){
+        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open")){
             style += "text-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "text-pink-500"
-        }else if(event === "V8 Masters League"){
+        }else if(event === "V8 Masters League" || event === "Praga Cup"){
             style += "text-blue-500"
         }else if(event === "Juniors"){
             style += "text-lime-500"
-        }else if(event === "B.E.G.O. Balap Cup"){
+        }else if(event === "B.E.G.O. Balap Cup" || event === "Sportscar Challenge"){
             style += "text-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "text-purple-500"
+        }else if(event === "Ramadhan Ya Balapan"){
+            style += "text-green-500"
         }
         return style
     }
@@ -102,7 +108,8 @@
         let dateOptions = {
             month: "long",
             day: "numeric",
-            weekday: "long"
+            weekday: "long",
+            year: "numeric"
         }
         
         newDate = newDate.toLocaleDateString(locale.value === "en" ? "en-US" : "id-ID", dateOptions)
@@ -193,7 +200,10 @@
             </div>
         </div>
         <div class="text-base lg:text-xl">
-            {{ formatDate(date) }} - {{  formatTime(date) }}
+            {{ formatDate(date) }}
+        </div>
+        <div class="text-base lg:text-xl">
+            {{ formatTime(date) }}
         </div>
         <div :class="getTextStyle(event)">
             <span class="font-bold text-base lg:text-xl">{{ event }}</span>
