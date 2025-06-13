@@ -179,28 +179,28 @@
 
     const filteredSchedule = computed(() => {
         if(selectedStatus.value === "Semua"){
-            return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && (selectedYears.value.includes(new Date(item.date).getFullYear())))
+            return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
         }else if(selectedStatus.value === "Selesai"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate < todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && (selectedYears.value.includes(new Date(item.date).getFullYear())))
+                return eventDate < todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && (selectedYears.value.includes(new Date(item.date).getFullYear())))
+                return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
             })
         }
-        return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && (selectedYears.value.includes(new Date(item.date).getFullYear())))
+        return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
     })
 
     const nextThreeRaces = computed(() => {
         return schedule.value.filter(item => {
             const eventDate = new Date(item.finish_date)
             const todayDate = new Date()
-            return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" })))
+            return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear())
         }).slice(0, 3)
     })
 
@@ -332,7 +332,7 @@
             <div class="text-white text-center text-lg lg:text-2xl font-bold leading-6">
                 {{ $t('nearestRaces') }}
             </div>
-            <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+            <div v-if="nextThreeRaces.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
                 <div v-for="event in nextThreeRaces" :key="event.id">
                     <CardSchedule
                         :date="event.date"
@@ -350,7 +350,7 @@
                     />
                 </div>
             </div>
-            <div v-if="filteredSchedule.length === 0" class="text-center text-white text-base lg:text-lg leading-6">
+            <div v-else="nextThreeRaces.length > 0" class="text-center text-white text-base lg:text-lg leading-6">
                 {{ $t('noRacesFound') }}
             </div>
         </div>
