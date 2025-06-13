@@ -131,15 +131,20 @@
         let remainingFinishDays = Math.floor((finishDate - todayDate) / (1000 * 60 * 60 * 24))
         if(remainingEventDays < 0 && remainingFinishDays < 0){
             return t("finished")
-        }else if(remainingEventDays < 0 && remainingFinishDays === 0){
+        }else if(remainingEventDays < 0 && remainingFinishDays >= 0){
             return t("started")
         }else if(remainingEventDays <= 1){
-            let remainingHours = Math.floor((eventDate - todayDate) / (1000 * 60 * 60))
+            let remainingHours = Math.ceil((eventDate - todayDate) / (1000 * 60 * 60))
             if(remainingHours > 24){
                 remainingHours -= 24
-                return t("oneDayAndHoursLeft", {hours: remainingHours})
+                return t("oneDayAndHoursLeft", {count: remainingHours})
             }else{
-                return t("hoursLeft", {hours: remainingHours})
+                let remainingMinutes = Math.ceil((eventDate - todayDate) / (1000 * 60))
+                if(remainingMinutes < 60){
+                    return t("minutesLeft", {count: remainingMinutes})
+                }else{
+                    return t("hoursLeft", {count: remainingHours})
+                }
             }
         }else{
             return t("daysLeft", {days: remainingEventDays})
@@ -162,9 +167,6 @@
     <div :class="getCardStyle(event)">
         <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-1">
-                <!-- <NuxtLink :to="discord" target="_blank" :class="getOrganizerStyle(organizer)">
-                    {{ organizer }}
-                </NuxtLink> -->
                 <button
                     data-modal-toggle="organizationModal"
                     data-modal-target="organizationModal"
@@ -173,9 +175,6 @@
                 >
                     {{ organizer }}
                 </button>
-                <!-- <NuxtLink :to="game_link" target="_blank" :class="getGameStyle(game)">
-                    {{ game }}
-                </NuxtLink> -->
                 <button
                     data-modal-toggle="gameModal"
                     data-modal-target="gameModal"
@@ -207,11 +206,11 @@
                 {{ getStatus(date, finish_date) }}
             </div>
             <NuxtLink v-if="link" :to="link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 hover:bg-blue-400 px-2 py-1 rounded-md font-bold cursor-pointer">
-                <div v-if="getStatus(date, finish_date) === t('today') || getStatus(date, finish_date) === t('started')">
-                    <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
-                </div>
-                <div v-else="getStatus(date, finish_date) === t('today') || getStatus(date, finish_date) === t('started')">
+                <div v-if="getStatus(date, finish_date) === t('finished')">
                     <span class="text-sm lg:text-base">{{ $t("watchReplay") }}</span>
+                </div>
+                <div v-else="getStatus(date, finish_date) === t('finished')">
+                    <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
                 </div>
             </NuxtLink>
         </div>
