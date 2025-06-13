@@ -84,7 +84,7 @@
     const totalEvents = ref(0)
     const totalMonths = ref(0)
     const totalYears = ref(0)
-    const selectedStatus = ref("Semua")
+    const selectedStatus = ref("Mendatang")
 
     const scrollToTop = () => {
         window.scrollTo({
@@ -105,8 +105,10 @@
     const yearsList = computed(() => {
         const years = [...new Set(
             schedule.value.map(item => new Date(item.date).getFullYear())
-        )]
-        selectedYears.value = [...new Set(years)]
+        )].sort((a, b) => a - b)
+
+        const currentYear = new Date().getFullYear()
+        selectedYears.value = years.includes(currentYear) ? [currentYear] : []
         totalYears.value = years.length
         return years
     })
@@ -315,7 +317,7 @@
                         </select>
                     </div>
                     <div
-                        v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Semua' || selectedMonths.length < totalMonths"
+                        v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Semua' || selectedMonths.length < totalMonths || selectedYears.length < totalYears"
                         class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
                         {{ $t('resetFilter') }}
                     </div>

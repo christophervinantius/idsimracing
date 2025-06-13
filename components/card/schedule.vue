@@ -40,7 +40,7 @@
             style += "border-blue-500"
         }else if(event === "Juniors"){
             style += "border-lime-500"
-        }else if(event === "B.E.G.O. Balap Cup" || event === "Sportscar Challenge"){
+        }else if(event === "B.E.G.O. Balap Cup"){
             style += "border-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "border-purple-500"
@@ -92,7 +92,7 @@
             style += "text-blue-500"
         }else if(event === "Juniors"){
             style += "text-lime-500"
-        }else if(event === "B.E.G.O. Balap Cup" || event === "Sportscar Challenge"){
+        }else if(event === "B.E.G.O. Balap Cup"){
             style += "text-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "text-purple-500"
