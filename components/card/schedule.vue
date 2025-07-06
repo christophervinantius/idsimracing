@@ -44,8 +44,8 @@
             style += "border-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "border-purple-500"
-        }else if(event === "Ramadhan Ya Balapan"){
-            style += "border-green-500"
+        }else if(event.startsWith("Speedway Master Series")){
+            style += "border-rose-500"
         }
         return style
     }
@@ -96,8 +96,8 @@
             style += "text-orange-500"
         }else if(event === "Sprint Rally Challenge"){
             style += "text-purple-500"
-        }else if(event === "Ramadhan Ya Balapan"){
-            style += "text-green-500"
+        }else if(event.startsWith("Speedway Master Series")){
+            style += "text-rose-500"
         }
         return style
     }
