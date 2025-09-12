@@ -19,5 +19,8 @@
     "watchReplay": "Watch replay",
     "allTimesInYourTimezone": "Date and time are displayed in your time zone—and may still change at any time.",
     "noDescription": "No description available yet.",
-    "postponed": "Postponed"
+    "postponed": "Postponed",
+    "years": "Year",
+    "months": "Month",
+    "events": "Event"
 }

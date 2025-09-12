@@ -1,5 +1,4 @@
 <script setup>
-
     useHead({
         htmlAttrs: {
             lang: "id"
@@ -72,7 +71,7 @@
         return data
     })
 
-    const { locale } = useI18n()
+    const { locale, t } = useI18n()
 
     const showTopButton = ref(false)
 
@@ -128,6 +127,48 @@
         selectedMonths.value = [...months]
         totalMonths.value = months.length
         return months
+    })
+
+    const orderedSelectedEvents = computed({
+        get(){
+            return eventList.value.filter(event => selectedEvents.value.includes(event))
+        },
+        set(newValue){
+            selectedEvents.value = newValue
+        }
+    })
+
+    const orderedSelectedMonths = computed({
+        get(){
+            return monthsList.value.filter(month => selectedMonths.value.includes(month))
+        },
+        set(newValue) {
+            selectedMonths.value = newValue
+        }
+    })
+
+    const orderedSelectedYears = computed({
+        get(){
+            return yearsList.value.filter(year => selectedYears.value.includes(year))
+        },
+        set(newValue){
+            selectedYears.value = newValue
+        }
+    })
+
+    const statusList = computed(() => [
+        { value: "Semua", label: t('all')},
+        { value: "Selesai", label: t('finished')},
+        { value: "Mendatang", label: t('upcoming')}
+    ])
+
+    const selectedStatusObject = computed({
+        get(){
+            return statusList.value.find(status => status.value === selectedStatus.value) || statusList.value[2]
+        },
+        set(newValue){
+            selectedStatus.value = newValue.value
+        }
     })
 
     onMounted(() => {
@@ -202,7 +243,7 @@
         return schedule.value.filter(item => {
             const eventDate = new Date(item.finish_date)
             const todayDate = new Date()
-            return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear())
+            return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()) && !item.is_postponed
         }).slice(0, 3)
     })
 
@@ -210,7 +251,7 @@
         selectedEvents.value = [...eventList.value]
         selectedMonths.value = [...monthsList.value]
         selectedYears.value = [...yearsList.value]
-        selectedStatus.value = "Semua"
+        selectedStatus.value = "Mendatang"
     }
 
     const organizationData = reactive({
@@ -260,66 +301,55 @@
     }
 
     provide("gameData", gameData)
-
 </script>
 
 <template>
     <div>
-        <div id="organizationModal" data-modal-backdrop="static" tabindex="-1" aria-hidden="true" class="fixed top-0 left-0 right-0 z-50 hidden w-full p-4 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-1rem)] max-h-full">
-            <ModalOrganization />
-        </div>
-        <div id="gameModal" data-modal-backdrop="static" tabindex="-1" aria-hidden="true" class="fixed top-0 left-0 right-0 z-50 hidden w-full p-4 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-1rem)] max-h-full">
-            <ModalGame />
-        </div>
-        <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+        <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6">
             <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
                 {{ $t('calendarTitle') }}
             </div>
             <div v-if="schedule" class="mx-auto">
-                <div class="flex flex-col justify-center items-center gap-6 lg:gap-8">
-                    <div class="bg-red-50 dark:bg-slate-950 text-black dark:text-white p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-700 dark:border-red-900 grid grid-cols-2 lg:grid-cols-4 gap-2">
-                        <label v-for="year in yearsList" :key="year" class="flex items-center gap-2 text-sm lg:text-base">
-                            <input
-                                type="checkbox"
-                                :value="year"
-                                v-model="selectedYears"
-                                class="rounded-sm text-red-700 dark:text-red-900"
-                            />
-                            {{ year }}
-                        </label>
+                <div class="flex flex-col justify-center items-center gap-4">
+                    <div class="flex flex-col gap-1 items-center text-sm lg:text-base">
+                        <label class="text-black dark:text-white font-bold">{{ $t('years') }}</label>
+                        <USelectMenu
+                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            v-model="orderedSelectedYears"
+                            :items="yearsList"
+                            multiple
+                        />
                     </div>
-                    <div class="bg-red-50 dark:bg-slate-950 text-black dark:text-white p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-700 dark:border-red-900 grid grid-cols-2 lg:grid-cols-4 gap-2">
-                        <label v-for="month in monthsList" :key="month" class="flex items-center gap-2 text-sm lg:text-base">
-                            <input
-                                type="checkbox"
-                                :value="month"
-                                v-model="selectedMonths"
-                                class="rounded-sm text-red-700 dark:text-red-900"
-                            />
-                            {{ month }}
-                        </label>
+                    <div class="flex flex-col gap-1 items-center text-sm lg:text-base">
+                        <label class="text-black dark:text-white font-bold">{{ $t('months') }}</label>
+                        <USelectMenu
+                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            v-model="orderedSelectedMonths"
+                            :items="monthsList"
+                            multiple
+                        />
                     </div>
-                    <div class="bg-red-50 dark:bg-slate-950 text-black dark:text-white p-4 lg:p-8 rounded-xl lg:rounded-3xl border-2 border-red-700 dark:border-red-900 grid grid-cols-2 lg:grid-cols-5 gap-2">
-                        <label v-for="event in eventList" :key="event" class="flex items-center gap-2 text-sm lg:text-base">
-                            <input
-                                type="checkbox"
-                                :value="event"
-                                v-model="selectedEvents"
-                                class="rounded-sm text-red-700 dark:text-red-900"
-                            />
-                            {{ event }}
-                        </label>
+                    <div class="flex flex-col gap-1 items-center text-sm lg:text-base">
+                        <label class="text-black dark:text-white font-bold">{{ $t('events') }}</label>
+                        <USelectMenu
+                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            v-model="orderedSelectedEvents"
+                            :items="eventList"
+                            multiple
+                        />
                     </div>
-                    <div class="flex flex-col lg:flex-row gap-2 items-center text-sm lg:text-base">
-                        <label for="status" name="status" class="text-black dark:text-white">Status:</label>
-                        <select id="status" name="status" class="border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white" v-model="selectedStatus">
-                            <option value="Semua">{{ $t('all') }}</option>
-                            <option value="Selesai">{{ $t('finished') }}</option>
-                            <option value="Mendatang">{{ $t('upcoming') }}</option>
-                        </select>
+                    <div class="flex flex-col gap-1 items-center text-sm lg:text-base">
+                        <label class="text-black dark:text-white font-bold">Status</label>
+                        <USelectMenu
+                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            v-model="selectedStatusObject"
+                            :items="statusList"
+                            option-attribute="label"
+                            value-attribute="value"
+                        />
                     </div>
                     <div
-                        v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Semua' || selectedMonths.length < totalMonths || selectedYears.length < totalYears"
+                        v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Mendatang' || selectedMonths.length < totalMonths || selectedYears.length < totalYears"
                         class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
                         {{ $t('resetFilter') }}
                     </div>

@@ -191,29 +191,28 @@
         }
         return style
     }
-
 </script>
 
 <template>
     <div :class="getCardStyle(event)">
         <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-1">
-                <button
-                    data-modal-toggle="organizationModal"
-                    data-modal-target="organizationModal"
-                    :class="getOrganizerStyle(organizer)"
-                    @click="emits('organizerClick')"
-                >
-                    {{ organizer }}
-                </button>
-                <button
-                    data-modal-toggle="gameModal"
-                    data-modal-target="gameModal"
-                    :class="getGameStyle(game)"
-                    @click="emits('gameClick')"
-                >
-                    {{ game }}
-                </button>
+                <UModal>
+                    <button :class="getOrganizerStyle(organizer)" @click="emits('organizerClick')">
+                        {{ organizer }}
+                    </button>
+                    <template #content>
+                        <ModalOrganization />
+                    </template>
+                </UModal>
+                <UModal>
+                    <button :class="getGameStyle(game)" @click="emits('gameClick')">
+                        {{ game }}
+                    </button>
+                    <template #content>
+                        <ModalGame />
+                    </template>
+                </UModal>
             </div>
             <div v-if="country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
                 <Icon :name="`flag-${ country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
