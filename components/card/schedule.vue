@@ -46,11 +46,13 @@
         }else if(event === "Sprint Rally Challenge"){
             style += "border-purple-500"
         }else if(event.startsWith("Speedway Master Series")){
-            style += "border-rose-500"
+            style += "border-fuchsia-500"
         }else if(event === "Javahosting Rental Cup"){
             style += "border-indigo-500"
         }else if(event === "Indorance"){
             style += "border-sky-500"
+        }else if(event === "Endurance Edition" || event === "Global Edition"){
+            style += "border-rose-500"
         }
         return style
     }
@@ -67,6 +69,8 @@
             style += "bg-sky-500 hover:bg-sky-600 text-black"
         }else if(organizer === "JRC"){
             style += "bg-indigo-500 hover:bg-indigo-600 text-black"
+        }else if(organizer === "ERGP"){
+            style += "bg-white hover:bg-neutral-300 text-red-600"
         }
         return style
     }
@@ -106,11 +110,13 @@
         }else if(event === "Sprint Rally Challenge"){
             style += "text-purple-500"
         }else if(event.startsWith("Speedway Master Series")){
-            style += "text-rose-500"
+            style += "text-fuchsia-500"
         }else if(event === "Javahosting Rental Cup"){
             style += "text-indigo-500"
         }else if(event === "Indorance"){
             style += "text-sky-500"
+        }else if(event === "Endurance Edition" || event === "Global Edition"){
+            style += "text-rose-500"
         }
         return style
     }
