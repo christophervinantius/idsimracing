@@ -18,5 +18,6 @@
     "watchLive": "Watch live",
     "watchReplay": "Watch replay",
     "allTimesInYourTimezone": "Date and time are displayed in your time zone—and may still change at any time.",
-    "noDescription": "No description available yet."
+    "noDescription": "No description available yet.",
+    "postponed": "Postponed"
 }

@@ -10,6 +10,7 @@
             "link",
             "country",
             "country_2",
+            "is_postponed",
             "organizer",
             "game",
         ]
@@ -46,6 +47,10 @@
             style += "border-purple-500"
         }else if(event.startsWith("Speedway Master Series")){
             style += "border-rose-500"
+        }else if(event === "Javahosting Rental Cup"){
+            style += "border-indigo-500"
+        }else if(event === "Indorance"){
+            style += "border-sky-500"
         }
         return style
     }
@@ -58,6 +63,10 @@
             style += "bg-white hover:bg-neutral-300 text-black"
         }else if(organizer === "CRC"){
             style += "bg-yellow-500 hover:bg-yellow-600 text-black"
+        }else if(organizer === "BRM"){
+            style += "bg-sky-500 hover:bg-sky-600 text-black"
+        }else if(organizer === "JRC"){
+            style += "bg-indigo-500 hover:bg-indigo-600 text-black"
         }
         return style
     }
@@ -98,6 +107,10 @@
             style += "text-purple-500"
         }else if(event.startsWith("Speedway Master Series")){
             style += "text-rose-500"
+        }else if(event === "Javahosting Rental Cup"){
+            style += "text-indigo-500"
+        }else if(event === "Indorance"){
+            style += "text-sky-500"
         }
         return style
     }
@@ -130,7 +143,10 @@
         return newTime
     }
 
-    const getStatus = (date, finish_date) => {
+    const getStatus = (date, finish_date, is_postponed) => {
+        if(is_postponed){
+            return t("postponed")
+        }
         let eventDate = new Date(date)
         let todayDate = new Date()
         let finishDate = new Date(finish_date)
@@ -159,11 +175,13 @@
     }
 
     const getStatusStyle = (status) => {
-        let style = "w-fit px-2 py-1 font-bold rounded-md text-sm lg:text-base text-white "
-        if(status === t("finished")){
-            style += "bg-red-900"
+        let style = "w-fit px-2 py-1 font-bold rounded-md text-sm lg:text-base "
+        if(status === t("postponed")){
+            style += "bg-white text-black"
+        }else if(status === t("finished")){
+            style += "bg-red-900 text-white"
         }else{
-            style += "bg-red-500"
+            style += "bg-red-500 text-white"
         }
         return style
     }
@@ -209,17 +227,22 @@
             <span class="font-bold text-base lg:text-xl">{{ event }}</span>
         </div>
         <div class="text-sm lg:text-base">
-            Round {{ round }}: {{ circuit }}
+            <div v-if="round === 'Invitation'">
+                {{ round }} Round: {{ circuit }}
+            </div>
+            <div v-else>
+                Round {{ round }}: {{ circuit }}
+            </div>
         </div>
         <div class="flex gap-1 lg:gap-2 items-center mt-2">
-            <div :class="getStatusStyle(getStatus(date, finish_date))">
-                {{ getStatus(date, finish_date) }}
+            <div :class="getStatusStyle(getStatus(date, finish_date, is_postponed))">
+                {{ getStatus(date, finish_date, is_postponed) }}
             </div>
             <NuxtLink v-if="link" :to="link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 hover:bg-blue-400 px-2 py-1 rounded-md font-bold cursor-pointer">
-                <div v-if="getStatus(date, finish_date) === t('finished')">
+                <div v-if="getStatus(date, finish_date, is_postponed) === t('finished')">
                     <span class="text-sm lg:text-base">{{ $t("watchReplay") }}</span>
                 </div>
-                <div v-else="getStatus(date, finish_date) === t('finished')">
+                <div v-else="getStatus(date, finish_date, is_postponed) === t('finished')">
                     <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
                 </div>
             </NuxtLink>

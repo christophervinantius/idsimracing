@@ -39,6 +39,7 @@
                 stream_link,
                 country,
                 country_2,
+                is_postponed,
                 events (
                     name,
                     games (
@@ -63,6 +64,7 @@
                     )
                 )
             `)
+            // .eq("is_postponed", false)
             .order("date", { ascending: true })
         if(error){
             throw error
@@ -343,6 +345,7 @@
                         :link="event.stream_link"
                         :country="event.country"
                         :country_2="event.country_2"
+                        :is_postponed="event.is_postponed"
                         :organizer="event.events.organizers.abbreviation"
                         :game="event.events.games.abbreviation"
                         @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
@@ -369,6 +372,7 @@
                         :link="event.stream_link"
                         :country="event.country"
                         :country_2="event.country_2"
+                        :is_postponed="event.is_postponed"
                         :organizer="event.events.organizers.abbreviation"
                         :game="event.events.games.abbreviation"
                         @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"

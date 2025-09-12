@@ -11,6 +11,10 @@
             style += "bg-white hover:bg-neutral-300 text-black"
         }else if(organizer === "CRC"){
             style += "bg-yellow-500 hover:bg-yellow-600 text-black"
+        }else if(organizer === "BRM"){
+            style += "bg-sky-500 hover:bg-sky-600 text-black"
+        }else if(organizer === "JRC"){
+            style += "bg-indigo-500 hover:bg-indigo-600 text-black"
         }
         return style
     }
