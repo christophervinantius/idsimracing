@@ -1,4 +1,7 @@
 <script setup>
+    import { Calendar } from 'v-calendar'
+    import 'v-calendar/style.css'
+
     useHead({
         htmlAttrs: {
             lang: "id"
@@ -74,9 +77,28 @@
     const { locale, t } = useI18n()
 
     const showTopButton = ref(false)
+    const showCalendarButton = ref(false)
 
     const handleScrollTop = () => {
         showTopButton.value = window.scrollY > 100
+    }
+
+    const handleScrollCalendar = () => {
+        showCalendarButton.value = window.scrollY > 100
+    }
+    
+    const scrollToCalendar = () => {
+        const calendarElement = document.getElementById("calendar")
+        if(calendarElement){
+            calendarElement.scrollIntoView({ behavior: "smooth" })
+        }
+    }
+
+    const scrollToTop = () => {
+        window.scrollTo({
+            top: 0,
+            behavior: "smooth"
+        })
     }
 
     const selectedEvents = ref([])
@@ -86,13 +108,6 @@
     const totalMonths = ref(0)
     const totalYears = ref(0)
     const selectedStatus = ref("Mendatang")
-
-    const scrollToTop = () => {
-        window.scrollTo({
-            top: 0,
-            behavior: "smooth"
-        })
-    }
 
     const eventList = computed(() => {
         const events = [...new Set(
@@ -198,6 +213,7 @@
         }
 
         window.addEventListener("scroll", handleScrollTop)
+        window.addEventListener("scroll", handleScrollCalendar)
 
         watch(selectedEvents, (newValue) => {
             localStorage.setItem("selectedEvents", JSON.stringify(newValue))
@@ -218,6 +234,7 @@
 
     onUnmounted(() => {
         window.removeEventListener("scroll", handleScrollTop)
+        window.removeEventListener("scroll", handleScrollCalendar)
     })
 
     const filteredSchedule = computed(() => {
@@ -301,6 +318,101 @@
     }
 
     provide("gameData", gameData)
+
+    const getEventStyle = (event) => {
+        let style = "text-base font-bold "
+        if(event.startsWith("MX-5 Cup Asia")){
+            style += "text-red-500"
+        }else if(event.startsWith("1 Hour Series")){
+            style += "text-emerald-500"
+        }else if(event === "Open Wheel Series"){
+            style += "text-cyan-500"
+        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open")){
+            style += "text-yellow-500"
+        }else if(event === "Endurance Championship"){
+            style += "text-pink-500"
+        }else if(event === "V8 Masters League" || event === "Praga Cup"){
+            style += "text-blue-500"
+        }else if(event === "Juniors"){
+            style += "text-lime-500"
+        }else if(event === "B.E.G.O. Balap Cup"){
+            style += "text-orange-500"
+        }else if(event === "Sprint Rally Challenge"){
+            style += "text-purple-500"
+        }else if(event.startsWith("Speedway Master Series")){
+            style += "text-fuchsia-500"
+        }else if(event === "Javahosting Rental Cup"){
+            style += "text-indigo-500"
+        }else if(event === "Indorance"){
+            style += "text-sky-500"
+        }else if(event === "Endurance Edition" || event === "Global Edition"){
+            style += "text-rose-500"
+        }
+        return style
+    }
+
+    const getBarColor = (event) => {
+        let color = ""
+        if(event.startsWith("MX-5 Cup Asia")){
+            color = "red"
+        }else if(event.startsWith("1 Hour Series")){
+            color = "emerald"
+        }else if(event === "Open Wheel Series"){
+            color = "cyan"
+        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open")){
+            color = "yellow"
+        }else if(event === "Endurance Championship"){
+            color = "pink"
+        }else if(event === "V8 Masters League" || event === "Praga Cup"){
+            color = "blue"
+        }else if(event === "Juniors"){
+            color = "lime"
+        }else if(event === "B.E.G.O. Balap Cup"){
+            color = "orange"
+        }else if(event === "Sprint Rally Challenge"){
+            color = "purple"
+        }else if(event.startsWith("Speedway Master Series")){
+            color = "fuchsia"
+        }else if(event === "Javahosting Rental Cup"){
+            color = "indigo"
+        }else if(event === "Indorance"){
+            color = "sky"
+        }else if(event === "Endurance Edition" || event === "Global Edition"){
+            color = "rose"
+        }
+        return color
+    }
+
+    const calendarAttributes = computed(() => {
+        return filteredSchedule.value.map(item => {
+            return {
+                key: item.id,
+                dates: new Date(item.date),
+                bar: getBarColor(item.events.name),
+                popover: true,
+                customData: item,
+            }
+        })
+    })
+
+    const formatTime = (date) => {
+        let newTime = new Date(date)
+
+        let timeOptions = {
+            hour: "2-digit",
+            minute: "2-digit"
+        }
+
+        newTime = newTime.toLocaleTimeString(locale.value === "en" ? "en-US" : "id-ID", timeOptions)
+
+        return newTime
+    }
+
+    const calendar = ref(null);
+
+    const moveToday = () => {
+        calendar.value.move(new Date());
+    }
 </script>
 
 <template>
@@ -387,6 +499,55 @@
                 {{ $t('noRacesFound') }}
             </div>
         </div>
+        <div id="calendar" class="bg-white dark:bg-slate-900 px-1 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+            <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
+                {{ $t('calendar') }}
+            </div>
+            <div class="mx-auto w-3/4">
+                <Calendar
+                    ref="calendar"
+                    expanded
+                    borderless
+                    is-dark
+                    show-weeknumbers="left-outside"
+                    trim-weeks
+                    :locale="locale"
+                    :first-day-of-week="2"
+                    :masks="{ weekdays: 'WWW' }"
+                    :attributes="calendarAttributes"
+                >
+                    <template #day-popover="{ attributes }">
+                        <ul class="p-2 lg:p-4 grid gap-4">
+                            <li
+                                v-for="{ key, customData } in [...attributes].sort((a, b) => new Date(a.customData.date) - new Date(b.customData.date))"
+                                :key="key"
+                                class="block text-xs lg:text-sm"
+                            >
+                                <div>
+                                    {{ formatTime(customData.date) }}
+                                </div>
+                                <div :class="getEventStyle(customData.events.name)">
+                                    {{ customData.events.organizers.abbreviation }} - {{ customData.events.name }}
+                                </div>
+                                <div>
+                                    Round {{ customData.round }}: {{ customData.circuit }}
+                                </div>
+                            </li>
+                        </ul>
+                    </template>
+                    <template #footer>
+                        <div class="w-fit mx-auto px-4 py-2">
+                            <button
+                                class="bg-red-700 dark:bg-red-900 text-white cursor-pointer w-full text-sm lg:text-base font-bold px-4 py-2 rounded-md"
+                                @click="moveToday"
+                            >
+                                {{ $t('today') }}
+                            </button>
+                        </div>
+                    </template>
+                </Calendar>
+            </div>
+        </div>
         <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
             <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
                 {{ $t('fullCalendar') }}
@@ -413,6 +574,9 @@
             <div v-if="filteredSchedule.length === 0" class="text-black dark:text-white text-center text-base lg:text-lg leading-6">
                 {{ $t('noRacesFound') }}
             </div>
+            <button v-if="showCalendarButton" @click="scrollToCalendar" class="fixed bottom-12 left-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
+                <Icon name="mi:calendar" size="2.5em"  mode="svg" />
+            </button>
             <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
                 <Icon name="mi:arrow-up" size="2.5em"  mode="svg" />
             </button>

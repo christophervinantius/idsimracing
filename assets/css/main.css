@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
 @import "tailwindcss";
 @import "@nuxt/ui";
+@import "v-calendar/style.css";
 @import "flowbite/src/themes/default";
 @plugin "flowbite/plugin";
 @source "../../node_modules/flowbite";
@@ -10,4 +11,108 @@
 @theme {
     --font-sans: 'Plus Jakarta Sans', sans-serif;
     --font-display: 'Plus Jakarta Sans', sans-serif;
+}
+
+.vc-container {
+    font-family: var(--font-sans) !important;
+}
+
+.vc-weekdays {
+    margin-top: 2em !important;
+    margin-bottom: 2em !important;
+}
+
+.vc-title-wrapper {
+    font-size: 1em !important;
+}
+
+.vc-weekday {
+    color: white !important;
+    font-size: 1em !important;
+}
+
+.vc-week {
+    margin-bottom: 2em !important;
+}
+
+.vc-day-content {
+    font-size: 1em !important;
+}
+
+.vc-sky {
+    --vc-accent-50: #f0f9ff;
+    --vc-accent-100: #e0f2fe;
+    --vc-accent-200: #bae6fd;
+    --vc-accent-300: #7dd3fc;
+    --vc-accent-400: #38bdf8;
+    --vc-accent-500: #0ea5e9;
+    --vc-accent-600: #0284c7;
+    --vc-accent-700: #0369a1;
+    --vc-accent-800: #075985;
+    --vc-accent-900: #0c4a6e;
+}
+
+.vc-fuchsia {
+    --vc-accent-50: #fdf4ff;
+    --vc-accent-100: #fae8ff;
+    --vc-accent-200: #f5d0fe;
+    --vc-accent-300: #f0abfc;
+    --vc-accent-400: #e879f9;
+    --vc-accent-500: #d946ef;
+    --vc-accent-600: #c026d3;
+    --vc-accent-700: #a21caf;
+    --vc-accent-800: #86198f;
+    --vc-accent-900: #701a75;
+}
+
+.vc-emerald {
+    --vc-accent-50: #ecfdf5;
+    --vc-accent-100: #d1fae5;
+    --vc-accent-200: #a7f3d0;
+    --vc-accent-300: #6ee7b7;
+    --vc-accent-400: #34d399;
+    --vc-accent-500: #10b981;
+    --vc-accent-600: #059669;
+    --vc-accent-700: #047857;
+    --vc-accent-800: #065f46;
+    --vc-accent-900: #064e3b;
+}
+
+.vc-lime {
+    --vc-accent-50: #f7fee7;
+    --vc-accent-100: #ecfccb;
+    --vc-accent-200: #d9f99d;
+    --vc-accent-300: #bef264;
+    --vc-accent-400: #a3e635;
+    --vc-accent-500: #84cc16;
+    --vc-accent-600: #65a30d;
+    --vc-accent-700: #4d7c0f;
+    --vc-accent-800: #3f6212;
+    --vc-accent-900: #365314;
+}
+
+.vc-cyan {
+    --vc-accent-50: #ecfeff;
+    --vc-accent-100: #cffafe;
+    --vc-accent-200: #a5f3fc;
+    --vc-accent-300: #67e8f9;
+    --vc-accent-400: #22d3ee;
+    --vc-accent-500: #06b6d4;
+    --vc-accent-600: #0891b2;
+    --vc-accent-700: #0e7490;
+    --vc-accent-800: #155e75;
+    --vc-accent-900: #164e63;
+}
+
+.vc-rose {
+    --vc-accent-50: #fff1f2;
+    --vc-accent-100: #ffe4e6;
+    --vc-accent-200: #fecdd3;
+    --vc-accent-300: #fda4af;
+    --vc-accent-400: #fb7185;
+    --vc-accent-500: #f43f5e;
+    --vc-accent-600: #e11d48;
+    --vc-accent-700: #be123c;
+    --vc-accent-800: #9f1239;
+    --vc-accent-900: #881337;
 }
