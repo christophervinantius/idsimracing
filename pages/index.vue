@@ -529,7 +529,10 @@
                                 <div :class="getEventStyle(customData.events.name)">
                                     {{ customData.events.organizers.abbreviation }} - {{ customData.events.name }}
                                 </div>
-                                <div>
+                                <div v-if="customData.round === 'Invitation'">
+                                    {{ customData.round }} Round: {{ customData.circuit }}
+                                </div>
+                                <div v-else>
                                     Round {{ customData.round }}: {{ customData.circuit }}
                                 </div>
                             </li>
