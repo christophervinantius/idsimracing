@@ -384,15 +384,23 @@
     }
 
     const calendarAttributes = computed(() => {
-        return filteredSchedule.value.map(item => {
-            return {
+        return [
+            ...filteredSchedule.value.map(item => ({
                 key: item.id,
                 dates: new Date(item.date),
                 bar: getBarColor(item.events.name),
                 popover: true,
                 customData: item,
+            })),
+            {
+                key: 'today',
+                dates: new Date(),
+                highlight: {
+                    color: 'idsimracing-2',
+                    fillMode: 'solid',
+                },
             }
-        })
+        ]
     })
 
     const formatTime = (date) => {
