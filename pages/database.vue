@@ -50,6 +50,7 @@
                     )
                 `)
                 .range(start, start + batchSize - 1)
+                .order("rating", { ascending: true })
                 .order("name", { ascending: true })
             
             if(error) throw error
@@ -109,6 +110,15 @@
         const organizers = database.value.map(driver => driver.organizers.name)
         return [...new Set(organizers)].sort()
     })
+
+    const ratingsOrder = {
+        "Platinum": 1,
+        "Gold": 2,
+        "Silver": 3,
+        "Bronze": 4,
+        "Copper": 5,
+        "Iron": 6
+    }
     
     const selectedRatings = ref([])
 
@@ -116,7 +126,7 @@
         if(!database.value) return []
         const ratings = database.value.map(driver => driver.rating)
         selectedRatings.value = [...new Set(ratings)]
-        return [...new Set(ratings)].sort()
+        return [...new Set(ratings)].sort((a, b) => ratingsOrder[a] - ratingsOrder[b])
     })
 
     const orderedSelectedRatings = computed({
@@ -133,9 +143,18 @@
     const filteredDrivers = computed(() => {
         currentPage.value = 1
         if(!database.value) return []
-        return database.value.filter(driver =>
-            driver.name.toLowerCase().includes(searchQuery.value.toLowerCase()) && selectedCountries.value.includes(driver.countries.name) && selectedRatings.value.includes(driver.rating) && driver.organizers.name === selectedOrganizer.value
+        const driversData = database.value.filter(driver =>
+            driver.name.toLowerCase().includes(searchQuery.value.toLowerCase()) &&
+            selectedCountries.value.includes(driver.countries.name) &&
+            selectedRatings.value.includes(driver.rating) &&
+            driver.organizers.name === selectedOrganizer.value
         )
+        return driversData.sort((a, b) => {
+            if(ratingsOrder[a.rating] !== ratingsOrder[b.rating]){
+                return ratingsOrder[a.rating] - ratingsOrder[b.rating]
+            }
+            return a.name.localeCompare(b.name)
+        })
     })
 
     const currentPage = ref(1)
@@ -171,7 +190,6 @@
         selectedCountries.value = [...countriesList.value]
         currentPage.value = 1
     }
-
     const showTopButton = ref(false)
 
     const handleScrollTop = () => {
