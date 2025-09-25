@@ -1,14 +1,17 @@
 {
-    "calendarTitle": "Kalender Indonesia Sim Racing",
+    "calendarTitle": "Kalender ID Sim Racing",
+    "databaseTitle": "Database ID Sim Racing",
     "nearestRaces": "Jadwal Balapan Terdekat",
     "fullCalendar": "Jadwal Lengkap",
     "calendar": "Tampilan Kalender",
     "noRacesFound": "Tidak ada jadwal balapan yang ditemukan dengan filter ini.",
+    "noDriversFound": "Tidak ada data yang ditemukan dengan filter ini.",
     "resetFilter": "Atur ulang filter",
     "all": "Semua",
     "finished": "Selesai",
     "upcoming": "Mendatang",
     "totalRaces": "Total: {total} balapan",
+    "totalDrivers": "Total: {total} data",
     "started": "Dimulai",
     "today": "Hari ini",
     "tomorrow": "Besok",
@@ -23,5 +26,11 @@
     "postponed": "Ditunda",
     "years": "Tahun",
     "months": "Bulan",
-    "events": "Event"
+    "events": "Event",
+    "organizer": "Penyelenggara",
+    "rating": "Kelas",
+    "country": "Kewarganegaraan",
+    "name": "Nama",
+    "searchName": "Cari nama...",
+    "driversDisclaimer": "Data masih dapat berubah sewaktu-waktu sesuai keputusan penyelenggara."
 }

@@ -2,9 +2,6 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 @import "v-calendar/style.css";
-@import "flowbite/src/themes/default";
-@plugin "flowbite/plugin";
-@source "../../node_modules/flowbite";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -17,6 +14,26 @@
     font-family: var(--font-sans) !important;
 }
 
+.vc-pane {
+    background-color: #fef2f2 !important;
+    margin-bottom: 1.2em !important;
+    border-radius: 1em !important;
+    border: 0.2em solid #b91c1c !important;
+}
+
+.dark .vc-pane {
+    background-color: #020617 !important;
+    border: 0.2em solid #7f1d1d !important;
+}
+
+.vc-base-icon {
+    color: black !important;
+}
+
+.dark .vc-base-icon {
+    color: white !important;
+}
+
 .vc-weekdays {
     margin-top: 2em !important;
     margin-bottom: 2em !important;
@@ -27,8 +44,12 @@
 }
 
 .vc-weekday {
-    color: white !important;
+    color: black !important;
     font-size: 1em !important;
+}
+
+.dark .vc-weekday {
+    color: white !important;
 }
 
 .vc-week {
@@ -37,6 +58,24 @@
 
 .vc-day-content {
     font-size: 1em !important;
+}
+
+.vc-highlight {
+    background-color: #b91c1c !important;
+    font-size: 1em !important;
+}
+
+.dark .vc-highlight {
+    background-color: #7f1d1d !important;
+}
+
+.vc-weeknumber-content {
+    color: black !important;
+    font-size: 0.7em !important;
+}
+
+.dark .vc-weeknumber-content {
+    color: white !important;
 }
 
 .vc-sky {
@@ -115,30 +154,4 @@
     --vc-accent-700: #be123c;
     --vc-accent-800: #9f1239;
     --vc-accent-900: #881337;
-}
-
-.vc-idsimracing-1 {
-    --vc-accent-50: #b91c1c;
-    --vc-accent-100: #b91c1c;
-    --vc-accent-200: #b91c1c;
-    --vc-accent-300: #b91c1c;
-    --vc-accent-400: #b91c1c;
-    --vc-accent-500: #b91c1c;
-    --vc-accent-600: #b91c1c;
-    --vc-accent-700: #b91c1c;
-    --vc-accent-800: #b91c1c;
-    --vc-accent-900: #b91c1c;
-}
-
-.vc-idsimracing-2 {
-    --vc-accent-50: #7f1d1d;
-    --vc-accent-100: #7f1d1d;
-    --vc-accent-200: #7f1d1d;
-    --vc-accent-300: #7f1d1d;
-    --vc-accent-400: #7f1d1d;
-    --vc-accent-500: #7f1d1d;
-    --vc-accent-600: #7f1d1d;
-    --vc-accent-700: #7f1d1d;
-    --vc-accent-800: #7f1d1d;
-    --vc-accent-900: #7f1d1d;
 }

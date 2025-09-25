@@ -6,22 +6,22 @@
         htmlAttrs: {
             lang: "id"
         },
-        title: "Indonesia Sim Racing",
+        title: "ID Sim Racing",
         meta: [
             {
                 name: "description",
-                content: "Jadwal Lengkap Indonesia Sim Racing 2025 - Assetto Corsa Indonesia, Croco Racing Community, 97th Sim Racing Community"
+                content: "Pusat Sim Racer Indonesia"
             }
         ]
     })
 
     useSeoMeta({
-        title: "Indonesia Sim Racing",
-        ogTitle: "Indonesia Sim Racing",
-        twitterTitle: "Indonesia Sim Racing",
-        description: "Jadwal Lengkap Indonesia Sim Racing 2025 - Assetto Corsa Indonesia, Croco Racing Community, 97th Sim Racing Community",
-        ogDescription: "Jadwal Lengkap Indonesia Sim Racing 2025 - Assetto Corsa Indonesia, Croco Racing Community, 97th Sim Racing Community",
-        twitterDescription: "Jadwal Lengkap Indonesia Sim Racing 2025 - Assetto Corsa Indonesia, Croco Racing Community, 97th Sim Racing Community",
+        title: "ID Sim Racing",
+        ogTitle: "ID Sim Racing",
+        twitterTitle: "ID Sim Racing",
+        description: "Pusat Sim Racer Indonesia",
+        ogDescription: "Pusat Sim Racer Indonesia",
+        twitterDescription: "Pusat Sim Racer Indonesia",
         ogImage: "https://idsimracing.pages.dev/images/1.png",
         twitterImage: "https://idsimracing.pages.dev/images/1.png",
         ogUrl: "https://idsimracing.pages.dev",
@@ -29,7 +29,7 @@
     })
 
     const { $supabase } = useNuxtApp()
-    const { data: schedule, error } = await useAsyncData("schedule", async () => {
+    const { data: schedule } = await useAsyncData("schedule", async () => {
         const { data, error } = await $supabase
             .from("schedule")
             .select(`
@@ -66,7 +66,6 @@
                     )
                 )
             `)
-            // .eq("is_postponed", false)
             .order("date", { ascending: true })
         if(error){
             throw error
@@ -186,9 +185,18 @@
         }
     })
 
+    const isDark = ref(false)
+
     onMounted(() => {
-        useFlowbite(() => {
-            initFlowbite();
+        isDark.value = document.documentElement.classList.contains('dark')
+        
+        const observer = new MutationObserver(() => {
+            isDark.value = document.documentElement.classList.contains('dark')
+        })
+        
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class']
         })
 
         const savedEvents = localStorage.getItem("selectedEvents")
@@ -263,6 +271,16 @@
             return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()) && !item.is_postponed
         }).slice(0, 3)
     })
+
+    const clearFilterField = (filterType) => {
+        if(filterType === "year"){
+            selectedYears.value = []
+        }else if(filterType === "month"){
+            selectedMonths.value = []
+        }else if(filterType === "event"){
+            selectedEvents.value = []
+        }
+    }
 
     const resetFilter = () => {
         selectedEvents.value = [...eventList.value]
@@ -396,7 +414,6 @@
                 key: 'today',
                 dates: new Date(),
                 highlight: {
-                    color: 'idsimracing-2',
                     fillMode: 'solid',
                 },
             }
@@ -424,173 +441,204 @@
 </script>
 
 <template>
-    <div>
-        <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6">
-            <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
-                {{ $t('calendarTitle') }}
-            </div>
-            <div v-if="schedule" class="mx-auto">
-                <div class="flex flex-col justify-center items-center gap-4">
-                    <div class="flex flex-col gap-1 items-center text-sm lg:text-base">
+    <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6">
+        <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
+            {{ $t('calendarTitle') }}
+        </div>
+        <div v-if="schedule" class="mx-auto">
+            <div class="flex flex-col justify-center items-center gap-4">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                         <label class="text-black dark:text-white font-bold">{{ $t('years') }}</label>
-                        <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                            v-model="orderedSelectedYears"
-                            :items="yearsList"
-                            multiple
-                        />
-                    </div>
-                    <div class="flex flex-col gap-1 items-center text-sm lg:text-base">
-                        <label class="text-black dark:text-white font-bold">{{ $t('months') }}</label>
-                        <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                            v-model="orderedSelectedMonths"
-                            :items="monthsList"
-                            multiple
-                        />
-                    </div>
-                    <div class="flex flex-col gap-1 items-center text-sm lg:text-base">
-                        <label class="text-black dark:text-white font-bold">{{ $t('events') }}</label>
-                        <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                            v-model="orderedSelectedEvents"
-                            :items="eventList"
-                            multiple
-                        />
-                    </div>
-                    <div class="flex flex-col gap-1 items-center text-sm lg:text-base">
-                        <label class="text-black dark:text-white font-bold">Status</label>
-                        <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                            v-model="selectedStatusObject"
-                            :items="statusList"
-                            option-attribute="label"
-                            value-attribute="value"
-                        />
-                    </div>
-                    <div
-                        v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Mendatang' || selectedMonths.length < totalMonths || selectedYears.length < totalYears"
-                        class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
-                        {{ $t('resetFilter') }}
-                    </div>
-                </div>
-            </div>
-            <div v-if="schedule && filteredSchedule.length > 0" class="text-black dark:text-white text-center text-base lg:text-lg">
-                <div>{{ $t('totalRaces', {total: filteredSchedule.length}) }}</div>
-                <div>{{ $t('allTimesInYourTimezone') }}</div>
-            </div>
-        </div>
-        <div class="bg-red-700 dark:bg-red-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
-            <div class="text-white text-center text-lg lg:text-2xl font-bold leading-6">
-                {{ $t('nearestRaces') }}
-            </div>
-            <div v-if="nextThreeRaces.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-                <div v-for="event in nextThreeRaces" :key="event.id">
-                    <CardSchedule
-                        :date="event.date"
-                        :finish_date="event.finish_date"
-                        :event="event.events.name"
-                        :round="event.round"
-                        :circuit="event.circuit"
-                        :link="event.stream_link"
-                        :country="event.country"
-                        :country_2="event.country_2"
-                        :is_postponed="event.is_postponed"
-                        :organizer="event.events.organizers.abbreviation"
-                        :game="event.events.games.abbreviation"
-                        @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
-                        @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
-                    />
-                </div>
-            </div>
-            <div v-else="nextThreeRaces.length > 0" class="text-center text-white text-base lg:text-lg leading-6">
-                {{ $t('noRacesFound') }}
-            </div>
-        </div>
-        <div id="calendar" class="bg-white dark:bg-slate-900 px-1 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
-            <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
-                {{ $t('calendar') }}
-            </div>
-            <div class="mx-auto w-3/4">
-                <Calendar
-                    ref="calendar"
-                    expanded
-                    borderless
-                    is-dark
-                    show-weeknumbers="left-outside"
-                    trim-weeks
-                    :locale="locale"
-                    :first-day-of-week="2"
-                    :masks="{ weekdays: 'WWW' }"
-                    :attributes="calendarAttributes"
-                >
-                    <template #day-popover="{ attributes }">
-                        <ul class="p-2 lg:p-4 grid gap-4">
-                            <li
-                                v-for="{ key, customData } in [...attributes].sort((a, b) => new Date(a.customData.date) - new Date(b.customData.date))"
-                                :key="key"
-                                class="block text-xs lg:text-sm"
+                        <div class="flex items-center gap-2">
+                            <USelectMenu
+                                class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                v-model="orderedSelectedYears"
+                                :items="yearsList"
+                                multiple
+                            />
+                            <button 
+                                @click="clearFilterField('year')" 
+                                :disabled="selectedYears.length === 0"
+                                class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                             >
-                                <div>
-                                    {{ formatTime(customData.date) }}
-                                </div>
-                                <div :class="getEventStyle(customData.events.name)">
-                                    {{ customData.events.organizers.abbreviation }} - {{ customData.events.name }}
-                                </div>
-                                <div v-if="customData.round === 'Invitation'">
-                                    {{ customData.round }} Round: {{ customData.circuit }}
-                                </div>
-                                <div v-else>
-                                    Round {{ customData.round }}: {{ customData.circuit }}
-                                </div>
-                            </li>
-                        </ul>
-                    </template>
-                    <template #footer>
-                        <div class="w-fit mx-auto px-4 py-2">
-                            <button
-                                class="bg-red-700 dark:bg-red-900 text-white cursor-pointer w-full text-sm lg:text-base font-bold px-4 py-2 rounded-md"
-                                @click="moveToday"
-                            >
-                                {{ $t('today') }}
+                                <Icon name="mdi:filter-off" mode="svg" />
                             </button>
                         </div>
-                    </template>
-                </Calendar>
-            </div>
-        </div>
-        <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
-            <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
-                {{ $t('fullCalendar') }}
-            </div>
-            <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-                <div v-for="event in filteredSchedule" :id="event.id">
-                    <CardSchedule
-                        :date="event.date"
-                        :finish_date="event.finish_date"
-                        :event="event.events.name"
-                        :round="event.round"
-                        :circuit="event.circuit"
-                        :link="event.stream_link"
-                        :country="event.country"
-                        :country_2="event.country_2"
-                        :is_postponed="event.is_postponed"
-                        :organizer="event.events.organizers.abbreviation"
-                        :game="event.events.games.abbreviation"
-                        @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
-                        @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
-                    />
+                    </div>
+                    <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
+                        <label class="text-black dark:text-white font-bold">{{ $t('months') }}</label>
+                        <div class="flex items-center gap-2">
+                            <USelectMenu
+                                class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                v-model="orderedSelectedMonths"
+                                :items="monthsList"
+                                multiple
+                            />
+                            <button 
+                                @click="clearFilterField('month')" 
+                                :disabled="selectedMonths.length === 0"
+                                class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                            >
+                                <Icon name="mdi:filter-off" mode="svg" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
+                        <label class="text-black dark:text-white font-bold">{{ $t('events') }}</label>
+                        <div class="flex items-center gap-2">
+                            <USelectMenu
+                                class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                v-model="orderedSelectedEvents"
+                                :items="eventList"
+                                multiple
+                            />
+                            <button 
+                                @click="clearFilterField('event')" 
+                                :disabled="selectedEvents.length === 0"
+                                class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                            >
+                                <Icon name="mdi:filter-off" mode="svg" />
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
+                        <label class="text-black dark:text-white font-bold">Status</label>
+                        <div class="flex items-center gap-2">
+                            <USelectMenu
+                                class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                v-model="selectedStatusObject"
+                                :items="statusList"
+                                option-attribute="label"
+                                value-attribute="value"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div
+                    v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Mendatang' || selectedMonths.length < totalMonths || selectedYears.length < totalYears"
+                    class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
+                    {{ $t('resetFilter') }}
                 </div>
             </div>
-            <div v-if="filteredSchedule.length === 0" class="text-black dark:text-white text-center text-base lg:text-lg leading-6">
-                {{ $t('noRacesFound') }}
-            </div>
-            <button v-if="showCalendarButton" @click="scrollToCalendar" class="fixed bottom-12 left-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
-                <Icon name="mi:calendar" size="2.5em"  mode="svg" />
-            </button>
-            <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
-                <Icon name="mi:arrow-up" size="2.5em"  mode="svg" />
-            </button>
         </div>
-    </div> 
+        <div v-if="schedule && filteredSchedule.length > 0" class="text-black dark:text-white text-center text-base lg:text-lg">
+            <div>{{ $t('totalRaces', {total: filteredSchedule.length}) }}</div>
+            <div>{{ $t('allTimesInYourTimezone') }}</div>
+        </div>
+    </div>
+    <div class="bg-red-700 dark:bg-red-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+        <div class="text-white text-center text-lg lg:text-2xl font-bold leading-6">
+            {{ $t('nearestRaces') }}
+        </div>
+        <div v-if="nextThreeRaces.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+            <div v-for="event in nextThreeRaces" :key="event.id">
+                <CardSchedule
+                    :date="event.date"
+                    :finish_date="event.finish_date"
+                    :event="event.events.name"
+                    :round="event.round"
+                    :circuit="event.circuit"
+                    :link="event.stream_link"
+                    :country="event.country"
+                    :country_2="event.country_2"
+                    :is_postponed="event.is_postponed"
+                    :organizer="event.events.organizers.abbreviation"
+                    :game="event.events.games.abbreviation"
+                    @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
+                    @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
+                />
+            </div>
+        </div>
+        <div v-else="nextThreeRaces.length > 0" class="text-center text-white text-base lg:text-lg leading-6">
+            {{ $t('noRacesFound') }}
+        </div>
+    </div>
+    <div id="calendar" class="bg-white dark:bg-slate-900 px-1 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+        <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
+            {{ $t('calendar') }}
+        </div>
+        <div class="mx-auto w-3/4">
+            <Calendar
+                ref="calendar"
+                expanded
+                borderless
+                :is-dark="isDark"
+                show-weeknumbers="left-outside"
+                trim-weeks
+                :locale="locale"
+                :first-day-of-week="2"
+                :masks="{ weekdays: 'WWW' }"
+                :attributes="calendarAttributes"
+            >
+                <template #day-popover="{ attributes }">
+                    <ul class="p-2 lg:p-4 grid gap-4">
+                        <li
+                            v-for="{ key, customData } in [...attributes].sort((a, b) => new Date(a.customData.date) - new Date(b.customData.date))"
+                            :key="key"
+                            class="block text-xs lg:text-sm"
+                        >
+                            <div>
+                                {{ formatTime(customData.date) }}
+                            </div>
+                            <div :class="getEventStyle(customData.events.name)">
+                                {{ customData.events.organizers.abbreviation }} - {{ customData.events.name }}
+                            </div>
+                            <div v-if="customData.round === 'Invitation'">
+                                {{ customData.round }} Round: {{ customData.circuit }}
+                            </div>
+                            <div v-else>
+                                Round {{ customData.round }}: {{ customData.circuit }}
+                            </div>
+                        </li>
+                    </ul>
+                </template>
+                <template #footer>
+                    <div class="w-fit mx-auto px-4 py-2">
+                        <button
+                            class="bg-red-700 dark:bg-red-900 text-white cursor-pointer w-full text-sm lg:text-base font-bold px-4 py-2 rounded-md"
+                            @click="moveToday"
+                        >
+                            {{ $t('today') }}
+                        </button>
+                    </div>
+                </template>
+            </Calendar>
+        </div>
+    </div>
+    <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+        <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
+            {{ $t('fullCalendar') }}
+        </div>
+        <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+            <div v-for="event in filteredSchedule" :id="event.id">
+                <CardSchedule
+                    :date="event.date"
+                    :finish_date="event.finish_date"
+                    :event="event.events.name"
+                    :round="event.round"
+                    :circuit="event.circuit"
+                    :link="event.stream_link"
+                    :country="event.country"
+                    :country_2="event.country_2"
+                    :is_postponed="event.is_postponed"
+                    :organizer="event.events.organizers.abbreviation"
+                    :game="event.events.games.abbreviation"
+                    @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
+                    @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
+                />
+            </div>
+        </div>
+        <div v-if="filteredSchedule.length === 0" class="text-black dark:text-white text-center text-base lg:text-lg leading-6">
+            {{ $t('noRacesFound') }}
+        </div>
+        <button v-if="showCalendarButton" @click="scrollToCalendar" class="fixed bottom-12 left-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
+            <Icon name="mi:calendar" size="2.5em"  mode="svg" />
+        </button>
+        <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
+            <Icon name="mi:arrow-up" size="2.5em"  mode="svg" />
+        </button>
+    </div>
 </template>

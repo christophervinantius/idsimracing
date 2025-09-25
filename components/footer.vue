@@ -5,6 +5,6 @@
 
 <template>
     <div class="bg-red-700 dark:bg-red-900 text-center py-4 text-white">
-        Indonesia Sim Racing {{ year }}
+        ID Sim Racing {{ year }}
     </div>
 </template>

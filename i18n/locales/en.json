@@ -1,14 +1,17 @@
 {
-    "calendarTitle": "Indonesia Sim Racing Calendar",
+    "calendarTitle": "ID Sim Racing Calendar",
+    "databaseTitle": "ID Sim Racing Database",
     "nearestRaces": "Nearest Upcoming Races",
     "fullCalendar": "Full Schedule",
     "calendar": "Calendar View",
     "noRacesFound": "No schedules found with this filter.",
+    "noDriversFound": "No data found with this filter.",
     "resetFilter": "Reset filter",
     "all": "All",
     "finished": "Finished",
     "upcoming": "Upcoming",
     "totalRaces": "Total: {total} races",
+    "totalDrivers": "Total: {total} data",
     "started": "Started",
     "today": "Today",
     "tomorrow": "Tomorrow",
@@ -23,5 +26,11 @@
     "postponed": "Postponed",
     "years": "Year",
     "months": "Month",
-    "events": "Event"
+    "events": "Event",
+    "organizer": "Organizer",
+    "rating": "Rating",
+    "country": "Nationality",
+    "name": "Name",
+    "searchName": "Search by name...",
+    "driversDisclaimer": "Data may still change at any time subject to organizer's decision."
 }

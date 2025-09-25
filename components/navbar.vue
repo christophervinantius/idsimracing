@@ -39,11 +39,16 @@
 
 <template>
     <div class="sticky top-0 z-50">
-        <nav class="flex items-center justify-between bg-red-700 dark:bg-red-900 px-4 lg:px-16 py-4 text-white">
-            <NuxtLink to="/" class="text-lg lg:text-3xl font-bold">Indonesia Sim Racing</NuxtLink>
-            <ul class="flex gap-4 lg:gap-16 text-sm lg:text-lg items-center">
-                <Icon v-if="mode === 'dark'" @click="toggleMode" class="cursor-pointer" name="material-symbols:dark-mode-rounded" size="1.5em" /> 
-                <Icon v-if="mode === 'light'" @click="toggleMode" class="cursor-pointer" name="material-symbols:light-mode-rounded" size="1.5em" />
+        <nav class="w-full flex items-center justify-between bg-red-700 dark:bg-red-900 px-4 lg:px-16 py-4 text-white">
+            <ul class="w-4/5 flex gap-4 lg:gap-16 text-sm lg:text-lg items-center justify-start">
+                <NuxtLink to="/" class="text-lg lg:text-3xl font-bold">ID Sim Racing</NuxtLink>
+                <NuxtLink to="/database">
+                    <Icon name="material-symbols:database-search-rounded" class="cursor-pointer" size="1.5em" mode="svg"/>
+                </NuxtLink>
+            </ul>
+            <ul class="w-1/5 flex gap-4 lg:gap-16 text-sm lg:text-lg items-center justify-end">
+                <Icon v-if="mode === 'dark'" @click="toggleMode" class="cursor-pointer" name="material-symbols:dark-mode-rounded" size="1.5em" mode="svg" /> 
+                <Icon v-if="mode === 'light'" @click="toggleMode" class="cursor-pointer" name="material-symbols:light-mode-rounded" size="1.5em" mode="svg" />
                 <div @click="toggleLocale" class="cursor-pointer">
                     {{  locale === 'id' ? 'ID' : 'EN' }}
                 </div>
