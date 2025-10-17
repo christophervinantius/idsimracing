@@ -45,6 +45,9 @@
                 <NuxtLink to="/database">
                     <Icon name="material-symbols:database-search-rounded" class="cursor-pointer" size="1.5em" mode="svg"/>
                 </NuxtLink>
+                <NuxtLink to="/rentals">
+                    <Icon name="material-symbols:map-search-rounded" class="cursor-pointer" size="1.5em" mode="svg"/>
+                </NuxtLink>
             </ul>
             <ul class="w-1/5 flex gap-4 lg:gap-16 text-sm lg:text-lg items-center justify-end">
                 <Icon v-if="mode === 'dark'" @click="toggleMode" class="cursor-pointer" name="material-symbols:dark-mode-rounded" size="1.5em" mode="svg" /> 

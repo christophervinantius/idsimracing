@@ -190,6 +190,7 @@
         selectedCountries.value = [...countriesList.value]
         currentPage.value = 1
     }
+    
     const showTopButton = ref(false)
 
     const handleScrollTop = () => {
