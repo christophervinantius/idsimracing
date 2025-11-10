@@ -345,7 +345,7 @@
             style += "text-emerald-500"
         }else if(event === "Open Wheel Series"){
             style += "text-cyan-500"
-        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open")){
+        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open") || event.startsWith("Asri Motor Slalom Cup")){
             style += "text-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "text-pink-500"
@@ -377,7 +377,7 @@
             color = "emerald"
         }else if(event === "Open Wheel Series"){
             color = "cyan"
-        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open")){
+        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open") || event.startsWith("Asri Motor Slalom Cup")){
             color = "yellow"
         }else if(event === "Endurance Championship"){
             color = "pink"
@@ -589,8 +589,11 @@
                             <div v-if="customData.round === 'Invitation'">
                                 {{ customData.round }} Round: {{ customData.circuit }}
                             </div>
-                            <div v-else>
+                            <div v-else-if="customData.round !== null">
                                 Round {{ customData.round }}: {{ customData.circuit }}
+                            </div>
+                            <div v-else-if="customData.circuit !== null">
+                                {{ customData.circuit }}
                             </div>
                         </li>
                     </ul>

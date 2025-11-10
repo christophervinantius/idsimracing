@@ -33,7 +33,7 @@
             style += "border-emerald-500"
         }else if(event === "Open Wheel Series"){
             style += "border-cyan-500"
-        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open")){
+        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open") || event.startsWith("Asri Motor Slalom Cup")){
             style += "border-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "border-pink-500"
@@ -97,7 +97,7 @@
             style += "text-emerald-500"
         }else if(event === "Open Wheel Series"){
             style += "text-cyan-500"
-        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open")){
+        }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open") || event.startsWith("Asri Motor Slalom Cup")){
             style += "text-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "text-pink-500"
@@ -235,8 +235,11 @@
             <div v-if="round === 'Invitation'">
                 {{ round }} Round: {{ circuit }}
             </div>
-            <div v-else>
+            <div v-else-if="round !== null">
                 Round {{ round }}: {{ circuit }}
+            </div>
+            <div v-else-if="circuit !== null">
+                {{ circuit }}
             </div>
         </div>
         <div class="flex gap-1 lg:gap-2 items-center mt-2">
