@@ -11,6 +11,8 @@
             style += "bg-white hover:bg-neutral-300 text-red-600"
         }else if(game === "RBR"){
             style += "bg-black hover:bg-neutral-600 text-white"
+        }else if(game === "LMU"){
+            style += "bg-amber-500 hover:bg-amber-600 text-black"
         }
         return style
     }

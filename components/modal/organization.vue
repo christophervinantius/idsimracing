@@ -17,6 +17,8 @@
             style += "bg-indigo-500 hover:bg-indigo-600 text-black"
         }else if(organizer === "ERGP"){
             style += "bg-white hover:bg-neutral-300 text-red-600"
+        }else if(organizer === "SRC"){
+            style += "bg-blue-500 hover:bg-blue-600 text-white"
         }
         return style
     }

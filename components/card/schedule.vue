@@ -53,6 +53,8 @@
             style += "border-sky-500"
         }else if(event === "Endurance Edition" || event === "Global Edition"){
             style += "border-rose-500"
+        }else if(event === "LMU Championship"){
+            style += "border-amber-500"
         }
         return style
     }
@@ -71,6 +73,8 @@
             style += "bg-indigo-500 hover:bg-indigo-600 text-black"
         }else if(organizer === "ERGP"){
             style += "bg-white hover:bg-neutral-300 text-red-600"
+        }else if(organizer === "SRC"){
+            style += "bg-blue-500 hover:bg-blue-600 text-white"
         }
         return style
     }
@@ -83,8 +87,8 @@
             style += "bg-white hover:bg-neutral-300 text-red-600"
         }else if(game === "RBR"){
             style += "bg-black hover:bg-neutral-600 text-white"
-        }else if(game === "rF2"){
-            style += "bg-orange-500 hover:bg-orange-600 text-white"
+        }else if(game === "LMU"){
+            style += "bg-amber-500 hover:bg-amber-600 text-black"
         }
         return style
     }
@@ -117,6 +121,8 @@
             style += "text-sky-500"
         }else if(event === "Endurance Edition" || event === "Global Edition"){
             style += "text-rose-500"
+        }else if(event === "LMU Championship"){
+            style += "text-amber-500"
         }
         return style
     }
@@ -232,7 +238,7 @@
             <span class="font-bold text-base lg:text-xl">{{ event }}</span>
         </div>
         <div class="text-sm lg:text-base">
-            <div v-if="round === 'Invitation'">
+            <div v-if="round === 'Invitation' || round === 'Prologue'">
                 {{ round }} Round: {{ circuit }}
             </div>
             <div v-else-if="round !== null">

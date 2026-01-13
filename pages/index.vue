@@ -134,7 +134,7 @@
         )].sort((a, b) => a - b)
 
         const months = monthIndices.map(index => {
-            const date = new Date(2025, index, 1)
+            const date = new Date(2026, index, 1)
             return date.toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" })
         })
 
@@ -586,7 +586,7 @@
                             <div :class="getEventStyle(customData.events.name)">
                                 {{ customData.events.organizers.abbreviation }} - {{ customData.events.name }}
                             </div>
-                            <div v-if="customData.round === 'Invitation'">
+                            <div v-if="customData.round === 'Invitation' || customData.round === 'Prologue'">
                                 {{ customData.round }} Round: {{ customData.circuit }}
                             </div>
                             <div v-else-if="customData.round !== null">
