@@ -155,3 +155,16 @@
     --vc-accent-800: #9f1239;
     --vc-accent-900: #881337;
 }
+
+.vc-amber {
+    --vc-accent-50: #fffbeb;
+    --vc-accent-100: #fef3c7;
+    --vc-accent-200: #fde68a;
+    --vc-accent-300: #fcd34d;
+    --vc-accent-400: #fbbf24;
+    --vc-accent-500: #f59e0b;
+    --vc-accent-600: #d97706;
+    --vc-accent-700: #b45309;
+    --vc-accent-800: #92400e;
+    --vc-accent-900: #78350f;
+}

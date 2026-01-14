@@ -365,6 +365,8 @@
             style += "text-sky-500"
         }else if(event === "Endurance Edition" || event === "Global Edition"){
             style += "text-rose-500"
+        }else if(event === "LMU Championship"){
+            style += "text-amber-500"
         }
         return style
     }
@@ -397,6 +399,8 @@
             color = "sky"
         }else if(event === "Endurance Edition" || event === "Global Edition"){
             color = "rose"
+        }else if(event === "LMU Championship"){
+            color = "amber"
         }
         return color
     }
