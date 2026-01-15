@@ -35,6 +35,8 @@
     "country": "Nationality",
     "province": "Province",
     "name": "Name",
+    "team": "Team",
     "searchName": "Search by name...",
-    "driversDisclaimer": "Data may still change at any time subject to organizer's decision."
+    "driversDisclaimer": "Data may still change at any time subject to organizer's decision.",
+    "sortBy": "Sort By"
 }

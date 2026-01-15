@@ -1,4 +1,6 @@
 <script setup>
+    const { t } = useI18n()
+
     useHead({
         htmlAttrs: {
             lang: "id"
@@ -47,6 +49,9 @@
                     countries (
                         name,
                         code
+                    ),
+                    teams (
+                        name
                     )
                 `)
                 .range(start, start + batchSize - 1)
@@ -103,6 +108,24 @@
         }
     })
 
+    const selectedTeams = ref([])
+
+    const teamsList = computed(() => {
+        if(!database.value) return []
+        const teams = database.value.map(driver => driver.teams.name)
+        selectedTeams.value = [...new Set(teams)]
+        return [...new Set(teams)].sort()
+    })
+
+    const orderedSelectedTeams = computed({
+        get(){
+            return teamsList.value.filter(team => selectedTeams.value.includes(team))
+        },
+        set(newValue){
+            selectedTeams.value = newValue
+        }
+    })
+
     const selectedOrganizer = ref("Croco Racing Community")
 
     const organizersList = computed(() => {
@@ -140,20 +163,41 @@
 
     const searchQuery = ref("")
 
+    const sortBy = ref("Kelas")
+    
+    const sortOptions = computed(() => [
+        { value: "Kelas", label: t("rating") },
+        { value: "Nama", label: t("name") }
+    ])
+
+    const selectedSortBy = computed({
+        get(){
+            return sortOptions.value.find(option => option.value === sortBy.value) || sortOptions.value[0]
+        },
+        set(newValue){
+            sortBy.value = newValue.value
+        }
+    })
+
     const filteredDrivers = computed(() => {
         currentPage.value = 1
         if(!database.value) return []
         const driversData = database.value.filter(driver =>
             driver.name.toLowerCase().includes(searchQuery.value.toLowerCase()) &&
             selectedCountries.value.includes(driver.countries.name) &&
+            selectedTeams.value.includes(driver.teams.name) &&
             selectedRatings.value.includes(driver.rating) &&
             driver.organizers.name === selectedOrganizer.value
         )
         return driversData.sort((a, b) => {
-            if(ratingsOrder[a.rating] !== ratingsOrder[b.rating]){
-                return ratingsOrder[a.rating] - ratingsOrder[b.rating]
+            if(sortBy.value === "Kelas"){
+                if(ratingsOrder[a.rating] !== ratingsOrder[b.rating]){
+                    return ratingsOrder[a.rating] - ratingsOrder[b.rating]
+                }
+                return a.name.localeCompare(b.name)
+            }else if(sortBy.value === "Nama"){
+                return a.name.localeCompare(b.name)
             }
-            return a.name.localeCompare(b.name)
         })
     })
 
@@ -179,6 +223,8 @@
             selectedRatings.value = []
         }else if(filterType === "country"){
             selectedCountries.value = []
+        }else if(filterType === "team"){
+            selectedTeams.value = []
         }
         currentPage.value = 1
     }
@@ -187,7 +233,9 @@
         searchQuery.value = ""
         selectedOrganizer.value = "Croco Racing Community"
         selectedRatings.value = [...ratingsList.value]
+        selectedTeams.value = [...teamsList.value]
         selectedCountries.value = [...countriesList.value]
+        sortBy.value = "Kelas"
         currentPage.value = 1
     }
     
@@ -218,7 +266,7 @@
         <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
             {{ $t('databaseTitle') }}
         </div>
-        <div class="mx-aut flex flex-col justify-center items-center gap-4">
+        <div class="mx-auto flex flex-col justify-center items-center gap-4">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('organizer') }}</label>
@@ -269,6 +317,26 @@
                     </div>
                 </div>
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
+                    <label class="text-black dark:text-white font-bold">{{ $t('team') }}</label>
+                    <div class="flex items-center gap-2">
+                        <USelectMenu
+                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            v-model="orderedSelectedTeams"
+                            :items="teamsList"
+                            multiple
+                        />
+                        <button
+                            @click="clearFilterField('team')" 
+                            :disabled="selectedTeams.length === 0"
+                            class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                        >
+                            <Icon name="mdi:filter-off" mode="svg" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('name') }}</label>
                     <div class="flex items-center gap-2">
                         <input
@@ -279,14 +347,31 @@
                         />
                     </div>
                 </div>
+                <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
+                    <label class="text-black dark:text-white font-bold">{{ $t('sortBy') }}</label>
+                    <div class="flex items-center gap-2">
+                        <USelectMenu
+                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            v-model="selectedSortBy"
+                            :items="sortOptions"
+                            value-attribute="value"
+                            option-attribute="label"
+                        />
+                        <button
+                            class="invisible text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                        >
+                            <Icon name="mdi:filter-off" mode="svg" />
+                        </button>
+                    </div>
+                </div>
             </div>
             <div
-                v-if="searchQuery || selectedRatings.length !== ratingsList.length || selectedCountries.length !== countriesList.length || selectedOrganizer !== 'Croco Racing Community'"
+                v-if="searchQuery || selectedRatings.length !== ratingsList.length || selectedCountries.length !== countriesList.length || selectedTeams.length !== teamsList.length || selectedOrganizer !== 'Croco Racing Community' || sortBy !== 'Kelas'"
                 class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
                 {{ $t('resetFilter') }}
             </div>
         </div>
-        <div v-if="filteredDrivers.length" class="mx-auto w-full lg:w-3/5 flex flex-col gap-6 lg:gap-8">
+        <div v-if="filteredDrivers.length" class="mx-auto w-full lg:w-3/4 flex flex-col gap-6 lg:gap-8">
             <div class="text-black dark:text-white text-center text-base lg:text-lg">
                 <div>{{ $t('totalDrivers', {total: filteredDrivers.length}) }}</div>
                 <div>{{ $t('driversDisclaimer') }}</div>
@@ -294,8 +379,9 @@
             <table class="w-full">
                 <thead class="bg-red-700 dark:bg-red-900 text-white">
                     <tr>
-                        <th class="w-4/5 px-2 lg:px-4 py-2 text-sm lg:text-base">{{ $t('name') }}</th>
-                        <th class="2-1/5 px-2 lg:px-4 py-2 text-sm lg:text-base">{{ $t('rating') }}</th>
+                        <th class="w-5/10 px-2 lg:px-4 py-2 text-sm lg:text-base">{{ $t('name') }}</th>
+                        <th class="w-4/10 px-2 lg:px-4 py-2 text-sm lg:text-base">{{ $t('team') }}</th>
+                        <th class="w-1/10 px-2 lg:px-4 py-2 text-sm lg:text-base">{{ $t('rating') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -304,7 +390,7 @@
                         :key="driver.id"
                         class="text-center border-b border-slate-300 dark:border-slate-700 bg-red-50 dark:bg-slate-950 hover:bg-red-100 dark:hover:bg-slate-800"
                     >
-                        <td class="w-4/5 px-2 lg:px-4 py-2 flex items-center gap-1 lg:gap-2 font-bold text-sm lg:text-base">
+                        <td class="w-full px-2 lg:px-4 py-2 flex items-center gap-1 lg:gap-2 font-bold text-sm lg:text-base">
                             <div>
                                 <Icon
                                     :name="`flag-${driver.countries.code}-4x3`"
@@ -317,7 +403,12 @@
                             </div>
                         </td>
                         <td
-                            class="w-1/5 px-2 lg:px-4 py-2 text-sm lg:text-base"
+                            class="w-4/10 px-2 lg:px-4 py-2 text-sm lg:text-base font-bold"
+                        >
+                            {{ driver.teams.name }}
+                        </td>
+                        <td
+                            class="w-1/10 px-2 lg:px-4 py-2 text-sm lg:text-base"
                             :class="getRatingStyle(driver.rating)"
                         >
                             {{ driver.rating }}

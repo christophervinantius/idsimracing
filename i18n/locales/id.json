@@ -35,6 +35,8 @@
     "country": "Kewarganegaraan",
     "province": "Provinsi",
     "name": "Nama",
+    "team": "Tim",
     "searchName": "Cari nama...",
-    "driversDisclaimer": "Data masih dapat berubah sewaktu-waktu sesuai keputusan penyelenggara."
+    "driversDisclaimer": "Data masih dapat berubah sewaktu-waktu sesuai keputusan penyelenggara.",
+    "sortBy": "Urut Berdasarkan"
 }
