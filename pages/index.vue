@@ -41,6 +41,7 @@
                 stream_link,
                 country,
                 country_2,
+                season,
                 is_postponed,
                 events (
                     name,
@@ -349,13 +350,13 @@
             style += "text-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "text-pink-500"
-        }else if(event === "V8 Masters League" || event === "Praga Cup"){
+        }else if(event === "Masters League" || event === "Praga Cup"){
             style += "text-blue-500"
         }else if(event === "Juniors"){
             style += "text-lime-500"
         }else if(event === "B.E.G.O. Balap Cup"){
             style += "text-orange-500"
-        }else if(event === "Sprint Rally Challenge"){
+        }else if(event === "Sprint Rally Challenge" || event === "Rally Championship"){
             style += "text-purple-500"
         }else if(event.startsWith("Speedway Master Series")){
             style += "text-fuchsia-500"
@@ -383,13 +384,13 @@
             color = "yellow"
         }else if(event === "Endurance Championship"){
             color = "pink"
-        }else if(event === "V8 Masters League" || event === "Praga Cup"){
+        }else if(event === "Masters League" || event === "Praga Cup"){
             color = "blue"
         }else if(event === "Juniors"){
             color = "lime"
         }else if(event === "B.E.G.O. Balap Cup"){
             color = "orange"
-        }else if(event === "Sprint Rally Challenge"){
+        }else if(event === "Sprint Rally Challenge" || event === "Rally Championship"){
             color = "purple"
         }else if(event.startsWith("Speedway Master Series")){
             color = "fuchsia"
@@ -551,6 +552,7 @@
                     :is_postponed="event.is_postponed"
                     :organizer="event.events.organizers.abbreviation"
                     :game="event.events.games.abbreviation"
+                    :season="event.season"
                     @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
                     @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
                 />
@@ -588,7 +590,7 @@
                                 {{ formatTime(customData.date) }}
                             </div>
                             <div :class="getEventStyle(customData.events.name)">
-                                {{ customData.events.organizers.abbreviation }} - {{ customData.events.name }}
+                                {{ customData.events.organizers.abbreviation }} - {{ customData.events.name }} {{ customData.season && "(S" + customData.season + ")"}}
                             </div>
                             <div v-if="customData.round === 'Invitation' || customData.round === 'Prologue'">
                                 {{ customData.round }} Round: {{ customData.circuit }}
@@ -633,6 +635,7 @@
                     :is_postponed="event.is_postponed"
                     :organizer="event.events.organizers.abbreviation"
                     :game="event.events.games.abbreviation"
+                    :season="event.season"
                     @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
                     @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
                 />

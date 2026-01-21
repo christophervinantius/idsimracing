@@ -13,6 +13,7 @@
             "is_postponed",
             "organizer",
             "game",
+            "season"
         ]
     )
 
@@ -37,13 +38,13 @@
             style += "border-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "border-pink-500"
-        }else if(event === "V8 Masters League" || event === "Praga Cup"){
+        }else if(event === "Masters League" || event === "Praga Cup"){
             style += "border-blue-500"
         }else if(event === "Juniors"){
             style += "border-lime-500"
         }else if(event === "B.E.G.O. Balap Cup"){
             style += "border-orange-500"
-        }else if(event === "Sprint Rally Challenge"){
+        }else if(event === "Sprint Rally Challenge" || event === "Rally Championship"){
             style += "border-purple-500"
         }else if(event.startsWith("Speedway Master Series")){
             style += "border-fuchsia-500"
@@ -105,13 +106,13 @@
             style += "text-yellow-500"
         }else if(event === "Endurance Championship"){
             style += "text-pink-500"
-        }else if(event === "V8 Masters League" || event === "Praga Cup"){
+        }else if(event === "Masters League" || event === "Praga Cup"){
             style += "text-blue-500"
         }else if(event === "Juniors"){
             style += "text-lime-500"
         }else if(event === "B.E.G.O. Balap Cup"){
             style += "text-orange-500"
-        }else if(event === "Sprint Rally Challenge"){
+        }else if(event === "Sprint Rally Challenge" || event === "Rally Championship"){
             style += "text-purple-500"
         }else if(event.startsWith("Speedway Master Series")){
             style += "text-fuchsia-500"
@@ -235,7 +236,7 @@
             {{ formatTime(date) }}
         </div>
         <div :class="getTextStyle(event)">
-            <span class="font-bold text-base lg:text-xl">{{ event }}</span>
+            <span class="font-bold text-base lg:text-xl">{{ event }} {{ season && "(S" + season + ")"}}</span>
         </div>
         <div class="text-sm lg:text-base">
             <div v-if="round === 'Invitation' || round === 'Prologue'">
