@@ -265,6 +265,25 @@
         return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
     })
 
+    const PAGE_SIZE = 12
+    const displayCount = ref(PAGE_SIZE)
+
+    const displayedSchedule = computed(() => {
+        return filteredSchedule.value.slice(0, displayCount.value)
+    })
+
+    const hasMore = computed(() => {
+        return displayCount.value < filteredSchedule.value.length
+    })
+
+    const loadMore = () => {
+        displayCount.value += PAGE_SIZE
+    }
+
+    watch([selectedEvents, selectedMonths, selectedYears, selectedStatus], () => {
+        displayCount.value = PAGE_SIZE
+    })
+
     const nextThreeRaces = computed(() => {
         return schedule.value.filter(item => {
             const eventDate = new Date(item.finish_date)
@@ -368,42 +387,48 @@
             style += "text-rose-500"
         }else if(event.startsWith("LMU Championship")){
             style += "text-amber-500"
+        }else if(event === "LMU Solo Endurance"){
+            style += "text-pink-800"
         }
         return style
     }
 
+    // Returns a color string for standard 500 accents,
+    // or a { style } object for custom accents (e.g. 800, 900).
+    // v-calendar bar supports both formats.
     const getBarColor = (event) => {
-        let color = ""
         if(event.startsWith("MX-5 Cup Asia")){
-            color = "red"
+            return "red"
         }else if(event.startsWith("1 Hour Series")){
-            color = "emerald"
+            return "emerald"
         }else if(event === "Open Wheel Series"){
-            color = "cyan"
+            return "cyan"
         }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open") || event.startsWith("Asri Motor Slalom Cup")){
-            color = "yellow"
+            return "yellow"
         }else if(event === "Endurance Championship"){
-            color = "pink"
+            return "pink"
         }else if(event === "Masters League" || event === "Praga Cup"){
-            color = "blue"
+            return "blue"
         }else if(event === "Juniors"){
-            color = "lime"
+            return "lime"
         }else if(event === "B.E.G.O. Balap Cup"){
-            color = "orange"
+            return "orange"
         }else if(event === "Sprint Rally Challenge" || event === "Rally Championship"){
-            color = "purple"
+            return "purple"
         }else if(event.startsWith("Speedway Master Series")){
-            color = "fuchsia"
+            return "fuchsia"
         }else if(event === "Javahosting Rental Cup"){
-            color = "indigo"
+            return "indigo"
         }else if(event === "Indorance"){
-            color = "sky"
+            return "sky"
         }else if(event === "Endurance Edition" || event === "Global Edition"){
-            color = "rose"
+            return "rose"
         }else if(event.startsWith("LMU Championship")){
-            color = "amber"
+            return "amber"
+        }else if(event === "LMU Solo Endurance"){
+            return { style: { backgroundColor: '#9d174d' } } // pink-800
         }
-        return color
+        return ""
     }
 
     const calendarAttributes = computed(() => {
@@ -621,8 +646,11 @@
         <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
             {{ $t('fullCalendar') }}
         </div>
+        <div v-if="schedule && filteredSchedule.length > 0" class="text-black dark:text-white text-center text-sm lg:text-base">
+            {{ $t('showingOf', { showing: displayedSchedule.length, total: filteredSchedule.length }) }}
+        </div>
         <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-            <div v-for="event in filteredSchedule" :id="event.id">
+            <div v-for="event in displayedSchedule" :key="event.id" :id="event.id">
                 <CardSchedule
                     :date="event.date"
                     :finish_date="event.finish_date"
@@ -640,6 +668,14 @@
                     @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
                 />
             </div>
+        </div>
+        <div v-if="hasMore" class="flex justify-center">
+            <button
+                @click="loadMore"
+                class="bg-red-700 dark:bg-red-900 hover:bg-red-800 dark:hover:bg-red-950 text-white text-sm lg:text-base font-bold px-8 py-3 rounded-lg cursor-pointer transition-colors duration-200"
+            >
+                {{ $t('loadMore') }}
+            </button>
         </div>
         <div v-if="filteredSchedule.length === 0" class="text-black dark:text-white text-center text-base lg:text-lg leading-6">
             {{ $t('noRacesFound') }}

@@ -56,6 +56,8 @@
             style += "border-rose-500"
         }else if(event.startsWith("LMU Championship")){
             style += "border-amber-500"
+        }else if(event === "LMU Solo Endurance"){
+            style += "border-pink-800"
         }
         return style
     }
@@ -76,6 +78,8 @@
             style += "bg-white hover:bg-neutral-300 text-red-600"
         }else if(organizer === "SRC"){
             style += "bg-blue-500 hover:bg-blue-600 text-white"
+        }else if(organizer === "ISL"){
+            style += "bg-pink-800 hover:bg-pink-900 text-white"
         }
         return style
     }
@@ -124,6 +128,8 @@
             style += "text-rose-500"
         }else if(event.startsWith("LMU Championship")){
             style += "text-amber-500"
+        }else if(event === "LMU Solo Endurance"){
+            style += "text-pink-800"
         }
         return style
     }

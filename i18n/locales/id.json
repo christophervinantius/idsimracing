@@ -38,5 +38,7 @@
     "team": "Tim",
     "searchName": "Cari nama...",
     "driversDisclaimer": "Data masih dapat berubah sewaktu-waktu sesuai keputusan penyelenggara.",
-    "sortBy": "Urut Berdasarkan"
+    "sortBy": "Urut Berdasarkan",
+    "showingOf": "Menampilkan {showing} dari {total} balapan",
+    "loadMore": "Muat Lebih Banyak"
 }

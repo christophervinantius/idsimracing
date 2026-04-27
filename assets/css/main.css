@@ -168,3 +168,16 @@
     --vc-accent-800: #92400e;
     --vc-accent-900: #78350f;
 }
+
+.vc-pink {
+    --vc-accent-50: #fdf2f8;
+    --vc-accent-100: #fce7f3;
+    --vc-accent-200: #fbcfe8;
+    --vc-accent-300: #f9a8d4;
+    --vc-accent-400: #f472b6;
+    --vc-accent-500: #ec4899;
+    --vc-accent-600: #db2777;
+    --vc-accent-700: #c0104f;
+    --vc-accent-800: #9d174d;
+    --vc-accent-900: #831843;
+}
