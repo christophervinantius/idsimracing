@@ -109,9 +109,16 @@
     const totalYears = ref(0)
     const selectedStatus = ref("Mendatang")
 
+    const getEventFullName = (item) => {
+        const orgAbbr = item.events?.organizers?.abbreviation
+        const eventName = item.events?.name || ""
+        return orgAbbr ? `${orgAbbr} ${eventName}` : eventName
+    }
+
     const eventList = computed(() => {
+        if(!schedule.value) return []
         const events = [...new Set(
-            schedule.value.map(item => item.events.name).sort()
+            schedule.value.map(item => getEventFullName(item)).sort()
         )]
         selectedEvents.value = [...new Set(events)]
         totalEvents.value = events.length
@@ -119,6 +126,7 @@
     })
 
     const yearsList = computed(() => {
+        if(!schedule.value) return []
         const years = [...new Set(
             schedule.value.map(item => new Date(item.date).getFullYear())
         )].sort((a, b) => a - b)
@@ -130,6 +138,7 @@
     })
     
     const monthsList = computed(() => {
+        if(!schedule.value) return []
         const monthIndices = [...new Set(
             schedule.value.map(item => new Date(item.date).getMonth())
         )].sort((a, b) => a - b)
@@ -247,22 +256,23 @@
     })
 
     const filteredSchedule = computed(() => {
+        if(!schedule.value) return []
         if(selectedStatus.value === "Semua"){
-            return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
+            return schedule.value.filter(item => selectedEvents.value.includes(getEventFullName(item)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
         }else if(selectedStatus.value === "Selesai"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate < todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
+                return eventDate < todayDate && (selectedEvents.value.includes(getEventFullName(item)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
+                return eventDate >= todayDate && (selectedEvents.value.includes(getEventFullName(item)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
             })
         }
-        return schedule.value.filter(item => selectedEvents.value.includes(item.events.name) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
+        return schedule.value.filter(item => selectedEvents.value.includes(getEventFullName(item)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
     })
 
     const PAGE_SIZE = 12
@@ -285,10 +295,11 @@
     })
 
     const nextThreeRaces = computed(() => {
+        if(!schedule.value) return []
         return schedule.value.filter(item => {
             const eventDate = new Date(item.finish_date)
             const todayDate = new Date()
-            return eventDate >= todayDate && (selectedEvents.value.includes(item.events.name)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()) && !item.is_postponed
+            return eventDate >= todayDate && (selectedEvents.value.includes(getEventFullName(item))) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()) && !item.is_postponed
         }).slice(0, 3)
     })
 

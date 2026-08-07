@@ -21,7 +21,7 @@
     "daysLeft": "{days} days to go",
     "minutesLeft": "{count} minute to go | {count} minutes to go",
     "hoursLeft": "{count} hour to go | {count} hours to go",
-    "oneDayAndHoursLeft": "1 day and {count} hour to go | 1 day and {count} hours to go",
+    "oneDayAndHoursLeft": "1 day {count} hour to go | 1 day {count} hours to go",
     "watchLive": "Watch live",
     "watchReplay": "Watch replay",
     "allTimesInYourTimezone": "Date and time are displayed in your time zone—and may still change at any time.",
