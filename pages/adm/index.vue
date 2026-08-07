@@ -3,7 +3,7 @@
         htmlAttrs: {
             lang: "id"
         },
-        title: "Admin - Schedule Management | ID Sim Racing",
+        title: "Admin | ID Sim Racing",
         meta: [
             {
                 name: "description",
@@ -13,7 +13,7 @@
     })
 
     useSeoMeta({
-        title: "Admin - Schedule Management | ID Sim Racing",
+        title: "Admin | ID Sim Racing",
         description: "Halaman Admin Update Jadwal Balapan ID Sim Racing"
     })
 
@@ -556,16 +556,16 @@
 
         <!-- Schedule Table -->
         <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
-            <table class="w-full text-left border-collapse">
+            <table class="w-full min-w-[1050px] table-fixed text-left border-collapse">
                 <thead class="bg-red-700 dark:bg-red-900 text-white">
                     <tr>
-                        <th class="px-4 py-3">Event</th>
-                        <th class="px-4 py-3">Round</th>
-                        <th class="px-4 py-3">Jadwal</th>
-                        <th class="px-4 py-3">Sirkuit</th>
-                        <th class="px-4 py-3 text-center">Stream</th>
-                        <th class="px-4 py-3 text-center">Status</th>
-                        <th class="px-4 py-3 text-center">Aksi</th>
+                        <th class="px-3 sm:px-4 py-3 w-[22%]">Event</th>
+                        <th class="px-1.5 sm:px-2 py-3 w-[6%]">Round</th>
+                        <th class="px-3 sm:px-4 py-3 w-[24%]">Jadwal</th>
+                        <th class="px-3 sm:px-4 py-3 w-[24%]">Sirkuit</th>
+                        <th class="px-2 sm:px-3 py-3 text-center w-[8%]">Stream</th>
+                        <th class="px-2 sm:px-3 py-3 text-center w-[8%]">Status</th>
+                        <th class="px-2 sm:px-3 py-3 text-center w-[8%]">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-sm">
@@ -591,23 +591,23 @@
                         :key="item.id"
                         class="hover:bg-red-50/50 dark:hover:bg-slate-900/50 transition-colors text-black dark:text-white"
                     >
-                        <td class="px-4 py-3">
+                        <td class="px-3 sm:px-4 py-3">
                             <div class="text-gray-900 dark:text-white">
                                 {{ item.events.organizers.abbreviation }} {{ item.events?.name || 'Event N/A' }}{{ item.season ? ' (S' + item.season + ')' : '' }}
                             </div>
                         </td>
 
-                        <td class="px-4 py-3 whitespace-nowrap">
+                        <td class="px-1.5 sm:px-2 py-3 whitespace-nowrap">
                             {{ item.round || '-' }}
                         </td>
 
-                        <td class="px-4 py-3 whitespace-nowrap">
+                        <td class="px-3 sm:px-4 py-3 whitespace-nowrap">
                             <div class="text-gray-900 dark:text-gray-100">
                                 {{ formatDateDisplay(item.date) }}
                             </div>
                         </td>
 
-                        <td class="px-4 py-3">
+                        <td class="px-3 sm:px-4 py-3">
                             <div class="flex items-center gap-1">
                                 <Icon
                                     v-if="item.country"
@@ -624,7 +624,7 @@
                         </td>
 
                         <!-- Stream Link -->
-                        <td class="px-4 py-3 text-center whitespace-nowrap">
+                        <td class="px-2 sm:px-3 py-3 text-center whitespace-nowrap">
                             <a
                                 v-if="item.stream_link"
                                 :href="item.stream_link"
@@ -638,7 +638,7 @@
                         </td>
 
                         <!-- Status Badge -->
-                        <td class="px-4 py-3 text-center whitespace-nowrap">
+                        <td class="px-2 sm:px-3 py-3 text-center whitespace-nowrap">
                             <span
                                 class="px-2.5 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 select-none"
                                 :class="getStatusBadgeClass(getScheduleStatus(item))"
@@ -648,7 +648,7 @@
                         </td>
 
                         <!-- Actions -->
-                        <td class="px-4 py-3 text-center whitespace-nowrap">
+                        <td class="px-2 sm:px-3 py-3 text-center whitespace-nowrap">
                             <div class="flex items-center justify-center gap-2">
                                 <button
                                     @click="openEditModal(item)"
@@ -689,140 +689,144 @@
 
                 <!-- Modal Form -->
                 <form @submit.prevent="saveSchedule" class="flex flex-col gap-4">
-                    <!-- Row 1: Event (50%) Season (25%) Round (25%) -->
-                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                        <div class="sm:col-span-2 flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Event <span class="text-red-600">*</span></label>
-                            <div class="relative flex items-center">
-                                <select
-                                    v-model="formData.event_id"
-                                    required
-                                    class="p-2.5 pr-10 appearance-none rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full cursor-pointer"
-                                >
-                                    <option value="" disabled>-- Pilih Event --</option>
-                                    <option v-for="ev in eventsList" :key="ev.id" :value="ev.id">
-                                        {{ ev.organizers?.abbreviation ? ev.organizers.abbreviation + ' ' : '' }}{{ ev.name }}
-                                    </option>
-                                </select>
-                                <Icon name="material-symbols:keyboard-arrow-down-rounded" class="absolute right-3 text-xl text-gray-400 pointer-events-none" />
-                            </div>
+                    <!-- Row 1: Event (100%) -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-black dark:text-white text-sm font-medium">Event <span class="text-red-600">*</span></label>
+                        <div class="relative flex items-center">
+                            <select
+                                v-model="formData.event_id"
+                                required
+                                class="p-2.5 pr-10 appearance-none rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full cursor-pointer"
+                            >
+                                <option value="" disabled>-- Pilih Event --</option>
+                                <option v-for="ev in eventsList" :key="ev.id" :value="ev.id">
+                                    {{ ev.organizers?.abbreviation ? ev.organizers.abbreviation + ' ' : '' }}{{ ev.name }}
+                                </option>
+                            </select>
+                            <Icon name="material-symbols:keyboard-arrow-down-rounded" class="absolute right-3 text-xl text-gray-400 pointer-events-none" />
                         </div>
-                        <div class="sm:col-span-1 flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Season</label>
+                    </div>
+
+                    <!-- Row 2: Season (50%) Round (50%) -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-sm font-medium">Season</label>
                             <input
                                 v-model="formData.season"
                                 type="text"
                                 placeholder="Contoh: 2"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none"
+                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
                             />
                         </div>
-                        <div class="sm:col-span-1 flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Round <span class="text-red-600">*</span></label>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-sm font-medium">Round <span class="text-red-600">*</span></label>
                             <input
                                 v-model="formData.round"
                                 type="text"
                                 placeholder="Contoh: 3"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none"
+                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
                             />
                         </div>
                     </div>
 
-                    <!-- Row 2: Start Date (50%) Finish Date (50%) -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Row 3: Jadwal Mulai (50%) Jadwal Selesai (50%) -->
+                    <div class="grid grid-cols-2 gap-4">
                         <div class="flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Tanggal dan Waktu Mulai <span class="text-red-600">*</span></label>
+                            <label class="text-black dark:text-white text-sm font-medium">Jadwal Mulai <span class="text-red-600">*</span></label>
                             <input
                                 v-model="formData.date"
                                 type="datetime-local"
                                 required
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                         <div class="flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Tanggal dan Waktu Selesai</label>
+                            <label class="text-black dark:text-white text-sm font-medium">Jadwal Selesai</label>
                             <input
                                 v-model="formData.finish_date"
                                 type="datetime-local"
                                 required
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                     </div>
 
-                    <!-- Row 3: Circuit (50%) Country 1 (25%) Country 2 (25%) -->
-                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                        <div class="sm:col-span-2 flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Sirkuit (dan Sesi)</label>
-                            <input
-                                v-model="formData.circuit"
-                                type="text"
-                                placeholder="Contoh: Imola Circuit - Qualifying"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none"
-                            />
-                        </div>
-                        <div class="sm:col-span-1 flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Kode Negara 1</label>
+                    <!-- Row 4: Sirkuit (100%) -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-black dark:text-white text-sm font-medium">Sirkuit (dan Sesi)</label>
+                        <input
+                            v-model="formData.circuit"
+                            type="text"
+                            placeholder="Contoh: Imola Circuit - Qualifying"
+                            class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
+                        />
+                    </div>
+
+                    <!-- Row 5: Kode Negara 1 (50%) Kode Negara 2 (50%) -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-sm font-medium">Kode Negara 1</label>
                             <input
                                 v-model="formData.country"
                                 type="text"
                                 placeholder="Contoh: us"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none"
+                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
                             />
                         </div>
-                        <div class="sm:col-span-1 flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Kode Negara 2</label>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-sm font-medium">Kode Negara 2</label>
                             <input
                                 v-model="formData.country_2"
                                 type="text"
                                 placeholder="Contoh: jp"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none"
+                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
                             />
                         </div>
                     </div>
 
-                    <!-- Row 4: Stream Link (100%) -->
+                    <!-- Row 6: Stream Link (100%) -->
                     <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white">Stream Link (YouTube URL)</label>
+                        <label class="text-black dark:text-white text-sm font-medium">Stream Link (YouTube URL)</label>
                         <input
                             v-model="formData.stream_link"
                             type="url"
                             placeholder="https://youtube.com/live/..."
-                            class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none"
+                            class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
                         />
                     </div>
 
-                    <!-- Postponed Checkbox & Admin Password Row -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end pt-2">
-                        <div class="flex items-center gap-3 py-2">
+                    <!-- Row 7: Postponed (50%) Password Admin (50%) -->
+                    <div class="grid grid-cols-2 gap-4 items-end">
+                        <div class="flex items-center gap-2 sm:gap-3 py-2.5">
                             <input
                                 id="postponed-checkbox"
                                 v-model="formData.is_postponed"
                                 type="checkbox"
-                                class="w-5 h-5 accent-red-700 rounded cursor-pointer"
+                                class="w-4 h-4 sm:w-5 sm:h-5 accent-red-700 rounded cursor-pointer shrink-0"
                             />
-                            <label for="postponed-checkbox" class="text-black dark:text-white cursor-pointer select-none">
+                            <label for="postponed-checkbox" class="text-black dark:text-white text-xs sm:text-sm font-medium cursor-pointer select-none">
                                 Ditunda (Postponed)
                             </label>
                         </div>
                         <div class="flex flex-col gap-1">
-                            <label class="text-black dark:text-white">Password Admin <span class="text-red-600">*</span></label>
+                            <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
                             <div class="relative flex items-center">
                                 <input
                                     v-model="adminPasswordInput"
                                     :type="showAdminPassword ? 'text' : 'password'"
                                     required
-                                    placeholder="Masukkan password admin"
+                                    placeholder="Password admin"
                                     @input="adminPasswordError = ''"
-                                    class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
+                                    class="p-2.5 pr-9 sm:pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                                     :class="adminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-700 dark:border-red-900'"
                                 />
                                 <button
                                     type="button"
                                     @click="showAdminPassword = !showAdminPassword"
-                                    class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
+                                    class="absolute right-2.5 sm:right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
                                     title="Tampilkan/Sembunyikan Password"
                                 >
-                                    <Icon :name="showAdminPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
+                                    <Icon :name="showAdminPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-lg sm:text-xl" />
                                 </button>
                             </div>
                             <p v-if="adminPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
