@@ -485,20 +485,49 @@
 
     const tableSelectedMonth = ref(new Date().getMonth())
     const tableSelectedYear = ref(new Date().getFullYear())
+    const showMonthPicker = ref(false)
+    const pickerYear = ref(new Date().getFullYear())
 
-    const tableMonthsList = computed(() => {
+    // All months with schedule data (sparse — only months that have events)
+    const tableDataMonths = computed(() => {
         if(!schedule.value) return []
-        const entries = [...new Map(
-            schedule.value.map(item => {
-                const d = new Date(item.date)
-                return [`${d.getFullYear()}-${d.getMonth()}`, { month: d.getMonth(), year: d.getFullYear() }]
+        const seen = new Map()
+        schedule.value.forEach(item => {
+            const d = new Date(item.date)
+            const key = `${d.getFullYear()}-${d.getMonth()}`
+            if(!seen.has(key)) seen.set(key, { month: d.getMonth(), year: d.getFullYear() })
+        })
+        return [...seen.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+    })
+
+    // Full contiguous month list from first to last schedule month (fills gaps)
+    const tableMonthsList = computed(() => {
+        if(!tableDataMonths.value.length) return []
+        const first = tableDataMonths.value[0]
+        const last = tableDataMonths.value[tableDataMonths.value.length - 1]
+        const result = []
+        let y = first.year, m = first.month
+        while(y < last.year || (y === last.year && m <= last.month)) {
+            result.push({
+                month: m,
+                year: y,
+                label: new Date(y, m, 1).toLocaleString(locale.value === 'en' ? 'en-US' : 'id-ID', { month: 'long', year: 'numeric' })
             })
-        ).values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
-        return entries.map(e => ({
-            month: e.month,
-            year: e.year,
-            label: new Date(e.year, e.month, 1).toLocaleString(locale.value === 'en' ? 'en-US' : 'id-ID', { month: 'long', year: 'numeric' })
-        }))
+            m++
+            if(m > 11) { m = 0; y++ }
+        }
+        return result
+    })
+
+    // Years covered by the full month list
+    const tablePickerYears = computed(() => {
+        const years = [...new Set(tableMonthsList.value.map(e => e.year))].sort((a, b) => a - b)
+        return years
+    })
+
+    // Months available for a given picker year
+    const tablePickerMonthsForYear = computed(() => {
+        return tableMonthsList.value.filter(e => e.year === pickerYear.value).map(e => e.month)
     })
 
     const tableNavIndex = computed(() =>
@@ -507,7 +536,7 @@
 
     const tableNavLabel = computed(() => {
         const found = tableMonthsList.value.find(e => e.month === tableSelectedMonth.value && e.year === tableSelectedYear.value)
-        return found ? found.label : ''
+        return found ? found.label : new Date(tableSelectedYear.value, tableSelectedMonth.value, 1).toLocaleString(locale.value === 'en' ? 'en-US' : 'id-ID', { month: 'long', year: 'numeric' })
     })
 
     const tablePrevMonth = () => {
@@ -525,6 +554,46 @@
             tableSelectedYear.value = tableMonthsList.value[idx + 1].year
         }
     }
+
+    const openMonthPicker = () => {
+        pickerYear.value = tableSelectedYear.value
+        showMonthPicker.value = !showMonthPicker.value
+    }
+
+    const selectPickerMonth = (month) => {
+        if(!tablePickerMonthsForYear.value.includes(month)) return
+        tableSelectedMonth.value = month
+        tableSelectedYear.value = pickerYear.value
+        showMonthPicker.value = false
+    }
+
+    const pickerPrevYear = () => {
+        const idx = tablePickerYears.value.indexOf(pickerYear.value)
+        if(idx > 0) pickerYear.value = tablePickerYears.value[idx - 1]
+    }
+
+    const pickerNextYear = () => {
+        const idx = tablePickerYears.value.indexOf(pickerYear.value)
+        if(idx < tablePickerYears.value.length - 1) pickerYear.value = tablePickerYears.value[idx + 1]
+    }
+
+    const moveTableToday = () => {
+        const now = new Date()
+        tableSelectedMonth.value = now.getMonth()
+        tableSelectedYear.value = now.getFullYear()
+        showMonthPicker.value = false
+    }
+
+    const tableMonthPickerRef = ref(null)
+    const handlePickerClickOutside = (e) => {
+        if(tableMonthPickerRef.value && !tableMonthPickerRef.value.contains(e.target)) {
+            showMonthPicker.value = false
+        }
+    }
+    watch(showMonthPicker, (val) => {
+        if(val) document.addEventListener('mousedown', handlePickerClickOutside)
+        else document.removeEventListener('mousedown', handlePickerClickOutside)
+    })
 
     const tableFilteredSchedule = computed(() => {
         if(!schedule.value) return []
@@ -562,6 +631,30 @@
             return formatted.replace(/\s*pukul\s*/i, ' - ')
         }
         return formatted.replace(/\s+at\s+/i, ' - ')
+    }
+
+    const formatDateOnly = (dateStr) => {
+        if(!dateStr) return '-'
+        const d = new Date(dateStr)
+        if(isNaN(d.getTime())) return dateStr
+        const localeStr = locale.value === 'en' ? 'en-US' : 'id-ID'
+        return d.toLocaleString(localeStr, {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        })
+    }
+
+    const formatTimeOnly = (dateStr) => {
+        if(!dateStr) return '-'
+        const d = new Date(dateStr)
+        if(isNaN(d.getTime())) return dateStr
+        const localeStr = locale.value === 'en' ? 'en-US' : 'id-ID'
+        return d.toLocaleTimeString(localeStr, {
+            hour: '2-digit',
+            minute: '2-digit'
+        })
     }
 
     const getEventRowStyle = (event) => {
@@ -882,9 +975,69 @@
             >
                 <Icon name="mi:chevron-left" size="1.5em" mode="svg" />
             </button>
-            <span class="text-black dark:text-white font-bold text-base lg:text-lg min-w-[180px] text-center">
-                {{ tableNavLabel }}
-            </span>
+            <!-- Clickable label that opens the month picker -->
+            <div class="relative" ref="tableMonthPickerRef">
+                <button
+                    @click="openMonthPicker"
+                    class="text-black dark:text-white font-bold text-base lg:text-lg min-w-[180px] text-center px-3 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                    {{ tableNavLabel }}
+                </button>
+                <!-- Month Picker Dropdown -->
+                <Transition
+                    enter-active-class="transition ease-out duration-150"
+                    enter-from-class="opacity-0 scale-95 -translate-y-1"
+                    enter-to-class="opacity-100 scale-100 translate-y-0"
+                    leave-active-class="transition ease-in duration-100"
+                    leave-from-class="opacity-100 scale-100 translate-y-0"
+                    leave-to-class="opacity-0 scale-95 -translate-y-1"
+                >
+                    <div
+                        v-if="showMonthPicker"
+                        class="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 min-w-[220px] select-none"
+                    >
+                        <!-- Year nav -->
+                        <div class="flex items-center justify-between mb-3">
+                            <button
+                                @click="pickerPrevYear"
+                                :disabled="tablePickerYears.indexOf(pickerYear) === 0"
+                                class="p-1 rounded-full hover:bg-slate-700 transition disabled:opacity-30 cursor-pointer disabled:cursor-default"
+                            >
+                                <Icon name="mi:chevron-left" size="1.2em" mode="svg" />
+                            </button>
+                            <span class="font-bold text-sm">{{ pickerYear }}</span>
+                            <button
+                                @click="pickerNextYear"
+                                :disabled="tablePickerYears.indexOf(pickerYear) === tablePickerYears.length - 1"
+                                class="p-1 rounded-full hover:bg-slate-700 transition disabled:opacity-30 cursor-pointer disabled:cursor-default"
+                            >
+                                <Icon name="mi:chevron-right" size="1.2em" mode="svg" />
+                            </button>
+                        </div>
+                        <!-- Month grid -->
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <button
+                                v-for="(mName, mIdx) in (locale === 'en'
+                                    ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+                                    : ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'])"
+                                :key="mIdx"
+                                @click="selectPickerMonth(mIdx)"
+                                :disabled="!tablePickerMonthsForYear.includes(mIdx)"
+                                :class="[
+                                    'py-1.5 rounded-lg text-sm font-semibold transition',
+                                    mIdx === tableSelectedMonth && pickerYear === tableSelectedYear
+                                        ? 'bg-red-600 text-white'
+                                        : tablePickerMonthsForYear.includes(mIdx)
+                                            ? 'hover:bg-slate-700 cursor-pointer'
+                                            : 'opacity-30 cursor-default'
+                                ]"
+                            >
+                                {{ mName }}
+                            </button>
+                        </div>
+                    </div>
+                </Transition>
+            </div>
             <button
                 @click="tableNextMonth"
                 :disabled="tableNavIndex === tableMonthsList.length - 1"
@@ -895,16 +1048,17 @@
         </div>
         <!-- Table -->
         <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
-            <table class="w-full min-w-[700px] table-fixed text-left border-collapse">
+            <table class="w-full min-w-[800px] table-fixed text-left border-collapse">
                 <colgroup>
+                    <col class="w-[23%]" />
+                    <col class="w-[9%]" />
                     <col class="w-[30%]" />
-                    <col class="w-[30%]" />
-                    <col class="w-[10%]" />
+                    <col class="w-[8%]" />
                     <col class="w-[30%]" />
                 </colgroup>
                 <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-sm">
                     <tr v-if="tableFilteredSchedule.length === 0">
-                        <td colspan="4" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="5" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                             {{ $t('noRacesFound') }}
                         </td>
                     </tr>
@@ -915,23 +1069,28 @@
                         :class="getEventRowStyle(item.events?.name)"
                     >
                         <td class="px-3 sm:px-4 py-3 whitespace-nowrap text-xs lg:text-sm">
-                            {{ formatDateDisplay(item.date) }}
+                            {{ formatDateOnly(item.date) }}
+                        </td>
+                        <td class="px-3 sm:px-4 py-3 whitespace-nowrap text-xs lg:text-sm">
+                            {{ formatTimeOnly(item.date) }}
                         </td>
                         <td class="px-3 sm:px-4 py-3">
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span :class="getAdminOrganizerStyle(item.events?.organizers?.abbreviation)">
-                                    {{ item.events?.organizers?.abbreviation }}
-                                </span>
-                                <span v-if="item.events?.games?.abbreviation" :class="getAdminGameStyle(item.events?.games?.abbreviation)">
-                                    {{ item.events?.games?.abbreviation }}
-                                </span>
+                            <div class="flex flex-col gap-1 lg:flex-row lg:flex-wrap lg:items-center lg:gap-1.5">
+                                <div class="flex items-center gap-1.5 lg:contents">
+                                    <span :class="getAdminOrganizerStyle(item.events?.organizers?.abbreviation)">
+                                        {{ item.events?.organizers?.abbreviation }}
+                                    </span>
+                                    <span v-if="item.events?.games?.abbreviation" :class="getAdminGameStyle(item.events?.games?.abbreviation)">
+                                        {{ item.events?.games?.abbreviation }}
+                                    </span>
+                                </div>
                                 <span :class="getAdminEventStyle(item.events?.name)">
                                     {{ item.events?.name || 'Event N/A' }}{{ item.season ? ' (S' + item.season + ')' : '' }}
                                 </span>
                             </div>
                         </td>
                         <td class="px-1.5 sm:px-2 py-3 whitespace-nowrap text-sm">
-                            {{ item.round ? (item.round === 'Invitation' || item.round === 'Prologue' ? item.round : 'Round ' + item.round) : '-' }}
+                            {{ item.round ? (item.round === 'Invitation' || item.round === 'Prologue' ? item.round : 'Round ' + item.round) : '' }}
                         </td>
                         <td class="px-3 sm:px-4 py-3">
                             <div class="flex items-center gap-1">
@@ -945,12 +1104,21 @@
                                     :name="`flag-${item.country_2.toLowerCase()}-4x3`"
                                     class="rounded-sm shadow-sm shrink-0"
                                 />
-                                <span>{{ item.circuit || '-' }}</span>
+                                <span>{{ item.circuit || '' }}</span>
                             </div>
                         </td>
                     </tr>
                 </tbody>
             </table>
+        </div>
+        <!-- Today button -->
+        <div class="flex justify-center">
+            <button
+                class="bg-red-900 dark:bg-red-900 text-white cursor-pointer text-sm lg:text-base font-bold px-4 py-2 rounded-md hover:bg-red-950 dark:hover:bg-red-950 transition"
+                @click="moveTableToday"
+            >
+                {{ $t('today') }}
+            </button>
         </div>
     </div>
 

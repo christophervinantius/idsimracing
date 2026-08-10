@@ -239,6 +239,28 @@
         return formatted.replace(/\s*pukul\s*/i, " - ")
     }
 
+    const formatDateOnly = (dateStr) => {
+        if (!dateStr) return "-"
+        const d = new Date(dateStr)
+        if (isNaN(d.getTime())) return dateStr
+        return d.toLocaleString("id-ID", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric"
+        })
+    }
+
+    const formatTimeOnly = (dateStr) => {
+        if (!dateStr) return "-"
+        const d = new Date(dateStr)
+        if (isNaN(d.getTime())) return dateStr
+        return d.toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit"
+        })
+    }
+
     const getScheduleStatus = (item) => {
         if (item.is_postponed) return "Ditunda"
         const startDate = new Date(item.date)
@@ -697,17 +719,18 @@
             <table class="w-full min-w-[1000px] table-fixed text-left border-collapse">
                 <thead class="bg-red-900 dark:bg-red-900 text-white">
                     <tr>
-                        <th class="px-3 sm:px-4 py-3 w-[25%]">Event</th>
-                        <th class="px-1.5 sm:px-2 py-3 w-[7%]">Round</th>
-                        <th class="px-3 sm:px-4 py-3 w-[25%]">Jadwal</th>
-                        <th class="px-3 sm:px-4 py-3 w-[27%]">Sirkuit</th>
-                        <th class="px-2 sm:px-3 py-3 text-center w-[8%]">Stream</th>
-                        <th class="px-2 sm:px-3 py-3 text-center w-[8%]">Status</th>
+                        <th class="px-3 sm:px-4 py-3 w-[18%]">Tanggal</th>
+                        <th class="px-2 sm:px-3 py-3 w-[6%]">Waktu</th>
+                        <th class="px-3 sm:px-4 py-3 w-[26%]">Event</th>
+                        <th class="px-1.5 sm:px-2 py-3 w-[6%]">Round</th>
+                        <th class="px-3 sm:px-4 py-3 w-[25%]">Sirkuit</th>
+                        <th class="px-2 sm:px-3 py-3 text-center w-[9%]">Stream</th>
+                        <th class="px-2 sm:px-3 py-3 text-center w-[10%]">Status</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-sm">
                     <tr v-if="loading" class="text-center py-8">
-                        <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                             <div class="flex items-center justify-center gap-2">
                                 <Icon name="material-symbols:refresh" class="animate-spin text-xl text-red-700" />
                                 <span>Memuat data jadwal balapan...</span>
@@ -716,7 +739,7 @@
                     </tr>
 
                     <tr v-else-if="filteredSchedules.length === 0" class="text-center py-8">
-                        <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                             <div class="flex flex-col items-center justify-center gap-2">
                                 <span>Jadwal tidak ditemukan</span>
                             </div>
@@ -730,14 +753,24 @@
                         class="cursor-pointer transition-colors text-black dark:text-white"
                         :class="getEventRowStyle(item.events?.name)"
                     >
+                        <td class="px-3 sm:px-4 py-3 whitespace-nowrap text-xs lg:text-sm">
+                            {{ formatDateOnly(item.date) }}
+                        </td>
+
+                        <td class="px-2 sm:px-3 py-3 whitespace-nowrap text-xs lg:text-sm">
+                            {{ formatTimeOnly(item.date) }}
+                        </td>
+
                         <td class="px-3 sm:px-4 py-3">
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span :class="getAdminOrganizerStyle(item.events?.organizers?.abbreviation)">
-                                    {{ item.events?.organizers?.abbreviation }}
-                                </span>
-                                <span v-if="item.events?.games?.abbreviation" :class="getAdminGameStyle(item.events?.games?.abbreviation)">
-                                    {{ item.events?.games?.abbreviation }}
-                                </span>
+                            <div class="flex flex-col gap-1 lg:flex-row lg:flex-wrap lg:items-center lg:gap-1.5">
+                                <div class="flex items-center gap-1.5 lg:contents">
+                                    <span :class="getAdminOrganizerStyle(item.events?.organizers?.abbreviation)">
+                                        {{ item.events?.organizers?.abbreviation }}
+                                    </span>
+                                    <span v-if="item.events?.games?.abbreviation" :class="getAdminGameStyle(item.events?.games?.abbreviation)">
+                                        {{ item.events?.games?.abbreviation }}
+                                    </span>
+                                </div>
                                 <span :class="getAdminEventStyle(item.events?.name)">
                                     {{ item.events?.name || 'Event N/A' }}{{ item.season ? ' (S' + item.season + ')' : '' }}
                                 </span>
@@ -745,13 +778,7 @@
                         </td>
 
                         <td class="px-1.5 sm:px-2 py-3 whitespace-nowrap">
-                            {{ item.round || '-' }}
-                        </td>
-
-                        <td class="px-3 sm:px-4 py-3 whitespace-nowrap">
-                            <div class="text-gray-900 dark:text-gray-100">
-                                {{ formatDateDisplay(item.date) }}
-                            </div>
+                            {{ item.round || '' }}
                         </td>
 
                         <td class="px-3 sm:px-4 py-3">
@@ -766,7 +793,7 @@
                                     :name="`flag-${item.country_2.toLowerCase()}-4x3`"
                                     class="rounded-sm shadow-sm shrink-0"
                                 />
-                                <span>{{ item.circuit || '-' }}</span>
+                                <span>{{ item.circuit || '' }}</span>
                             </div>
                         </td>
 
