@@ -290,6 +290,7 @@
     const openEditModal = (scheduleItem) => {
         modalMode.value = "edit"
         editingScheduleId.value = scheduleItem.id
+        deletingScheduleItem.value = scheduleItem
         formData.event_id = scheduleItem.event_id || ""
         formData.round = scheduleItem.round || ""
         formData.season = scheduleItem.season || ""
@@ -371,7 +372,7 @@
 
     // Delete schedule modal handlers
     const openDeleteModal = (scheduleItem) => {
-        deletingScheduleItem.value = scheduleItem
+        deletingScheduleItem.value = scheduleItem || schedules.value.find(s => s.id === editingScheduleId.value)
         deletePasswordInput.value = ""
         deletePasswordError.value = ""
         showDeletePassword.value = false
@@ -403,6 +404,7 @@
             
             showToast("Jadwal balapan berhasil dihapus!")
             closeDeleteModal()
+            closeModal()
             await fetchSchedules()
         } catch (err) {
             console.error("Error deleting schedule:", err)
@@ -556,21 +558,20 @@
 
         <!-- Schedule Table -->
         <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
-            <table class="w-full min-w-[1050px] table-fixed text-left border-collapse">
+            <table class="w-full min-w-[1000px] table-fixed text-left border-collapse">
                 <thead class="bg-red-700 dark:bg-red-900 text-white">
                     <tr>
-                        <th class="px-3 sm:px-4 py-3 w-[22%]">Event</th>
-                        <th class="px-1.5 sm:px-2 py-3 w-[6%]">Round</th>
-                        <th class="px-3 sm:px-4 py-3 w-[24%]">Jadwal</th>
-                        <th class="px-3 sm:px-4 py-3 w-[24%]">Sirkuit</th>
+                        <th class="px-3 sm:px-4 py-3 w-[25%]">Event</th>
+                        <th class="px-1.5 sm:px-2 py-3 w-[7%]">Round</th>
+                        <th class="px-3 sm:px-4 py-3 w-[25%]">Jadwal</th>
+                        <th class="px-3 sm:px-4 py-3 w-[27%]">Sirkuit</th>
                         <th class="px-2 sm:px-3 py-3 text-center w-[8%]">Stream</th>
                         <th class="px-2 sm:px-3 py-3 text-center w-[8%]">Status</th>
-                        <th class="px-2 sm:px-3 py-3 text-center w-[8%]">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-sm">
                     <tr v-if="loading" class="text-center py-8">
-                        <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                             <div class="flex items-center justify-center gap-2">
                                 <Icon name="material-symbols:refresh" class="animate-spin text-xl text-red-700" />
                                 <span>Memuat data jadwal balapan...</span>
@@ -579,7 +580,7 @@
                     </tr>
 
                     <tr v-else-if="filteredSchedules.length === 0" class="text-center py-8">
-                        <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                             <div class="flex flex-col items-center justify-center gap-2">
                                 <span>Jadwal tidak ditemukan</span>
                             </div>
@@ -589,10 +590,11 @@
                     <tr
                         v-for="item in filteredSchedules"
                         :key="item.id"
-                        class="hover:bg-red-50/50 dark:hover:bg-slate-900/50 transition-colors text-black dark:text-white"
+                        @click="openEditModal(item)"
+                        class="hover:bg-red-50/70 dark:hover:bg-slate-900/80 cursor-pointer transition-colors text-black dark:text-white"
                     >
                         <td class="px-3 sm:px-4 py-3">
-                            <div class="text-gray-900 dark:text-white">
+                            <div class="text-gray-900 dark:text-white font-medium">
                                 {{ item.events.organizers.abbreviation }} {{ item.events?.name || 'Event N/A' }}{{ item.season ? ' (S' + item.season + ')' : '' }}
                             </div>
                         </td>
@@ -624,7 +626,7 @@
                         </td>
 
                         <!-- Stream Link -->
-                        <td class="px-2 sm:px-3 py-3 text-center whitespace-nowrap">
+                        <td class="px-2 sm:px-3 py-3 text-center whitespace-nowrap" @click.stop>
                             <a
                                 v-if="item.stream_link"
                                 :href="item.stream_link"
@@ -645,26 +647,6 @@
                             >
                                 {{ getScheduleStatus(item) }}
                             </span>
-                        </td>
-
-                        <!-- Actions -->
-                        <td class="px-2 sm:px-3 py-3 text-center whitespace-nowrap">
-                            <div class="flex items-center justify-center gap-2">
-                                <button
-                                    @click="openEditModal(item)"
-                                    class="p-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-lg transition cursor-pointer"
-                                    title="Edit Jadwal"
-                                >
-                                    <Icon name="material-symbols:edit" class="text-lg" />
-                                </button>
-                                <button
-                                    @click="openDeleteModal(item)"
-                                    class="p-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950 dark:hover:bg-red-900 text-red-600 dark:text-red-400 rounded-lg transition cursor-pointer"
-                                    title="Hapus Jadwal"
-                                >
-                                    <Icon name="material-symbols:delete" class="text-lg" />
-                                </button>
-                            </div>
                         </td>
                     </tr>
                 </tbody>
@@ -689,48 +671,46 @@
 
                 <!-- Modal Form -->
                 <form @submit.prevent="saveSchedule" class="flex flex-col gap-4">
-                    <!-- Row 1: Event (100%) -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Event <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <select
-                                v-model="formData.event_id"
-                                required
-                                class="p-2.5 pr-10 appearance-none rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full cursor-pointer"
-                            >
-                                <option value="" disabled>-- Pilih Event --</option>
-                                <option v-for="ev in eventsList" :key="ev.id" :value="ev.id">
-                                    {{ ev.organizers?.abbreviation ? ev.organizers.abbreviation + ' ' : '' }}{{ ev.name }}
-                                </option>
-                            </select>
-                            <Icon name="material-symbols:keyboard-arrow-down-rounded" class="absolute right-3 text-xl text-gray-400 pointer-events-none" />
+                    <!-- Row 1: Event (60% mobile / 50% lg), Season (20% mobile / 25% lg), Round (20% mobile / 25% lg) -->
+                    <div class="grid grid-cols-5 lg:grid-cols-4 gap-2 sm:gap-4">
+                        <div class="col-span-3 lg:col-span-2 flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-xs sm:text-sm font-medium">Event <span class="text-red-600">*</span></label>
+                            <div class="relative flex items-center">
+                                <select
+                                    v-model="formData.event_id"
+                                    required
+                                    class="p-2 sm:p-2.5 pr-8 sm:pr-10 appearance-none rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full cursor-pointer"
+                                >
+                                    <option value="" disabled>-- Pilih Event --</option>
+                                    <option v-for="ev in eventsList" :key="ev.id" :value="ev.id">
+                                        {{ ev.organizers?.abbreviation ? ev.organizers.abbreviation + ' ' : '' }}{{ ev.name }}
+                                    </option>
+                                </select>
+                                <Icon name="material-symbols:keyboard-arrow-down-rounded" class="absolute right-2 sm:right-3 text-lg sm:text-xl text-gray-400 pointer-events-none" />
+                            </div>
                         </div>
-                    </div>
-
-                    <!-- Row 2: Season (50%) Round (50%) -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-1">
-                            <label class="text-black dark:text-white text-sm font-medium">Season</label>
+                        <div class="col-span-1 lg:col-span-1 flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-xs sm:text-sm font-medium truncate" title="Season">Season</label>
                             <input
                                 v-model="formData.season"
                                 type="text"
                                 placeholder="Contoh: 2"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
-                        <div class="flex flex-col gap-1">
-                            <label class="text-black dark:text-white text-sm font-medium">Round <span class="text-red-600">*</span></label>
+                        <div class="col-span-1 lg:col-span-1 flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-xs sm:text-sm font-medium truncate" title="Round">Round <span class="text-red-600">*</span></label>
                             <input
                                 v-model="formData.round"
                                 type="text"
                                 placeholder="Contoh: 3"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                     </div>
 
-                    <!-- Row 3: Jadwal Mulai (50%) Jadwal Selesai (50%) -->
-                    <div class="grid grid-cols-2 gap-4">
+                    <!-- Row 2: Jadwal Mulai (50%), Jadwal Selesai (50%) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="flex flex-col gap-1">
                             <label class="text-black dark:text-white text-sm font-medium">Jadwal Mulai <span class="text-red-600">*</span></label>
                             <input
@@ -751,40 +731,38 @@
                         </div>
                     </div>
 
-                    <!-- Row 4: Sirkuit (100%) -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Sirkuit (dan Sesi)</label>
-                        <input
-                            v-model="formData.circuit"
-                            type="text"
-                            placeholder="Contoh: Imola Circuit - Qualifying"
-                            class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                        />
-                    </div>
-
-                    <!-- Row 5: Kode Negara 1 (50%) Kode Negara 2 (50%) -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-1">
-                            <label class="text-black dark:text-white text-sm font-medium">Kode Negara 1</label>
+                    <!-- Row 3: Sirkuit (60% mobile / 50% lg), Kode Negara 1 (20% mobile / 25% lg), Kode Negara 2 (20% mobile / 25% lg) -->
+                    <div class="grid grid-cols-5 lg:grid-cols-4 gap-2 sm:gap-4">
+                        <div class="col-span-3 lg:col-span-2 flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-xs sm:text-sm font-medium">Sirkuit (dan Sesi)</label>
+                            <input
+                                v-model="formData.circuit"
+                                type="text"
+                                placeholder="Contoh: Imola Circuit - Qualifying"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
+                            />
+                        </div>
+                        <div class="col-span-1 lg:col-span-1 flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-xs sm:text-sm font-medium truncate" title="Kode Negara 1">Negara 1</label>
                             <input
                                 v-model="formData.country"
                                 type="text"
-                                placeholder="Contoh: us"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
+                                placeholder="us"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
-                        <div class="flex flex-col gap-1">
-                            <label class="text-black dark:text-white text-sm font-medium">Kode Negara 2</label>
+                        <div class="col-span-1 lg:col-span-1 flex flex-col gap-1">
+                            <label class="text-black dark:text-white text-xs sm:text-sm font-medium truncate" title="Kode Negara 2">Negara 2</label>
                             <input
                                 v-model="formData.country_2"
                                 type="text"
-                                placeholder="Contoh: jp"
-                                class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
+                                placeholder="jp"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                     </div>
 
-                    <!-- Row 6: Stream Link (100%) -->
+                    <!-- Row 4: Stream Link (100%) -->
                     <div class="flex flex-col gap-1">
                         <label class="text-black dark:text-white text-sm font-medium">Stream Link (YouTube URL)</label>
                         <input
@@ -795,7 +773,7 @@
                         />
                     </div>
 
-                    <!-- Row 7: Postponed (50%) Password Admin (50%) -->
+                    <!-- Row 5: Postponed (50%), Password Admin (50%) -->
                     <div class="grid grid-cols-2 gap-4 items-end">
                         <div class="flex items-center gap-2 sm:gap-3 py-2.5">
                             <input
@@ -805,7 +783,7 @@
                                 class="w-4 h-4 sm:w-5 sm:h-5 accent-red-700 rounded cursor-pointer shrink-0"
                             />
                             <label for="postponed-checkbox" class="text-black dark:text-white text-xs sm:text-sm font-medium cursor-pointer select-none">
-                                Ditunda (Postponed)
+                                Ditunda
                             </label>
                         </div>
                         <div class="flex flex-col gap-1">
@@ -836,22 +814,35 @@
                     </div>
 
                     <!-- Modal Actions -->
-                    <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
-                        <button
-                            type="button"
-                            @click="closeModal"
-                            class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-black dark:text-white rounded-lg font-bold transition cursor-pointer"
-                        >
-                            Batal
-                        </button>
-                        <button
-                            type="submit"
-                            :disabled="saving"
-                            class="px-5 py-2 bg-red-700 hover:bg-red-800 dark:bg-red-900 dark:hover:bg-red-800 text-white rounded-lg font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                        >
-                            <Icon v-if="saving" name="material-symbols:refresh" class="animate-spin" />
-                            <span>{{ saving ? 'Menyimpan...' : 'Simpan' }}</span>
-                        </button>
+                    <div class="flex items-center justify-between border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
+                        <div>
+                            <button
+                                v-if="modalMode === 'edit'"
+                                type="button"
+                                @click="openDeleteModal()"
+                                class="px-4 py-2 bg-red-100 hover:bg-red-200 dark:bg-red-950 dark:hover:bg-red-900 text-red-700 dark:text-red-300 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer border border-red-300 dark:border-red-800 text-sm"
+                            >
+                                <span>Hapus</span>
+                            </button>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <button
+                                type="button"
+                                @click="closeModal"
+                                class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-black dark:text-white rounded-lg font-bold transition cursor-pointer text-sm"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="submit"
+                                :disabled="saving"
+                                class="px-5 py-2 bg-red-700 hover:bg-red-800 dark:bg-red-900 dark:hover:bg-red-800 text-white rounded-lg font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
+                            >
+                                <Icon v-if="saving" name="material-symbols:refresh" class="animate-spin" />
+                                <span>{{ saving ? 'Menyimpan...' : 'Simpan' }}</span>
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -866,7 +857,6 @@
                 <!-- Delete Modal Header -->
                 <div class="flex items-center justify-between border-b border-gray-200 dark:border-slate-800 pb-4 mb-4">
                     <h2 class="text-xl font-bold text-black dark:text-white flex items-center gap-2">
-                        <Icon name="material-symbols:warning-rounded" class="text-red-600 text-2xl" />
                         <span>Konfirmasi Hapus</span>
                     </h2>
                     <button @click="closeDeleteModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer">
@@ -879,7 +869,7 @@
                     <p class="text-sm text-gray-700 dark:text-gray-300">
                         Apakah Anda yakin ingin menghapus jadwal balapan
                         <strong class="text-black dark:text-white">
-                            "{{ deletingScheduleItem?.events?.name || '' }} - Round {{ deletingScheduleItem?.round }}"
+                            "{{ deletingScheduleItem?.events?.name || '' }} - Round {{ deletingScheduleItem?.round }} - {{ deletingScheduleItem?.circuit }}"
                         </strong>?
                     </p>
 
