@@ -40,5 +40,7 @@
     "driversDisclaimer": "Data masih dapat berubah sewaktu-waktu sesuai keputusan penyelenggara.",
     "sortBy": "Urut Berdasarkan",
     "showingOf": "Menampilkan {showing} dari {total} balapan",
-    "loadMore": "Muat Lebih Banyak"
+    "loadMore": "Muat Lebih Banyak",
+    "calendarView": "Tampilan Kalender",
+    "tableView": "Tampilan Tabel"
 }

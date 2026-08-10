@@ -40,5 +40,7 @@
     "driversDisclaimer": "Data may still change at any time subject to organizer's decision.",
     "sortBy": "Sort By",
     "showingOf": "Showing {showing} of {total} races",
-    "loadMore": "Load More"
+    "loadMore": "Load More",
+    "calendarView": "Calendar View",
+    "tableView": "Table View"
 }

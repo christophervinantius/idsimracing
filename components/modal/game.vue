@@ -19,7 +19,7 @@
 </script>
 
 <template>
-    <div class="bg-red-700 dark:bg-red-900 p-4 lg:p-6 flex flex-col gap-4 lg:gap-6">
+    <div class="bg-red-900 dark:bg-red-900 p-4 lg:p-6 flex flex-col gap-4 lg:gap-6">
         <div class="flex items-center justify-between rounded-t">
             <div :class="getGameStyle(gameData?.game)">
                 {{ gameData?.game }}

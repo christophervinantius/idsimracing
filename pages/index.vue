@@ -479,6 +479,203 @@
     const moveToday = () => {
         calendar.value.move(new Date());
     }
+
+    // --- Table View ---
+    const viewMode = ref('kalender')
+
+    const tableSelectedMonth = ref(new Date().getMonth())
+    const tableSelectedYear = ref(new Date().getFullYear())
+
+    const tableMonthsList = computed(() => {
+        if(!schedule.value) return []
+        const entries = [...new Map(
+            schedule.value.map(item => {
+                const d = new Date(item.date)
+                return [`${d.getFullYear()}-${d.getMonth()}`, { month: d.getMonth(), year: d.getFullYear() }]
+            })
+        ).values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+        return entries.map(e => ({
+            month: e.month,
+            year: e.year,
+            label: new Date(e.year, e.month, 1).toLocaleString(locale.value === 'en' ? 'en-US' : 'id-ID', { month: 'long', year: 'numeric' })
+        }))
+    })
+
+    const tableNavIndex = computed(() =>
+        tableMonthsList.value.findIndex(e => e.month === tableSelectedMonth.value && e.year === tableSelectedYear.value)
+    )
+
+    const tableNavLabel = computed(() => {
+        const found = tableMonthsList.value.find(e => e.month === tableSelectedMonth.value && e.year === tableSelectedYear.value)
+        return found ? found.label : ''
+    })
+
+    const tablePrevMonth = () => {
+        const idx = tableNavIndex.value
+        if(idx > 0) {
+            tableSelectedMonth.value = tableMonthsList.value[idx - 1].month
+            tableSelectedYear.value = tableMonthsList.value[idx - 1].year
+        }
+    }
+
+    const tableNextMonth = () => {
+        const idx = tableNavIndex.value
+        if(idx < tableMonthsList.value.length - 1) {
+            tableSelectedMonth.value = tableMonthsList.value[idx + 1].month
+            tableSelectedYear.value = tableMonthsList.value[idx + 1].year
+        }
+    }
+
+    const tableFilteredSchedule = computed(() => {
+        if(!schedule.value) return []
+        return schedule.value.filter(item => {
+            const itemMonth = new Date(item.date).getMonth()
+            const itemYear = new Date(item.date).getFullYear()
+            const matchesMonth = itemMonth === tableSelectedMonth.value && itemYear === tableSelectedYear.value
+            const matchesEvent = selectedEvents.value.includes(getEventFullName(item))
+            const matchesYear = selectedYears.value.includes(itemYear)
+            if(selectedStatus.value === 'Selesai') {
+                const finishDate = new Date(item.finish_date)
+                return matchesMonth && matchesEvent && matchesYear && finishDate < new Date()
+            } else if(selectedStatus.value === 'Mendatang') {
+                const finishDate = new Date(item.finish_date)
+                return matchesMonth && matchesEvent && matchesYear && finishDate >= new Date()
+            }
+            return matchesMonth && matchesEvent && matchesYear
+        })
+    })
+
+    const formatDateDisplay = (dateStr) => {
+        if(!dateStr) return '-'
+        const d = new Date(dateStr)
+        if(isNaN(d.getTime())) return dateStr
+        const localeStr = locale.value === 'en' ? 'en-US' : 'id-ID'
+        const formatted = d.toLocaleString(localeStr, {
+            day: 'numeric',
+            month: 'long',
+            weekday: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+        if(locale.value !== 'en') {
+            return formatted.replace(/\s*pukul\s*/i, ' - ')
+        }
+        return formatted.replace(/\s+at\s+/i, ' - ')
+    }
+
+    const getEventRowStyle = (event) => {
+        if(!event) return 'bg-white dark:bg-slate-950 hover:bg-gray-100 dark:hover:bg-slate-900'
+        if(event.startsWith('MX-5 Cup Asia')) {
+            return 'bg-red-200/80 dark:bg-red-900/60 hover:bg-red-300/80 dark:hover:bg-red-900/80'
+        } else if(event.startsWith('1 Hour Series')) {
+            return 'bg-emerald-200/80 dark:bg-emerald-900/60 hover:bg-emerald-300/80 dark:hover:bg-emerald-900/80'
+        } else if(event === 'Open Wheel Series') {
+            return 'bg-cyan-200/80 dark:bg-cyan-900/60 hover:bg-cyan-300/80 dark:hover:bg-cyan-900/80'
+        } else if(event.startsWith('Sprint Series') || event.startsWith('Porsche Supercup') || event.startsWith('GT3 Open') || event.startsWith('Asri Motor Slalom Cup')) {
+            return 'bg-yellow-200/80 dark:bg-yellow-900/60 hover:bg-yellow-300/80 dark:hover:bg-yellow-900/80'
+        } else if(event === 'Endurance Championship') {
+            return 'bg-pink-200/80 dark:bg-pink-900/60 hover:bg-pink-300/80 dark:hover:bg-pink-900/80'
+        } else if(event === 'Masters League' || event === 'Praga Cup') {
+            return 'bg-blue-200/80 dark:bg-blue-900/60 hover:bg-blue-300/80 dark:hover:bg-blue-900/80'
+        } else if(event === 'Juniors') {
+            return 'bg-lime-200/80 dark:bg-lime-900/60 hover:bg-lime-300/80 dark:hover:bg-lime-900/80'
+        } else if(event === 'B.E.G.O. Balap Cup') {
+            return 'bg-orange-200/80 dark:bg-orange-900/60 hover:bg-orange-300/80 dark:hover:bg-orange-900/80'
+        } else if(event === 'Sprint Rally Challenge' || event === 'Rally Championship') {
+            return 'bg-purple-200/80 dark:bg-purple-900/60 hover:bg-purple-300/80 dark:hover:bg-purple-900/80'
+        } else if(event.startsWith('Speedway Master Series')) {
+            return 'bg-fuchsia-200/80 dark:bg-fuchsia-900/60 hover:bg-fuchsia-300/80 dark:hover:bg-fuchsia-900/80'
+        } else if(event === 'Javahosting Rental Cup') {
+            return 'bg-indigo-200/80 dark:bg-indigo-900/60 hover:bg-indigo-300/80 dark:hover:bg-indigo-900/80'
+        } else if(event === 'Indorance') {
+            return 'bg-sky-200/80 dark:bg-sky-900/60 hover:bg-sky-300/80 dark:hover:bg-sky-900/80'
+        } else if(event === 'Endurance Edition' || event === 'Global Edition') {
+            return 'bg-rose-200/80 dark:bg-rose-900/60 hover:bg-rose-300/80 dark:hover:bg-rose-900/80'
+        } else if(event.startsWith('LMU Championship')) {
+            return 'bg-amber-200/80 dark:bg-amber-900/60 hover:bg-amber-300/80 dark:hover:bg-amber-900/80'
+        } else if(event === 'LMU Solo Endurance') {
+            return 'bg-pink-300/80 dark:bg-pink-800/60 hover:bg-pink-400/80 dark:hover:bg-pink-800/80'
+        }
+        return 'bg-white dark:bg-slate-950 hover:bg-gray-100 dark:hover:bg-slate-900'
+    }
+
+    const getAdminEventStyle = (event) => {
+        if(!event) return 'font-bold'
+        let style = 'font-bold '
+        if(event.startsWith('MX-5 Cup Asia')) {
+            style += 'text-red-500'
+        } else if(event.startsWith('1 Hour Series')) {
+            style += 'text-emerald-500'
+        } else if(event === 'Open Wheel Series') {
+            style += 'text-cyan-500'
+        } else if(event.startsWith('Sprint Series') || event.startsWith('Porsche Supercup') || event.startsWith('GT3 Open') || event.startsWith('Asri Motor Slalom Cup')) {
+            style += 'text-yellow-500'
+        } else if(event === 'Endurance Championship') {
+            style += 'text-pink-500'
+        } else if(event === 'Masters League' || event === 'Praga Cup') {
+            style += 'text-blue-500'
+        } else if(event === 'Juniors') {
+            style += 'text-lime-500'
+        } else if(event === 'B.E.G.O. Balap Cup') {
+            style += 'text-orange-500'
+        } else if(event === 'Sprint Rally Challenge' || event === 'Rally Championship') {
+            style += 'text-purple-500'
+        } else if(event.startsWith('Speedway Master Series')) {
+            style += 'text-fuchsia-500'
+        } else if(event === 'Javahosting Rental Cup') {
+            style += 'text-indigo-500'
+        } else if(event === 'Indorance') {
+            style += 'text-sky-500'
+        } else if(event === 'Endurance Edition' || event === 'Global Edition') {
+            style += 'text-rose-500'
+        } else if(event.startsWith('LMU Championship')) {
+            style += 'text-amber-500'
+        } else if(event === 'LMU Solo Endurance') {
+            style += 'text-pink-800'
+        }
+        return style
+    }
+
+    const getAdminOrganizerStyle = (organizer) => {
+        let style = 'px-1.5 py-0.5 font-bold rounded text-xs shrink-0 '
+        if(organizer === 'ACI') {
+            style += 'bg-red-500 text-white'
+        } else if(organizer === '97SRC') {
+            style += 'bg-white text-black border border-gray-300'
+        } else if(organizer === 'CRC') {
+            style += 'bg-yellow-500 text-black'
+        } else if(organizer === 'BRM') {
+            style += 'bg-sky-500 text-black'
+        } else if(organizer === 'JRC') {
+            style += 'bg-indigo-500 text-black'
+        } else if(organizer === 'ERGP') {
+            style += 'bg-white text-red-600 border border-gray-300'
+        } else if(organizer === 'SRC') {
+            style += 'bg-blue-500 text-white'
+        } else if(organizer === 'ISL') {
+            style += 'bg-pink-800 text-white'
+        } else {
+            style += 'bg-gray-200 text-gray-800 dark:bg-slate-700 dark:text-gray-200'
+        }
+        return style
+    }
+
+    const getAdminGameStyle = (game) => {
+        let style = 'px-1.5 py-0.5 font-bold rounded text-xs shrink-0 '
+        if(game === 'AC') {
+            style += 'bg-red-500 text-white'
+        } else if(game === 'ACC') {
+            style += 'bg-white text-red-600 border border-gray-300'
+        } else if(game === 'RBR') {
+            style += 'bg-black text-white'
+        } else if(game === 'LMU') {
+            style += 'bg-amber-500 text-black'
+        } else {
+            style += 'bg-gray-200 text-gray-800 dark:bg-slate-700 dark:text-gray-200'
+        }
+        return style
+    }
 </script>
 
 <template>
@@ -493,7 +690,7 @@
                         <label class="text-black dark:text-white font-bold">{{ $t('years') }}</label>
                         <div class="flex items-center gap-2">
                             <USelectMenu
-                                class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                                 v-model="orderedSelectedYears"
                                 :items="yearsList"
                                 multiple
@@ -501,7 +698,7 @@
                             <button 
                                 @click="clearFilterField('year')" 
                                 :disabled="selectedYears.length === 0"
-                                class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                             >
                                 <Icon name="mdi:filter-off" mode="svg" />
                             </button>
@@ -511,7 +708,7 @@
                         <label class="text-black dark:text-white font-bold">{{ $t('months') }}</label>
                         <div class="flex items-center gap-2">
                             <USelectMenu
-                                class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                                 v-model="orderedSelectedMonths"
                                 :items="monthsList"
                                 multiple
@@ -519,7 +716,7 @@
                             <button 
                                 @click="clearFilterField('month')" 
                                 :disabled="selectedMonths.length === 0"
-                                class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                             >
                                 <Icon name="mdi:filter-off" mode="svg" />
                             </button>
@@ -531,7 +728,7 @@
                         <label class="text-black dark:text-white font-bold">{{ $t('events') }}</label>
                         <div class="flex items-center gap-2">
                             <USelectMenu
-                                class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                                 v-model="orderedSelectedEvents"
                                 :items="eventList"
                                 multiple
@@ -539,7 +736,7 @@
                             <button 
                                 @click="clearFilterField('event')" 
                                 :disabled="selectedEvents.length === 0"
-                                class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                             >
                                 <Icon name="mdi:filter-off" mode="svg" />
                             </button>
@@ -549,7 +746,7 @@
                         <label class="text-black dark:text-white font-bold">Status</label>
                         <div class="flex items-center gap-2">
                             <USelectMenu
-                                class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                                 v-model="selectedStatusObject"
                                 :items="statusList"
                                 option-attribute="label"
@@ -560,7 +757,7 @@
                 </div>
                 <div
                     v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Mendatang' || selectedMonths.length < totalMonths || selectedYears.length < totalYears"
-                    class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
+                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
                     {{ $t('resetFilter') }}
                 </div>
             </div>
@@ -570,7 +767,7 @@
             <div>{{ $t('allTimesInYourTimezone') }}</div>
         </div>
     </div>
-    <div class="bg-red-700 dark:bg-red-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+    <div class="bg-red-900 dark:bg-red-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
         <div class="text-white text-center text-lg lg:text-2xl font-bold leading-6">
             {{ $t('nearestRaces') }}
         </div>
@@ -598,9 +795,27 @@
             {{ $t('noRacesFound') }}
         </div>
     </div>
-    <div id="calendar" class="bg-white dark:bg-slate-900 px-1 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+    <div class="flex justify-center items-center gap-3 pt-8">
+        <button
+            @click="viewMode = 'kalender'"
+            :class="viewMode === 'kalender'
+                ? 'bg-red-900 text-white font-bold px-5 py-2 rounded-lg cursor-pointer text-sm lg:text-base flex items-center gap-2 shadow'
+                : 'border-2 border-red-900 text-red-900 dark:text-red-400 dark:border-red-400 font-bold px-5 py-2 rounded-lg cursor-pointer text-sm lg:text-base flex items-center gap-2 hover:bg-red-50 dark:hover:bg-red-950/20 transition'"
+        >
+            {{ $t('calendarView') }}
+        </button>
+        <button
+            @click="viewMode = 'tabel'"
+            :class="viewMode === 'tabel'
+                ? 'bg-red-900 text-white font-bold px-5 py-2 rounded-lg cursor-pointer text-sm lg:text-base flex items-center gap-2 shadow'
+                : 'border-2 border-red-900 text-red-900 dark:text-red-400 dark:border-red-400 font-bold px-5 py-2 rounded-lg cursor-pointer text-sm lg:text-base flex items-center gap-2 hover:bg-red-50 dark:hover:bg-red-950/20 transition'"
+        >
+            {{ $t('tableView') }}
+        </button>
+    </div>
+    <div v-if="viewMode === 'kalender'" id="calendar" class="bg-white dark:bg-slate-900 px-1 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
         <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
-            {{ $t('calendar') }}
+            {{ $t('calendarView') }}
         </div>
         <div class="mx-auto w-3/4">
             <Calendar
@@ -643,7 +858,7 @@
                 <template #footer>
                     <div class="w-fit mx-auto px-4 py-2">
                         <button
-                            class="bg-red-700 dark:bg-red-900 text-white cursor-pointer w-full text-sm lg:text-base font-bold px-4 py-2 rounded-md"
+                            class="bg-red-900 dark:bg-red-900 text-white cursor-pointer w-full text-sm lg:text-base font-bold px-4 py-2 rounded-md"
                             @click="moveToday"
                         >
                             {{ $t('today') }}
@@ -653,6 +868,93 @@
             </Calendar>
         </div>
     </div>
+    <!-- Tampilan Tabel -->
+    <div v-if="viewMode === 'tabel'" class="bg-white dark:bg-slate-900 px-4 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
+        <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
+            {{ $t('tableView') }}
+        </div>
+        <!-- Month Navigator -->
+        <div class="flex justify-center items-center gap-4">
+            <button
+                @click="tablePrevMonth"
+                :disabled="tableNavIndex === 0"
+                class="text-black dark:text-white p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition disabled:opacity-30 cursor-pointer disabled:cursor-default"
+            >
+                <Icon name="mi:chevron-left" size="1.5em" mode="svg" />
+            </button>
+            <span class="text-black dark:text-white font-bold text-base lg:text-lg min-w-[180px] text-center">
+                {{ tableNavLabel }}
+            </span>
+            <button
+                @click="tableNextMonth"
+                :disabled="tableNavIndex === tableMonthsList.length - 1"
+                class="text-black dark:text-white p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition disabled:opacity-30 cursor-pointer disabled:cursor-default"
+            >
+                <Icon name="mi:chevron-right" size="1.5em" mode="svg" />
+            </button>
+        </div>
+        <!-- Table -->
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
+            <table class="w-full min-w-[700px] table-fixed text-left border-collapse">
+                <colgroup>
+                    <col class="w-[30%]" />
+                    <col class="w-[30%]" />
+                    <col class="w-[10%]" />
+                    <col class="w-[30%]" />
+                </colgroup>
+                <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-sm">
+                    <tr v-if="tableFilteredSchedule.length === 0">
+                        <td colspan="4" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                            {{ $t('noRacesFound') }}
+                        </td>
+                    </tr>
+                    <tr
+                        v-for="item in tableFilteredSchedule"
+                        :key="item.id"
+                        class="transition-colors text-black dark:text-white"
+                        :class="getEventRowStyle(item.events?.name)"
+                    >
+                        <td class="px-3 sm:px-4 py-3 whitespace-nowrap text-xs lg:text-sm">
+                            {{ formatDateDisplay(item.date) }}
+                        </td>
+                        <td class="px-3 sm:px-4 py-3">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span :class="getAdminOrganizerStyle(item.events?.organizers?.abbreviation)">
+                                    {{ item.events?.organizers?.abbreviation }}
+                                </span>
+                                <span v-if="item.events?.games?.abbreviation" :class="getAdminGameStyle(item.events?.games?.abbreviation)">
+                                    {{ item.events?.games?.abbreviation }}
+                                </span>
+                                <span :class="getAdminEventStyle(item.events?.name)">
+                                    {{ item.events?.name || 'Event N/A' }}{{ item.season ? ' (S' + item.season + ')' : '' }}
+                                </span>
+                            </div>
+                        </td>
+                        <td class="px-1.5 sm:px-2 py-3 whitespace-nowrap text-sm">
+                            {{ item.round ? (item.round === 'Invitation' || item.round === 'Prologue' ? item.round : 'Round ' + item.round) : '-' }}
+                        </td>
+                        <td class="px-3 sm:px-4 py-3">
+                            <div class="flex items-center gap-1">
+                                <Icon
+                                    v-if="item.country"
+                                    :name="`flag-${item.country.toLowerCase()}-4x3`"
+                                    class="rounded-sm shadow-sm shrink-0"
+                                />
+                                <Icon
+                                    v-if="item.country_2"
+                                    :name="`flag-${item.country_2.toLowerCase()}-4x3`"
+                                    class="rounded-sm shadow-sm shrink-0"
+                                />
+                                <span>{{ item.circuit || '-' }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Full Card Grid (always at bottom) -->
     <div class="bg-white dark:bg-slate-900 px-8 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
         <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
             {{ $t('fullCalendar') }}
@@ -683,7 +985,7 @@
         <div v-if="hasMore" class="flex justify-center">
             <button
                 @click="loadMore"
-                class="bg-red-700 dark:bg-red-900 hover:bg-red-800 dark:hover:bg-red-950 text-white text-sm lg:text-base font-bold px-8 py-3 rounded-lg cursor-pointer transition-colors duration-200"
+                class="bg-red-900 dark:bg-red-900 hover:bg-red-950 dark:hover:bg-red-950 text-white text-sm lg:text-base font-bold px-8 py-3 rounded-lg cursor-pointer transition-colors duration-200"
             >
                 {{ $t('loadMore') }}
             </button>
@@ -691,11 +993,13 @@
         <div v-if="filteredSchedule.length === 0" class="text-black dark:text-white text-center text-base lg:text-lg leading-6">
             {{ $t('noRacesFound') }}
         </div>
-        <button v-if="showCalendarButton" @click="scrollToCalendar" class="fixed bottom-12 left-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
-            <Icon name="mi:calendar" size="2.5em"  mode="svg" />
-        </button>
-        <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
-            <Icon name="mi:arrow-up" size="2.5em"  mode="svg" />
-        </button>
     </div>
+
+    <!-- Floating Scroll Buttons -->
+    <button v-if="showCalendarButton && viewMode === 'kalender'" @click="scrollToCalendar" class="fixed bottom-12 left-8 bg-red-900 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
+        <Icon name="mi:calendar" size="2.5em" mode="svg" />
+    </button>
+    <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-900 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
+        <Icon name="mi:arrow-up" size="2.5em" mode="svg" />
+    </button>
 </template>

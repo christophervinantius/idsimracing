@@ -4,7 +4,7 @@
 </script>
 
 <template>
-    <div class="bg-red-700 dark:bg-red-900 text-center py-4 text-white">
+    <div class="bg-red-900 dark:bg-red-900 text-center py-4 text-white">
         ID Sim Racing {{ year }}
     </div>
 </template>

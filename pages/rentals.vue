@@ -115,7 +115,7 @@
                     <label class="text-black dark:text-white font-bold">{{ $t('province') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                             v-model="orderedSelectedProvinces"
                             :items="provincesList"
                             multiple
@@ -123,7 +123,7 @@
                         <button
                             @click="clearFilterField('province')" 
                             :disabled="selectedProvinces.length === 0"
-                            class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                            class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
                         </button>
@@ -136,14 +136,14 @@
                             v-model="searchQuery"
                             type="text"
                             :placeholder="$t('searchName')"
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                         />
                     </div>
                 </div>
             </div>
             <div
                 v-if="searchQuery || selectedProvinces.length !== provincesList.length"
-                class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
+                class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
                 {{ $t('resetFilter') }}
             </div>
         </div>
@@ -168,7 +168,7 @@
         <div v-else class="text-center text-white text-base lg:text-lg leading-6">
             {{ $t('noRentalsFound') }}
         </div>
-        <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
+        <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-900 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
             <Icon name="mi:arrow-up" size="2.5em"  mode="svg" />
         </button>
     </div>

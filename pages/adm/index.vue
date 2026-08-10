@@ -19,6 +19,7 @@
 
     const { $supabase } = useNuxtApp()
     const config = useRuntimeConfig()
+    const { t } = useI18n()
 
     // State variables
     const schedules = ref([])
@@ -153,10 +154,10 @@
                 end.setHours(23, 59, 59, 999)
                 const startIso = start.toISOString()
                 const endIso = end.toISOString()
-                query = query.or(`and(date.gte.${startIso},date.lte.${endIso}),is_postponed.eq.true,stream_link.is.null,stream_link.eq.`)
+                query = query.or(`and(date.gte.${startIso},date.lte.${endIso}),is_postponed.eq.true`)
             } else if (timeFilter.value === "upcoming") {
                 const startIso = new Date().toISOString()
-                query = query.or(`finish_date.gte.${startIso},is_postponed.eq.true,stream_link.is.null,stream_link.eq.`)
+                query = query.or(`finish_date.gte.${startIso},is_postponed.eq.true`)
             }
 
             const { data, error } = await query
@@ -240,9 +241,30 @@
 
     const getScheduleStatus = (item) => {
         if (item.is_postponed) return "Ditunda"
-        const endDate = new Date(item.finish_date || item.date)
-        if (endDate < new Date()) return "Selesai"
-        return "Aktif"
+        const startDate = new Date(item.date)
+        const finishDate = new Date(item.finish_date || item.date)
+        const todayDate = new Date()
+
+        const remainingEventDays = Math.floor((startDate - todayDate) / (1000 * 60 * 60 * 24))
+        const remainingFinishDays = Math.floor((finishDate - todayDate) / (1000 * 60 * 60 * 24))
+
+        if (remainingEventDays < 0 && remainingFinishDays < 0) return "Selesai"
+        if (remainingEventDays < 0 && remainingFinishDays >= 0) return t("started")
+
+        if (remainingEventDays <= 1) {
+            let remainingHours = Math.ceil((startDate - todayDate) / (1000 * 60 * 60))
+            if (remainingHours > 24) {
+                return t("oneDayAndHoursLeft", { count: remainingHours - 24 })
+            } else {
+                const remainingMinutes = Math.ceil((startDate - todayDate) / (1000 * 60))
+                if (remainingMinutes < 60) {
+                    return t("minutesLeft", { count: remainingMinutes })
+                } else {
+                    return t("hoursLeft", { count: remainingHours })
+                }
+            }
+        }
+        return t("daysLeft", { days: remainingEventDays })
     }
 
     const getStatusBadgeClass = (status) => {
@@ -252,6 +274,120 @@
             return "bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-gray-300 border border-gray-300 dark:border-slate-700"
         }
         return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+    }
+
+    const getEventRowStyle = (event) => {
+        if (!event) return "bg-white dark:bg-slate-950 hover:bg-gray-100 dark:hover:bg-slate-900"
+        
+        if (event.startsWith("MX-5 Cup Asia")) {
+            return "bg-red-200/80 dark:bg-red-900/60 hover:bg-red-300/80 dark:hover:bg-red-900/80"
+        } else if (event.startsWith("1 Hour Series")) {
+            return "bg-emerald-200/80 dark:bg-emerald-900/60 hover:bg-emerald-300/80 dark:hover:bg-emerald-900/80"
+        } else if (event === "Open Wheel Series") {
+            return "bg-cyan-200/80 dark:bg-cyan-900/60 hover:bg-cyan-300/80 dark:hover:bg-cyan-900/80"
+        } else if (event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open") || event.startsWith("Asri Motor Slalom Cup")) {
+            return "bg-yellow-200/80 dark:bg-yellow-900/60 hover:bg-yellow-300/80 dark:hover:bg-yellow-900/80"
+        } else if (event === "Endurance Championship") {
+            return "bg-pink-200/80 dark:bg-pink-900/60 hover:bg-pink-300/80 dark:hover:bg-pink-900/80"
+        } else if (event === "Masters League" || event === "Praga Cup") {
+            return "bg-blue-200/80 dark:bg-blue-900/60 hover:bg-blue-300/80 dark:hover:bg-blue-900/80"
+        } else if (event === "Juniors") {
+            return "bg-lime-200/80 dark:bg-lime-900/60 hover:bg-lime-300/80 dark:hover:bg-lime-900/80"
+        } else if (event === "B.E.G.O. Balap Cup") {
+            return "bg-orange-200/80 dark:bg-orange-900/60 hover:bg-orange-300/80 dark:hover:bg-orange-900/80"
+        } else if (event === "Sprint Rally Challenge" || event === "Rally Championship") {
+            return "bg-purple-200/80 dark:bg-purple-900/60 hover:bg-purple-300/80 dark:hover:bg-purple-900/80"
+        } else if (event.startsWith("Speedway Master Series")) {
+            return "bg-fuchsia-200/80 dark:bg-fuchsia-900/60 hover:bg-fuchsia-300/80 dark:hover:bg-fuchsia-900/80"
+        } else if (event === "Javahosting Rental Cup") {
+            return "bg-indigo-200/80 dark:bg-indigo-900/60 hover:bg-indigo-300/80 dark:hover:bg-indigo-900/80"
+        } else if (event === "Indorance") {
+            return "bg-sky-200/80 dark:bg-sky-900/60 hover:bg-sky-300/80 dark:hover:bg-sky-900/80"
+        } else if (event === "Endurance Edition" || event === "Global Edition") {
+            return "bg-rose-200/80 dark:bg-rose-900/60 hover:bg-rose-300/80 dark:hover:bg-rose-900/80"
+        } else if (event.startsWith("LMU Championship")) {
+            return "bg-amber-200/80 dark:bg-amber-900/60 hover:bg-amber-300/80 dark:hover:bg-amber-900/80"
+        } else if (event === "LMU Solo Endurance") {
+            return "bg-pink-300/80 dark:bg-pink-800/60 hover:bg-pink-400/80 dark:hover:bg-pink-800/80"
+        }
+        return "bg-white dark:bg-slate-950 hover:bg-gray-100 dark:hover:bg-slate-900"
+    }
+
+    const getAdminEventStyle = (event) => {
+        if (!event) return "font-bold"
+        let style = "font-bold "
+        if (event.startsWith("MX-5 Cup Asia")) {
+            style += "text-red-500"
+        } else if (event.startsWith("1 Hour Series")) {
+            style += "text-emerald-500"
+        } else if (event === "Open Wheel Series") {
+            style += "text-cyan-500"
+        } else if (event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open") || event.startsWith("Asri Motor Slalom Cup")) {
+            style += "text-yellow-500"
+        } else if (event === "Endurance Championship") {
+            style += "text-pink-500"
+        } else if (event === "Masters League" || event === "Praga Cup") {
+            style += "text-blue-500"
+        } else if (event === "Juniors") {
+            style += "text-lime-500"
+        } else if (event === "B.E.G.O. Balap Cup") {
+            style += "text-orange-500"
+        } else if (event === "Sprint Rally Challenge" || event === "Rally Championship") {
+            style += "text-purple-500"
+        } else if (event.startsWith("Speedway Master Series")) {
+            style += "text-fuchsia-500"
+        } else if (event === "Javahosting Rental Cup") {
+            style += "text-indigo-500"
+        } else if (event === "Indorance") {
+            style += "text-sky-500"
+        } else if (event === "Endurance Edition" || event === "Global Edition") {
+            style += "text-rose-500"
+        } else if (event.startsWith("LMU Championship")) {
+            style += "text-amber-500"
+        } else if (event === "LMU Solo Endurance") {
+            style += "text-pink-800"
+        }
+        return style
+    }
+
+    const getAdminOrganizerStyle = (organizer) => {
+        let style = "px-1.5 py-0.5 font-bold rounded text-xs shrink-0 "
+        if (organizer === "ACI") {
+            style += "bg-red-500 text-white"
+        } else if (organizer === "97SRC") {
+            style += "bg-white text-black border border-gray-300"
+        } else if (organizer === "CRC") {
+            style += "bg-yellow-500 text-black"
+        } else if (organizer === "BRM") {
+            style += "bg-sky-500 text-black"
+        } else if (organizer === "JRC") {
+            style += "bg-indigo-500 text-black"
+        } else if (organizer === "ERGP") {
+            style += "bg-white text-red-600 border border-gray-300"
+        } else if (organizer === "SRC") {
+            style += "bg-blue-500 text-white"
+        } else if (organizer === "ISL") {
+            style += "bg-pink-800 text-white"
+        } else {
+            style += "bg-gray-200 text-gray-800 dark:bg-slate-700 dark:text-gray-200"
+        }
+        return style
+    }
+
+    const getAdminGameStyle = (game) => {
+        let style = "px-1.5 py-0.5 font-bold rounded text-xs shrink-0 "
+        if (game === "AC") {
+            style += "bg-red-500 text-white"
+        } else if (game === "ACC") {
+            style += "bg-white text-red-600 border border-gray-300"
+        } else if (game === "RBR") {
+            style += "bg-black text-white"
+        } else if (game === "LMU") {
+            style += "bg-amber-500 text-black"
+        } else {
+            style += "bg-gray-200 text-gray-800 dark:bg-slate-700 dark:text-gray-200"
+        }
+        return style
     }
 
     const formatDateForInput = (dateStr) => {
@@ -455,7 +591,7 @@
                                 placeholder="Masukkan password admin"
                                 @input="loginPasswordError = ''"
                                 class="p-3 pr-10 rounded-lg border-2 bg-white dark:bg-slate-900 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="loginPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-700 dark:border-red-900'"
+                                :class="loginPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
                             />
                             <button
                                 type="button"
@@ -473,7 +609,7 @@
 
                     <button
                         type="submit"
-                        class="w-full py-3 bg-red-700 hover:bg-red-800 dark:bg-red-900 dark:hover:bg-red-800 text-white rounded-lg font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-lg mt-2"
+                        class="w-full py-3 bg-red-900 hover:bg-red-950 dark:bg-red-900 dark:hover:bg-red-950 text-white rounded-lg font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-lg mt-2"
                     >
                         <span>Masuk ke Admin</span>
                     </button>
@@ -500,7 +636,7 @@
                     </button>
                     <button
                         @click="openCreateModal"
-                        class="flex items-center gap-2 px-4 py-2 bg-red-700 hover:bg-red-800 dark:bg-red-900 dark:hover:bg-red-800 text-white rounded-lg font-bold transition cursor-pointer shadow-md"
+                        class="flex items-center gap-2 px-4 py-2 bg-red-900 hover:bg-red-950 dark:bg-red-900 dark:hover:bg-red-950 text-white rounded-lg font-bold transition cursor-pointer shadow-md"
                     >
                         <span>Tambah Jadwal</span>
                     </button>
@@ -522,7 +658,7 @@
                         @click="timeFilter = 'week'"
                         class="px-3 py-1.5 text-xs lg:text-sm font-bold rounded-lg transition cursor-pointer border"
                         :class="timeFilter === 'week' 
-                            ? 'bg-red-700 dark:bg-red-900 text-white border-red-700 dark:border-red-900 shadow-sm' 
+                            ? 'bg-red-900 dark:bg-red-900 text-white border-red-900 dark:border-red-900 shadow-sm' 
                             : 'bg-white dark:bg-slate-900 text-black dark:text-gray-300 border-gray-300 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-800'"
                     >
                         Dalam 1 Minggu
@@ -531,7 +667,7 @@
                         @click="timeFilter = 'upcoming'"
                         class="px-3 py-1.5 text-xs lg:text-sm font-bold rounded-lg transition cursor-pointer border"
                         :class="timeFilter === 'upcoming' 
-                            ? 'bg-red-700 dark:bg-red-900 text-white border-red-700 dark:border-red-900 shadow-sm' 
+                            ? 'bg-red-900 dark:bg-red-900 text-white border-red-900 dark:border-red-900 shadow-sm' 
                             : 'bg-white dark:bg-slate-900 text-black dark:text-gray-300 border-gray-300 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-800'"
                     >
                         Semua Mendatang
@@ -544,7 +680,7 @@
                     v-model="searchQuery"
                     type="text"
                     placeholder="Cari event"
-                    class="w-full pl-4 pr-4 py-1.5 text-sm rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-900 text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                    class="w-full pl-4 pr-4 py-1.5 text-sm rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-900 text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
             </div>
         </div>
@@ -559,7 +695,7 @@
         <!-- Schedule Table -->
         <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
             <table class="w-full min-w-[1000px] table-fixed text-left border-collapse">
-                <thead class="bg-red-700 dark:bg-red-900 text-white">
+                <thead class="bg-red-900 dark:bg-red-900 text-white">
                     <tr>
                         <th class="px-3 sm:px-4 py-3 w-[25%]">Event</th>
                         <th class="px-1.5 sm:px-2 py-3 w-[7%]">Round</th>
@@ -591,11 +727,20 @@
                         v-for="item in filteredSchedules"
                         :key="item.id"
                         @click="openEditModal(item)"
-                        class="hover:bg-red-50/70 dark:hover:bg-slate-900/80 cursor-pointer transition-colors text-black dark:text-white"
+                        class="cursor-pointer transition-colors text-black dark:text-white"
+                        :class="getEventRowStyle(item.events?.name)"
                     >
                         <td class="px-3 sm:px-4 py-3">
-                            <div class="text-gray-900 dark:text-white font-medium">
-                                {{ item.events.organizers.abbreviation }} {{ item.events?.name || 'Event N/A' }}{{ item.season ? ' (S' + item.season + ')' : '' }}
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span :class="getAdminOrganizerStyle(item.events?.organizers?.abbreviation)">
+                                    {{ item.events?.organizers?.abbreviation }}
+                                </span>
+                                <span v-if="item.events?.games?.abbreviation" :class="getAdminGameStyle(item.events?.games?.abbreviation)">
+                                    {{ item.events?.games?.abbreviation }}
+                                </span>
+                                <span :class="getAdminEventStyle(item.events?.name)">
+                                    {{ item.events?.name || 'Event N/A' }}{{ item.season ? ' (S' + item.season + ')' : '' }}
+                                </span>
                             </div>
                         </td>
 
@@ -679,7 +824,7 @@
                                 <select
                                     v-model="formData.event_id"
                                     required
-                                    class="p-2 sm:p-2.5 pr-8 sm:pr-10 appearance-none rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full cursor-pointer"
+                                    class="p-2 sm:p-2.5 pr-8 sm:pr-10 appearance-none rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full cursor-pointer"
                                 >
                                     <option value="" disabled>-- Pilih Event --</option>
                                     <option v-for="ev in eventsList" :key="ev.id" :value="ev.id">
@@ -695,7 +840,7 @@
                                 v-model="formData.season"
                                 type="text"
                                 placeholder="Contoh: 2"
-                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                         <div class="col-span-1 lg:col-span-1 flex flex-col gap-1">
@@ -704,7 +849,7 @@
                                 v-model="formData.round"
                                 type="text"
                                 placeholder="Contoh: 3"
-                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                     </div>
@@ -717,7 +862,7 @@
                                 v-model="formData.date"
                                 type="datetime-local"
                                 required
-                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                         <div class="flex flex-col gap-1">
@@ -726,7 +871,7 @@
                                 v-model="formData.finish_date"
                                 type="datetime-local"
                                 required
-                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                     </div>
@@ -739,7 +884,7 @@
                                 v-model="formData.circuit"
                                 type="text"
                                 placeholder="Contoh: Imola Circuit - Qualifying"
-                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                         <div class="col-span-1 lg:col-span-1 flex flex-col gap-1">
@@ -748,7 +893,7 @@
                                 v-model="formData.country"
                                 type="text"
                                 placeholder="us"
-                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                         <div class="col-span-1 lg:col-span-1 flex flex-col gap-1">
@@ -757,7 +902,7 @@
                                 v-model="formData.country_2"
                                 type="text"
                                 placeholder="jp"
-                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
+                                class="p-2 sm:p-2.5 rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
                             />
                         </div>
                     </div>
@@ -769,7 +914,7 @@
                             v-model="formData.stream_link"
                             type="url"
                             placeholder="https://youtube.com/live/..."
-                            class="p-2.5 rounded-lg border-2 border-red-700 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
+                            class="p-2.5 rounded-lg border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
                         />
                     </div>
 
@@ -780,7 +925,7 @@
                                 id="postponed-checkbox"
                                 v-model="formData.is_postponed"
                                 type="checkbox"
-                                class="w-4 h-4 sm:w-5 sm:h-5 accent-red-700 rounded cursor-pointer shrink-0"
+                                class="w-4 h-4 sm:w-5 sm:h-5 accent-red-900 rounded cursor-pointer shrink-0"
                             />
                             <label for="postponed-checkbox" class="text-black dark:text-white text-xs sm:text-sm font-medium cursor-pointer select-none">
                                 Ditunda
@@ -796,7 +941,7 @@
                                     placeholder="Password admin"
                                     @input="adminPasswordError = ''"
                                     class="p-2.5 pr-9 sm:pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
-                                    :class="adminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-700 dark:border-red-900'"
+                                    :class="adminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
                                 />
                                 <button
                                     type="button"
@@ -837,7 +982,7 @@
                             <button
                                 type="submit"
                                 :disabled="saving"
-                                class="px-5 py-2 bg-red-700 hover:bg-red-800 dark:bg-red-900 dark:hover:bg-red-800 text-white rounded-lg font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
+                                class="px-5 py-2 bg-red-900 hover:bg-red-950 dark:bg-red-900 dark:hover:bg-red-950 text-white rounded-lg font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
                             >
                                 <Icon v-if="saving" name="material-symbols:refresh" class="animate-spin" />
                                 <span>{{ saving ? 'Menyimpan...' : 'Simpan' }}</span>
@@ -883,7 +1028,7 @@
                                 placeholder="Masukkan password admin"
                                 @input="deletePasswordError = ''"
                                 class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="deletePasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-700 dark:border-red-900'"
+                                :class="deletePasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
                             />
                             <button
                                 type="button"
@@ -910,7 +1055,7 @@
                         <button
                             type="submit"
                             :disabled="deleting"
-                            class="px-5 py-2 bg-red-700 hover:bg-red-800 dark:bg-red-900 dark:hover:bg-red-800 text-white rounded-lg font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                            class="px-5 py-2 bg-red-900 hover:bg-red-950 dark:bg-red-900 dark:hover:bg-red-950 text-white rounded-lg font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
                         >
                             <Icon v-if="deleting" name="material-symbols:refresh" class="animate-spin" />
                             <span>{{ deleting ? 'Menghapus...' : 'Hapus' }}</span>

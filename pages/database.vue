@@ -272,7 +272,7 @@
                     <label class="text-black dark:text-white font-bold">{{ $t('organizer') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                             v-model="selectedOrganizer"
                             :items="organizersList"
                         />
@@ -282,7 +282,7 @@
                     <label class="text-black dark:text-white font-bold">{{ $t('rating') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                             v-model="orderedSelectedRatings"
                             :items="ratingsList"
                             multiple
@@ -290,7 +290,7 @@
                         <button 
                             @click="clearFilterField('rating')" 
                             :disabled="selectedRatings.length === 0"
-                            class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                            class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
                         </button>
@@ -302,7 +302,7 @@
                     <label class="text-black dark:text-white font-bold">{{ $t('country') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                             v-model="orderedSelectedCountries"
                             :items="countriesList"
                             multiple
@@ -310,7 +310,7 @@
                         <button
                             @click="clearFilterField('country')" 
                             :disabled="selectedCountries.length === 0"
-                            class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                            class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
                         </button>
@@ -320,7 +320,7 @@
                     <label class="text-black dark:text-white font-bold">{{ $t('team') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                             v-model="orderedSelectedTeams"
                             :items="teamsList"
                             multiple
@@ -328,7 +328,7 @@
                         <button
                             @click="clearFilterField('team')" 
                             :disabled="selectedTeams.length === 0"
-                            class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                            class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
                         </button>
@@ -343,7 +343,7 @@
                             v-model="searchQuery"
                             type="text"
                             :placeholder="$t('searchName')"
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                         />
                     </div>
                 </div>
@@ -351,14 +351,14 @@
                     <label class="text-black dark:text-white font-bold">{{ $t('sortBy') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-700 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                             v-model="selectedSortBy"
                             :items="sortOptions"
                             value-attribute="value"
                             option-attribute="label"
                         />
                         <button
-                            class="invisible text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                            class="invisible text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
                         </button>
@@ -367,7 +367,7 @@
             </div>
             <div
                 v-if="searchQuery || selectedRatings.length !== ratingsList.length || selectedCountries.length !== countriesList.length || selectedTeams.length !== teamsList.length || selectedOrganizer !== 'Croco Racing Community' || sortBy !== 'Kelas'"
-                class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
+                class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
                 {{ $t('resetFilter') }}
             </div>
         </div>
@@ -377,7 +377,7 @@
                 <div>{{ $t('driversDisclaimer') }}</div>
             </div>
             <table class="w-full">
-                <thead class="bg-red-700 dark:bg-red-900 text-white">
+                <thead class="bg-red-900 dark:bg-red-900 text-white">
                     <tr>
                         <th class="w-5/10 px-2 lg:px-4 py-2 text-sm lg:text-base">{{ $t('name') }}</th>
                         <th class="w-4/10 px-2 lg:px-4 py-2 text-sm lg:text-base">{{ $t('team') }}</th>
@@ -425,14 +425,14 @@
                 <button 
                     @click="goToPage(1)" 
                     :disabled="currentPage === 1"
-                    class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                 >
                     <Icon name="material-symbols:first-page" mode="svg" />
                 </button>
                 <button 
                     @click="goToPage(currentPage - 1)" 
                     :disabled="currentPage === 1"
-                    class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                 >
                     <Icon name="material-symbols:arrow-back-ios" mode="svg" />
                 </button>
@@ -442,20 +442,20 @@
                 <button 
                     @click="goToPage(currentPage + 1)" 
                     :disabled="currentPage === totalPages"
-                    class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                 >
                     <Icon name="material-symbols:arrow-forward-ios" mode="svg" />
                 </button>
                 <button 
                     @click="goToPage(totalPages)" 
                     :disabled="currentPage === totalPages"
-                    class="text-white bg-red-700 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                 >
                     <Icon name="material-symbols:last-page" mode="svg" />
                 </button>
             </div>
         </div>
-        <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-700 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
+        <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-900 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">
             <Icon name="mi:arrow-up" size="2.5em"  mode="svg" />
         </button>
     </div>

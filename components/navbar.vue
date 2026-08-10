@@ -39,7 +39,7 @@
 
 <template>
     <div class="sticky top-0 z-50">
-        <nav class="w-full flex items-center justify-between bg-red-700 dark:bg-red-900 px-4 lg:px-16 py-4 text-white">
+        <nav class="w-full flex items-center justify-between bg-red-900 dark:bg-red-900 px-4 lg:px-16 py-4 text-white">
             <ul class="w-4/5 flex gap-4 lg:gap-16 text-sm lg:text-lg items-center justify-start">
                 <NuxtLink to="/" class="text-lg lg:text-3xl font-bold">ID Sim Racing</NuxtLink>
                 <!-- <NuxtLink to="/database">

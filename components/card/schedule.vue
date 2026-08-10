@@ -27,37 +27,39 @@
     const { locale, t } = useI18n()
 
     const getCardStyle = (event) => {
-        let style = "rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 p-4 lg:p-6 bg-red-50 dark:bg-slate-950 text-black dark:text-white "
+        let style = "rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 p-4 lg:p-6 text-black dark:text-white "
         if(event.startsWith("MX-5 Cup Asia")){
-            style += "border-red-500"
+            style += "border-red-500 bg-red-200/80 dark:bg-red-900/60"
         }else if(event.startsWith("1 Hour Series")){
-            style += "border-emerald-500"
+            style += "border-emerald-500 bg-emerald-200/80 dark:bg-emerald-900/60"
         }else if(event === "Open Wheel Series"){
-            style += "border-cyan-500"
+            style += "border-cyan-500 bg-cyan-200/80 dark:bg-cyan-900/60"
         }else if(event.startsWith("Sprint Series") || event.startsWith("Porsche Supercup") || event.startsWith("GT3 Open") || event.startsWith("Asri Motor Slalom Cup")){
-            style += "border-yellow-500"
+            style += "border-yellow-500 bg-yellow-200/80 dark:bg-yellow-900/60"
         }else if(event === "Endurance Championship"){
-            style += "border-pink-500"
+            style += "border-pink-500 bg-pink-200/80 dark:bg-pink-900/60"
         }else if(event === "Masters League" || event === "Praga Cup"){
-            style += "border-blue-500"
+            style += "border-blue-500 bg-blue-200/80 dark:bg-blue-900/60"
         }else if(event === "Juniors"){
-            style += "border-lime-500"
+            style += "border-lime-500 bg-lime-200/80 dark:bg-lime-900/60"
         }else if(event === "B.E.G.O. Balap Cup"){
-            style += "border-orange-500"
+            style += "border-orange-500 bg-orange-200/80 dark:bg-orange-900/60"
         }else if(event === "Sprint Rally Challenge" || event === "Rally Championship"){
-            style += "border-purple-500"
+            style += "border-purple-500 bg-purple-200/80 dark:bg-purple-900/60"
         }else if(event.startsWith("Speedway Master Series")){
-            style += "border-fuchsia-500"
+            style += "border-fuchsia-500 bg-fuchsia-200/80 dark:bg-fuchsia-900/60"
         }else if(event === "Javahosting Rental Cup"){
-            style += "border-indigo-500"
+            style += "border-indigo-500 bg-indigo-200/80 dark:bg-indigo-900/60"
         }else if(event === "Indorance"){
-            style += "border-sky-500"
+            style += "border-sky-500 bg-sky-200/80 dark:bg-sky-900/60"
         }else if(event === "Endurance Edition" || event === "Global Edition"){
-            style += "border-rose-500"
+            style += "border-rose-500 bg-rose-200/80 dark:bg-rose-900/60"
         }else if(event.startsWith("LMU Championship")){
-            style += "border-amber-500"
+            style += "border-amber-500 bg-amber-200/80 dark:bg-amber-900/60"
         }else if(event === "LMU Solo Endurance"){
-            style += "border-pink-800"
+            style += "border-pink-800 bg-pink-300/80 dark:bg-pink-800/60"
+        }else{
+            style += "bg-red-50 dark:bg-slate-950"
         }
         return style
     }
@@ -194,13 +196,13 @@
     }
 
     const getStatusStyle = (status) => {
-        let style = "w-fit px-2 py-1 font-bold rounded-md text-sm lg:text-base "
+        let style = "w-fit px-2 py-1 font-bold rounded-md text-sm lg:text-base border "
         if(status === t("postponed")){
-            style += "bg-white text-black"
+            style += "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 dark:border-amber-800"
         }else if(status === t("finished")){
-            style += "bg-red-900 text-white"
+            style += "bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-gray-300 border-gray-300 dark:border-slate-700"
         }else{
-            style += "bg-red-500 text-white"
+            style += "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
         }
         return style
     }
