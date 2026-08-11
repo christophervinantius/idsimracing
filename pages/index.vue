@@ -888,7 +888,7 @@
             {{ $t('noRacesFound') }}
         </div>
     </div>
-    <div class="flex justify-center items-center gap-3 pt-8">
+    <div id="calendar" class="flex justify-center items-center gap-3 pt-8">
         <button
             @click="viewMode = 'kalender'"
             :class="viewMode === 'kalender'
@@ -906,10 +906,7 @@
             {{ $t('tableView') }}
         </button>
     </div>
-    <div v-if="viewMode === 'kalender'" id="calendar" class="bg-white dark:bg-slate-900 px-1 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
-        <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
-            {{ $t('calendarView') }}
-        </div>
+    <div v-if="viewMode === 'kalender'" class="bg-white dark:bg-slate-900 px-1 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
         <div class="mx-auto w-3/4">
             <Calendar
                 ref="calendar"
@@ -961,11 +958,7 @@
             </Calendar>
         </div>
     </div>
-    <!-- Tampilan Tabel -->
     <div v-if="viewMode === 'tabel'" class="bg-white dark:bg-slate-900 px-4 lg:px-32 py-8 flex flex-col gap-6 lg:gap-8">
-        <div class="text-black dark:text-white text-center text-lg lg:text-2xl font-bold leading-6">
-            {{ $t('tableView') }}
-        </div>
         <!-- Month Navigator -->
         <div class="flex justify-center items-center gap-4">
             <button
