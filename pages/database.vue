@@ -75,6 +75,7 @@
     const { data: database } = await useAsyncData("database", fetchAllDrivers)
 
     const getRatingStyle = (rating) => {
+        if(!rating) return ""
         if(rating === "Platinum"){
             return "bg-slate-700 text-white font-bold"
         }else if(rating === "Gold"){
@@ -88,15 +89,17 @@
         }else if(rating === "Iron"){
             return "bg-black text-white font-bold"
         }
+        return ""
     }
 
     const selectedCountries = ref([])
 
     const countriesList = computed(() => {
         if(!database.value) return []
-        const countries = database.value.map(driver => driver.countries.name)
-        selectedCountries.value = [...new Set(countries)]
-        return [...new Set(countries)].sort()
+        const countries = database.value.map(driver => driver.countries?.name || "-")
+        const unique = [...new Set(countries)]
+        const nonNull = unique.filter(c => c !== "-").sort()
+        return unique.includes("-") ? ["-", ...nonNull] : nonNull
     })
 
     const orderedSelectedCountries = computed({
@@ -112,9 +115,10 @@
 
     const teamsList = computed(() => {
         if(!database.value) return []
-        const teams = database.value.map(driver => driver.teams.name)
-        selectedTeams.value = [...new Set(teams)]
-        return [...new Set(teams)].sort()
+        const teams = database.value.map(driver => driver.teams?.name || "-")
+        const unique = [...new Set(teams)]
+        const nonNull = unique.filter(t => t !== "-").sort()
+        return unique.includes("-") ? ["-", ...nonNull] : nonNull
     })
 
     const orderedSelectedTeams = computed({
@@ -130,7 +134,7 @@
 
     const organizersList = computed(() => {
         if(!database.value) return []
-        const organizers = database.value.map(driver => driver.organizers.name)
+        const organizers = database.value.map(driver => driver.organizers?.name).filter(Boolean)
         return [...new Set(organizers)].sort()
     })
 
@@ -147,10 +151,19 @@
 
     const ratingsList = computed(() => {
         if(!database.value) return []
-        const ratings = database.value.map(driver => driver.rating)
-        selectedRatings.value = [...new Set(ratings)]
-        return [...new Set(ratings)].sort((a, b) => ratingsOrder[a] - ratingsOrder[b])
+        const ratings = database.value.map(driver => driver.rating || "-")
+        const unique = [...new Set(ratings)]
+        const nonNull = unique.filter(r => r !== "-").sort((a, b) => (ratingsOrder[a] || 99) - (ratingsOrder[b] || 99))
+        return unique.includes("-") ? [...nonNull, "-"] : nonNull
     })
+
+    watch(database, (newVal) => {
+        if(newVal && newVal.length > 0){
+            selectedCountries.value = [...countriesList.value]
+            selectedTeams.value = [...teamsList.value]
+            selectedRatings.value = [...ratingsList.value]
+        }
+    }, { immediate: true })
 
     const orderedSelectedRatings = computed({
         get(){
@@ -182,21 +195,27 @@
     const filteredDrivers = computed(() => {
         currentPage.value = 1
         if(!database.value) return []
-        const driversData = database.value.filter(driver =>
-            driver.name.toLowerCase().includes(searchQuery.value.toLowerCase()) &&
-            selectedCountries.value.includes(driver.countries.name) &&
-            selectedTeams.value.includes(driver.teams.name) &&
-            selectedRatings.value.includes(driver.rating) &&
-            driver.organizers.name === selectedOrganizer.value
-        )
+        const driversData = database.value.filter(driver => {
+            const matchesName = driver.name ? driver.name.toLowerCase().includes(searchQuery.value.toLowerCase()) : false
+            const countryVal = driver.countries?.name || "-"
+            const matchesCountry = selectedCountries.value.includes(countryVal)
+            const teamVal = driver.teams?.name || "-"
+            const matchesTeam = selectedTeams.value.includes(teamVal)
+            const ratingVal = driver.rating || "-"
+            const matchesRating = selectedRatings.value.includes(ratingVal)
+            const matchesOrganizer = driver.organizers?.name === selectedOrganizer.value
+            return matchesName && matchesCountry && matchesTeam && matchesRating && matchesOrganizer
+        })
         return driversData.sort((a, b) => {
             if(sortBy.value === "Kelas"){
-                if(ratingsOrder[a.rating] !== ratingsOrder[b.rating]){
-                    return ratingsOrder[a.rating] - ratingsOrder[b.rating]
+                const orderA = ratingsOrder[a.rating] || 99
+                const orderB = ratingsOrder[b.rating] || 99
+                if(orderA !== orderB){
+                    return orderA - orderB
                 }
-                return a.name.localeCompare(b.name)
+                return (a.name || "").localeCompare(b.name || "")
             }else if(sortBy.value === "Nama"){
-                return a.name.localeCompare(b.name)
+                return (a.name || "").localeCompare(b.name || "")
             }
         })
     })
@@ -251,6 +270,12 @@
             behavior: "smooth"
         })
     }
+
+    const { exportDriversToExcel } = useExportDriversExcel()
+
+    // const handleExportExcel = () => {
+    //     exportDriversToExcel(filteredDrivers.value, `Database_Pembalap_${selectedOrganizer.value.replace(/\s+/g, '_')}.xlsx`)
+    // }
 
     onMounted(() => {
         window.addEventListener("scroll", handleScrollTop)
@@ -307,7 +332,7 @@
                             :items="countriesList"
                             multiple
                         />
-                        <button
+                        <button 
                             @click="clearFilterField('country')" 
                             :disabled="selectedCountries.length === 0"
                             class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
@@ -325,7 +350,7 @@
                             :items="teamsList"
                             multiple
                         />
-                        <button
+                        <button 
                             @click="clearFilterField('team')" 
                             :disabled="selectedTeams.length === 0"
                             class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
@@ -357,7 +382,7 @@
                             value-attribute="value"
                             option-attribute="label"
                         />
-                        <button
+                        <button 
                             class="invisible text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
@@ -372,9 +397,19 @@
             </div>
         </div>
         <div v-if="filteredDrivers.length" class="mx-auto w-full lg:w-3/4 flex flex-col gap-6 lg:gap-8">
-            <div class="text-black dark:text-white text-center text-base lg:text-lg">
-                <div>{{ $t('totalDrivers', {total: filteredDrivers.length}) }}</div>
-                <div>{{ $t('driversDisclaimer') }}</div>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-center gap-3 text-black dark:text-white">
+                <div>
+                    <div class="text-base lg:text-lg">{{ $t('totalDrivers', {total: filteredDrivers.length}) }}</div>
+                    <!-- <div class="text-xs">{{ $t('driversDisclaimer') }}</div> -->
+                </div>
+                <!-- <button
+                    @click="handleExportExcel"
+                    class="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-sm transition cursor-pointer shadow-sm self-start sm:self-auto"
+                    :title="$t('exportExcel')"
+                >
+                    <Icon name="material-symbols:download" class="text-lg" />
+                    <span>{{ $t('exportExcel') }}</span>
+                </button> -->
             </div>
             <table class="w-full">
                 <thead class="bg-red-900 dark:bg-red-900 text-white">
@@ -391,9 +426,9 @@
                         class="text-center border-b border-slate-300 dark:border-slate-700 bg-red-50 dark:bg-slate-950 hover:bg-red-100 dark:hover:bg-slate-800"
                     >
                         <td class="w-full px-2 lg:px-4 py-2 flex items-center gap-1 lg:gap-2 font-bold text-sm lg:text-base">
-                            <div>
+                            <div v-if="driver.countries?.code">
                                 <Icon
-                                    :name="`flag-${driver.countries.code}-4x3`"
+                                    :name="`flag-${driver.countries.code.toLowerCase()}-4x3`"
                                     mode="svg"
                                     class="rounded-sm lg:rounded-md"
                                 />
@@ -405,13 +440,13 @@
                         <td
                             class="w-4/10 px-2 lg:px-4 py-2 text-sm lg:text-base font-bold"
                         >
-                            {{ driver.teams.name }}
+                            {{ driver.teams?.name || '-' }}
                         </td>
                         <td
                             class="w-1/10 px-2 lg:px-4 py-2 text-sm lg:text-base"
-                            :class="getRatingStyle(driver.rating)"
+                            :class="driver.rating ? getRatingStyle(driver.rating) : 'text-gray-400 font-normal'"
                         >
-                            {{ driver.rating }}
+                            {{ driver.rating || '-' }}
                         </td>
                     </tr>
                 </tbody>

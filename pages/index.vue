@@ -43,6 +43,12 @@
                 country_2,
                 season,
                 is_postponed,
+                event_entries (
+                    id,
+                    results (
+                        id
+                    )
+                ),
                 events (
                     name,
                     games (
@@ -867,6 +873,7 @@
         <div v-if="nextThreeRaces.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
             <div v-for="event in nextThreeRaces" :key="event.id">
                 <CardSchedule
+                    :id="event.id"
                     :date="event.date"
                     :finish_date="event.finish_date"
                     :event="event.events.name"
@@ -879,6 +886,7 @@
                     :organizer="event.events.organizers.abbreviation"
                     :game="event.events.games.abbreviation"
                     :season="event.season"
+                    :has_result="Boolean(event.event_entries && event.event_entries.some(e => e.results && e.results.length > 0))"
                     @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
                     @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
                 />
@@ -1126,6 +1134,7 @@
         <div v-if="schedule && filteredSchedule.length > 0" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
             <div v-for="event in displayedSchedule" :key="event.id" :id="event.id">
                 <CardSchedule
+                    :id="event.id"
                     :date="event.date"
                     :finish_date="event.finish_date"
                     :event="event.events.name"
@@ -1138,6 +1147,7 @@
                     :organizer="event.events.organizers.abbreviation"
                     :game="event.events.games.abbreviation"
                     :season="event.season"
+                    :has_result="Boolean(event.event_entries && event.event_entries.some(e => e.results && e.results.length > 0))"
                     @organizerClick="setOrganizationData(event.events.organizers.abbreviation, event.events.organizers.name, event.events.organizers.description_en, event.events.organizers.description_id, event.events.organizers.youtube, event.events.organizers.discord, event.events.organizers.instagram, event.events.organizers.twitter, event.events.organizers.facebook, event.events.organizers.tiktok)"
                     @gameClick="setGameData(event.events.games.abbreviation, event.events.games.name, event.events.games.description_en, event.events.games.description_id, event.events.games.steam_link, event.events.games.other_link)"
                 />

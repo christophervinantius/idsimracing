@@ -1,6 +1,7 @@
 <script setup>
     defineProps(
         [
+            "id",
             "event",
             "round",
             "race",
@@ -13,7 +14,8 @@
             "is_postponed",
             "organizer",
             "game",
-            "season"
+            "season",
+            "has_result"
         ]
     )
 
@@ -257,17 +259,43 @@
                 {{ circuit }}
             </div>
         </div>
-        <div class="flex gap-1 lg:gap-2 items-center mt-2">
-            <div :class="getStatusStyle(getStatus(date, finish_date, is_postponed))">
+        <div class="flex flex-wrap gap-1 lg:gap-2 items-center mt-2">
+            <!-- Results button in front when finished -->
+            <NuxtLink
+                v-if="getStatus(date, finish_date, is_postponed) === t('finished') && id && has_result"
+                :to="`/results/${id}`"
+                target="_blank" 
+                class="text-sm lg:text-base text-white bg-red-700 hover:bg-red-800 px-2 py-1 rounded-md font-bold cursor-pointer flex items-center gap-1 shadow-sm transition"
+            >
+                <span>{{ $t("viewResults") }}</span>
+            </NuxtLink>
+
+            <!-- Status badge (hidden if finished) -->
+            <div
+                v-if="getStatus(date, finish_date, is_postponed) !== t('finished')"
+                :class="getStatusStyle(getStatus(date, finish_date, is_postponed))"
+            >
                 {{ getStatus(date, finish_date, is_postponed) }}
             </div>
+
+            <!-- Stream / Replay Link -->
             <NuxtLink v-if="link" :to="link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 hover:bg-blue-400 px-2 py-1 rounded-md font-bold cursor-pointer">
                 <div v-if="getStatus(date, finish_date, is_postponed) === t('finished')">
                     <span class="text-sm lg:text-base">{{ $t("watchReplay") }}</span>
                 </div>
-                <div v-else="getStatus(date, finish_date, is_postponed) === t('finished')">
+                <div v-else>
                     <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
                 </div>
+            </NuxtLink>
+
+            <!-- Results button when not finished -->
+            <NuxtLink
+                v-if="getStatus(date, finish_date, is_postponed) !== t('finished') && id && has_result"
+                :to="`/results/${id}`"
+                target="_blank" 
+                class="text-sm lg:text-base text-white bg-red-700 hover:bg-red-800 px-2 py-1 rounded-md font-bold cursor-pointer flex items-center gap-1 shadow-sm transition"
+            >
+                <span>{{ $t("viewResults") }}</span>
             </NuxtLink>
         </div>
     </div>
