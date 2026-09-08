@@ -34,6 +34,7 @@ export interface ChampionshipEventConfig {
     session_type: string
     points_system_id: string
     points_multiplier: number
+    scoring_mode?: "overall" | "in_class" | "auto" | null
 }
 
 // One driver/team result within a single session, as needed for scoring
@@ -47,6 +48,7 @@ export interface ScoringResult {
     classified_position: number | null
     status: ResultStatus
     fastest_lap: boolean
+    best_lap_ms?: number | null
     grid_position: number | null
     no_points?: boolean
 }
@@ -90,16 +92,20 @@ export const getPositionPoints = (system: PointsSystem | null | undefined, posit
 export const getBonusPoints = (
     system: PointsSystem | null | undefined,
     result: ScoringResult,
-    isPole: boolean
+    isPoleOrOptions: boolean | { isPole?: boolean; isFastestLap?: boolean } = false
 ): number => {
     if (!system) return 0
     const bonuses = system.points_bonuses || []
     if (bonuses.length === 0) return 0
 
     let total = 0
+    const isPole = typeof isPoleOrOptions === "boolean" ? isPoleOrOptions : Boolean(isPoleOrOptions.isPole)
+    const isFastestLap = typeof isPoleOrOptions === "object" && isPoleOrOptions.isFastestLap !== undefined
+        ? isPoleOrOptions.isFastestLap
+        : Boolean(result.fastest_lap)
 
     for (const bonus of bonuses) {
-        if (bonus.bonus_type === "fastest_lap" && result.fastest_lap) {
+        if (bonus.bonus_type === "fastest_lap" && isFastestLap) {
             total += Number(bonus.points) || 0
         } else if (bonus.bonus_type === "pole" && isPole) {
             total += Number(bonus.points) || 0
@@ -115,7 +121,7 @@ export const getBonusPoints = (
 export const calculateResultPoints = (
     system: PointsSystem | null | undefined,
     result: ScoringResult,
-    options: { isPole?: boolean; multiplier?: number } = {}
+    options: { isPole?: boolean; isFastestLap?: boolean; multiplier?: number; scoringMode?: "overall" | "in_class" } = {}
 ): number => {
     if (result.no_points) return 0
 
@@ -124,14 +130,36 @@ export const calculateResultPoints = (
         : Number(options.multiplier) || 0
 
     // Position finish points require finishing and classification. DNF/DNS/DSQ earn 0 position points.
-    const canScorePosition = isScoringStatus(result.status) && isClassified(result)
-    const scoringPos = result.scoring_position ?? result.classified_position
+    const canScorePosition = isScoringStatus(result.status) && isClassified(result) && !result.no_points
+    const scoringPos = options.scoringMode === "overall"
+        ? (result.classified_position ?? result.scoring_position)
+        : (result.scoring_position ?? result.classified_position)
     const base = canScorePosition ? getPositionPoints(system, scoringPos) : 0
 
     // Bonus points (pole position and fastest lap) are awarded even if a driver DNFs or gets DSQ
-    const bonus = getBonusPoints(system, result, Boolean(options.isPole))
+    const bonus = getBonusPoints(system, result, {
+        isPole: options.isPole,
+        isFastestLap: options.isFastestLap
+    })
 
     return (base + bonus) * multiplier
+}
+
+// Flexible session type matcher for championships: matches race variations (race, race_1, race1, r1),
+// race 2 variations, and qualifying variations interchangeably.
+export const matchSessionType = (roundType?: string | null, sessType?: string | null): boolean => {
+    const rt = String(roundType || "race").toLowerCase().trim()
+    const st = String(sessType || "race").toLowerCase().trim()
+    if (rt === st) return true
+    const isRace1 = (s: string) => s === "race" || s === "race_1" || s === "race1" || s === "r1"
+    if (isRace1(rt) && isRace1(st)) return true
+    const isRace2 = (s: string) => s === "race_2" || s === "race2" || s === "r2"
+    if (isRace2(rt) && isRace2(st)) return true
+    const isRace3 = (s: string) => s === "race_3" || s === "race3" || s === "r3"
+    if (isRace3(rt) && isRace3(st)) return true
+    const isQuali = (s: string) => s === "qualifying" || s === "quali" || s === "q"
+    if (isQuali(rt) && isQuali(st)) return true
+    return false
 }
 
 // Pole is grid position 1 within a session. Derived rather than stored so it
@@ -139,7 +167,7 @@ export const calculateResultPoints = (
 export const findPoleEntityKeys = (results: ScoringResult[], entityType: StandingsEntityType): Set<string> => {
     const keys = new Set<string>()
     for (const r of results) {
-        if (Number(r.grid_position) === 1) {
+        if (Number(r.grid_position) === 1 || Number(r.scoring_position) === 1 || Number(r.classified_position) === 1) {
             if (entityType === "driver") {
                 const dIds = r.driver_ids && r.driver_ids.length > 0 ? r.driver_ids : (r.driver_id ? [r.driver_id] : [])
                 dIds.forEach(id => {
@@ -193,35 +221,118 @@ export const calculateStandings = (
     }
 
     for (const champEvent of championshipEvents) {
+        // Robust session lookup: try exact match first, then flexible matchSessionType
         const session = sessions.find(
             s => s.schedule_id === champEvent.schedule_id && s.session_type === champEvent.session_type
+        ) || sessions.find(
+            s => s.schedule_id === champEvent.schedule_id && matchSessionType(champEvent.session_type, s.session_type)
         )
         if (!session || session.results.length === 0) continue
 
         const system = pointsSystems.get(champEvent.points_system_id) || null
         const multiplier = champEvent.points_multiplier
-        const poleKeys = findPoleEntityKeys(session.results, entityType)
 
+        // Determine pole keys: check session grid positions first; if not present, check qualifying session
+        const hasGridInSession = session.results.some(r => Number(r.grid_position) === 1)
+        let poleKeys: Set<string>
+        if (hasGridInSession) {
+            poleKeys = new Set()
+            for (const r of session.results) {
+                if (Number(r.grid_position) === 1) {
+                    if (entityType === "driver") {
+                        const dIds = r.driver_ids && r.driver_ids.length > 0 ? r.driver_ids : (r.driver_id ? [r.driver_id] : [])
+                        dIds.forEach(id => { if (id) poleKeys.add(String(id)) })
+                    } else if (r.team_id !== null && r.team_id !== undefined) {
+                        const teamKey = (r.car_number !== null && r.car_number !== undefined)
+                            ? `${r.team_id}::${r.car_number}`
+                            : String(r.team_id)
+                        poleKeys.add(teamKey)
+                    }
+                }
+            }
+        } else {
+            const qualifyingSession = sessions.find(
+                s => s.schedule_id === champEvent.schedule_id && matchSessionType("qualifying", s.session_type)
+            )
+            poleKeys = qualifyingSession ? findPoleEntityKeys(qualifyingSession.results, entityType) : new Set()
+        }
+
+        // Determine effective scoring mode:
+        // - In class-specific championships, always score in-class.
+        // - If event explicitly specifies "overall" or "in_class", use that.
+        // - In overall championships with "auto" (or unset): qualifying scores in-class, race scores overall.
+        const isClassChampionship = Boolean(options.allowedClassId)
+        let effectiveScoringMode: "overall" | "in_class" = "in_class"
+        if (isClassChampionship) {
+            effectiveScoringMode = "in_class"
+        } else if (champEvent.scoring_mode === "overall") {
+            effectiveScoringMode = "overall"
+        } else if (champEvent.scoring_mode === "in_class") {
+            effectiveScoringMode = "in_class"
+        } else {
+            effectiveScoringMode = champEvent.session_type === "qualifying" ? "in_class" : "overall"
+        }
+
+        // In overall scoring mode, only the single fastest car across all classes receives fastest lap points.
+        let overallFastestResult: ScoringResult | null = null
+        if (effectiveScoringMode === "overall") {
+            const candidatesWithTime = session.results.filter(r => (r.best_lap_ms ?? 0) > 0)
+            if (candidatesWithTime.length > 0) {
+                overallFastestResult = candidatesWithTime.reduce((best, cur) =>
+                    (cur.best_lap_ms! < best.best_lap_ms!) ? cur : best
+                )
+            } else {
+                const flCandidates = session.results.filter(r => r.fastest_lap)
+                if (flCandidates.length > 0) {
+                    overallFastestResult = flCandidates.reduce((best, cur) => {
+                        const posBest = best.classified_position ?? 9999
+                        const posCur = cur.classified_position ?? 9999
+                        return posCur < posBest ? cur : best
+                    })
+                }
+            }
+        }
+
+        // Aggregate points and best finish position for each entity in this session
         const sessionAgg = new Map<string, { points: number; bestPos: number | null }>()
 
         for (const result of session.results) {
             const entityKeys: string[] = []
+
             if (entityType === "driver") {
-                const dIds = result.driver_ids && result.driver_ids.length > 0 ? result.driver_ids : (result.driver_id ? [result.driver_id] : [])
-                dIds.forEach(id => {
-                    if (id) {
-                        if (!options.allowedDriverIds || options.allowedDriverIds.has(String(id))) {
-                            entityKeys.push(String(id))
-                        }
+                const belongsToEntryClass = !options.allowedClassId || (result.class_id && String(result.class_id) === String(options.allowedClassId))
+                const dIds = (result.driver_ids && result.driver_ids.length > 0)
+                    ? result.driver_ids
+                    : (result.driver_id ? [result.driver_id] : [])
+
+                for (const id of dIds) {
+                    if (!id) continue
+                    const strId = String(id)
+                    // A driver is allowed if:
+                    // 1. No driver-class filter is specified
+                    // 2. The driver is in the allowedDriverIds set
+                    // 3. Or the entry's class_id matches the championship's class (self-healing if season_driver_classes is empty)
+                    const driverAllowed = !options.allowedDriverIds || options.allowedDriverIds.has(strId) || belongsToEntryClass
+                    if (driverAllowed && belongsToEntryClass) {
+                        entityKeys.push(strId)
                     }
-                })
+                }
             } else {
                 if (result.team_id !== null && result.team_id !== undefined) {
-                    const dIds = result.driver_ids && result.driver_ids.length > 0 ? result.driver_ids : (result.driver_id ? [result.driver_id] : [])
-                    const belongsToDriverClass = !options.allowedDriverIds || dIds.length === 0 || dIds.some(id => id && options.allowedDriverIds!.has(String(id)))
-                    const belongsToEntryClass = !options.allowedClassId || !result.class_id || result.class_id === options.allowedClassId
-                    const belongsToClass = belongsToDriverClass && belongsToEntryClass
-                    if (belongsToClass) {
+                    let teamBelongsToClass = true
+                    if (options.allowedClassId) {
+                        const targetClassStr = String(options.allowedClassId)
+                        const entryMatches = Boolean(result.class_id && String(result.class_id) === targetClassStr)
+                        const dIds = (result.driver_ids && result.driver_ids.length > 0)
+                            ? result.driver_ids
+                            : (result.driver_id ? [result.driver_id] : [])
+                        const driverMatches = Boolean(
+                            options.allowedDriverIds && dIds.some(id => options.allowedDriverIds!.has(String(id)))
+                        )
+                        teamBelongsToClass = entryMatches || driverMatches
+                    }
+
+                    if (teamBelongsToClass) {
                         const teamKey = (result.car_number !== null && result.car_number !== undefined)
                             ? `${result.team_id}::${result.car_number}`
                             : String(result.team_id)
@@ -230,10 +341,16 @@ export const calculateStandings = (
                 }
             }
 
+            const isFastestLap = effectiveScoringMode === "overall"
+                ? (overallFastestResult !== null && result === overallFastestResult)
+                : Boolean(result.fastest_lap)
+
             for (const key of entityKeys) {
                 const points = calculateResultPoints(system, result, {
                     isPole: poleKeys.has(key),
-                    multiplier
+                    isFastestLap,
+                    multiplier,
+                    scoringMode: effectiveScoringMode
                 })
 
                 const cur = sessionAgg.get(key) || { points: 0, bestPos: null }
@@ -241,7 +358,9 @@ export const calculateStandings = (
 
                 // Only a classified, scoring finish counts toward wins/podiums and countback.
                 if (isScoringStatus(result.status) && isClassified(result)) {
-                    const pos = result.scoring_position ?? result.classified_position
+                    const pos = effectiveScoringMode === "overall"
+                        ? (result.classified_position ?? result.scoring_position)
+                        : (result.scoring_position ?? result.classified_position)
                     if (pos !== null && pos !== undefined) {
                         if (cur.bestPos === null || Number(pos) < cur.bestPos) cur.bestPos = Number(pos)
                     }

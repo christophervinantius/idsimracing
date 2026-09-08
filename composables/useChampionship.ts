@@ -64,6 +64,10 @@ export const fetchSessionsForScoring = async (
             team_id,
             car_number,
             class_id,
+            drivers (
+                id,
+                team
+            ),
             results (
                 session_type,
                 classified_position,
@@ -71,12 +75,13 @@ export const fetchSessionsForScoring = async (
                 status,
                 grid_position,
                 fastest_lap,
+                best_lap_ms,
                 no_points
             )
         `)
         .in("schedule_id", scheduleIds)
 
-    if (error && (error.message?.includes("class_id") || error.message?.includes("car_number") || error.message?.includes("no_points") || error.code === "PGRST204" || error.code === "42703")) {
+    if (error && (error.message?.includes("drivers") || error.message?.includes("class_id") || error.message?.includes("car_number") || error.message?.includes("no_points") || error.message?.includes("best_lap_ms") || error.code === "PGRST204" || error.code === "42703")) {
         const res = await supabase
             .from("event_entries")
             .select(`
@@ -84,13 +89,17 @@ export const fetchSessionsForScoring = async (
                 schedule_id,
                 driver_id,
                 team_id,
+                car_number,
+                class_id,
                 results (
                     session_type,
                     classified_position,
                     scoring_position,
                     status,
                     grid_position,
-                    fastest_lap
+                    fastest_lap,
+                    best_lap_ms,
+                    no_points
                 )
             `)
             .in("schedule_id", scheduleIds)
@@ -109,6 +118,8 @@ export const fetchSessionsForScoring = async (
             dIds.push(entry.driver_id)
         }
 
+        const effectiveTeamId = entry.team_id ?? entry.drivers?.team ?? null
+
         for (const res of entry.results || []) {
             const sessionType = res.session_type || "race"
             const key = `${entry.schedule_id}::${sessionType}`
@@ -124,13 +135,14 @@ export const fetchSessionsForScoring = async (
             const scoring: ScoringResult = {
                 driver_id: entry.driver_id || (dIds[0] || null),
                 driver_ids: dIds,
-                team_id: entry.team_id ?? null,
+                team_id: effectiveTeamId,
                 car_number: entry.car_number ?? null,
                 class_id: entry.class_id ?? null,
                 scoring_position: res.scoring_position ?? null,
                 classified_position: res.classified_position ?? null,
                 status: res.status || "finished",
                 fastest_lap: Boolean(res.fastest_lap),
+                best_lap_ms: res.best_lap_ms ? Number(res.best_lap_ms) : null,
                 grid_position: res.grid_position ?? null,
                 no_points: Boolean(res.no_points)
             }
@@ -146,10 +158,19 @@ export const fetchChampionshipEvents = async (
     supabase: any,
     championshipId: string
 ): Promise<ChampionshipEventConfig[]> => {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
         .from("championship_events")
-        .select("id, schedule_id, session_type, points_system_id, points_multiplier")
+        .select("id, schedule_id, session_type, points_system_id, points_multiplier, scoring_mode")
         .eq("championship_id", championshipId)
+
+    if (error && (error.message?.includes("scoring_mode") || error.code === "PGRST204" || error.code === "42703")) {
+        const fallback = await supabase
+            .from("championship_events")
+            .select("id, schedule_id, session_type, points_system_id, points_multiplier")
+            .eq("championship_id", championshipId)
+        data = fallback.data
+        error = fallback.error
+    }
 
     if (error) throw error
     return (data || []) as ChampionshipEventConfig[]
@@ -187,7 +208,8 @@ export const recalculateChampionship = async (
     }
 
     let allowedDriverIds: Set<string> | null = null
-    if (classId) {
+    // Only restrict allowedDriverIds for driver championships; team championships are scoped by entry class_id
+    if (classId && championship.standings_type === "driver") {
         let q = supabase.from("season_driver_classes").select("driver_id, class_id").eq("class_id", classId)
         if (seasonId) {
             q = q.eq("season_id", seasonId)
@@ -195,9 +217,8 @@ export const recalculateChampionship = async (
         const { data: sdcList } = await q
         if (sdcList && sdcList.length > 0) {
             allowedDriverIds = new Set(sdcList.map((s: any) => String(s.driver_id)))
-        } else {
-            allowedDriverIds = new Set()
         }
+        // If sdcList is empty, leave allowedDriverIds as null so entries with matching event_entries.class_id are not blocked
     }
 
     const rows = calculateStandings(
@@ -234,7 +255,20 @@ export const recalculateChampionship = async (
         if (insError) {
             // Fallback if car_number column is not yet present in the standings schema
             if (insError.message?.includes("car_number") || insError.code === "PGRST204" || insError.code === "42703") {
-                const payloadWithoutCarNumber = rows.map(r => ({
+                // Deduplicate by entity if car_number is not available to avoid duplicate key violations
+                const byEntity = new Map<string, any>()
+                for (const r of rows) {
+                    const key = r.entity_type === "driver" ? `d_${r.driver_id}` : `t_${r.team_id}`
+                    const cur = byEntity.get(key)
+                    if (!cur) {
+                        byEntity.set(key, { ...r })
+                    } else {
+                        cur.points += r.points
+                        cur.wins += r.wins
+                        cur.podiums += r.podiums
+                    }
+                }
+                const payloadWithoutCarNumber = [...byEntity.values()].map((r, idx) => ({
                     championship_id: championship.id,
                     entity_type: r.entity_type,
                     driver_id: r.driver_id,
@@ -242,7 +276,7 @@ export const recalculateChampionship = async (
                     points: r.points,
                     wins: r.wins,
                     podiums: r.podiums,
-                    position: r.position,
+                    position: idx + 1,
                     updated_at: new Date().toISOString()
                 }))
                 const { error: fallbackErr } = await supabase.from("standings").insert(payloadWithoutCarNumber)
@@ -254,7 +288,7 @@ export const recalculateChampionship = async (
     }
 
     const roundsScored = champEvents.filter(e =>
-        sessions.some(s => s.schedule_id === e.schedule_id && s.session_type === e.session_type)
+        sessions.some(s => s.schedule_id === e.schedule_id && matchSessionType(e.session_type, s.session_type))
     ).length
 
     const champName = championship.name || championship.classes?.name || "Overall"

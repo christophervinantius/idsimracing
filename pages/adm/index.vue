@@ -1517,12 +1517,13 @@
 
     const fetchAllSchedulesList = async () => {
         try {
-            const { data, error } = await $supabase
+            let { data, error } = await $supabase
                 .from("schedule")
                 .select(`
                     id,
                     event_id,
                     round,
+                    group,
                     date,
                     finish_date,
                     circuit,
@@ -1552,8 +1553,48 @@
                 `)
                 .order("date", { ascending: false })
 
+            if (error && (error.message?.includes("group") || error.code === "PGRST204" || error.code === "42703")) {
+                const res = await $supabase
+                    .from("schedule")
+                    .select(`
+                        id,
+                        event_id,
+                        round,
+                        date,
+                        finish_date,
+                        circuit,
+                        stream_link,
+                        country,
+                        country_2,
+                        season,
+                        is_postponed,
+                        event_entries (
+                            id,
+                            results (
+                                id
+                            )
+                        ),
+                        events (
+                            id,
+                            name,
+                            games (
+                                abbreviation,
+                                name
+                            ),
+                            organizers (
+                                abbreviation,
+                                name
+                            )
+                        )
+                    `)
+                    .order("date", { ascending: false })
+                data = res.data
+                error = res.error
+            }
+
             if (error) throw error
             allSchedulesList.value = data || []
+            scheduleHaystackMap.clear()
         } catch (err) {
             console.error("Error fetching all schedules list:", err)
         }
@@ -1655,7 +1696,6 @@
             scoring_position: pos,
             class_id: defaultClassId,
             driver_id: "",
-            co_driver_ids: [],
             team_id: "",
             car_number: null,
             car_model: "",
@@ -1668,7 +1708,7 @@
             total_time: "",
             total_time_ms: null,
             has_penalty: false,
-            penalty_time_sec: null,
+            penalty_time_sec: "",
             fastest_lap: false,
             no_points: false
         }
@@ -1810,48 +1850,6 @@
         closeDriverDropdown()
     }
 
-    const activeCoDriverSearchIndex = ref(null) // { rowIdx, coIdx }
-
-    const openCoDriverDropdown = (rowIdx, coIdx) => {
-        activeCoDriverSearchIndex.value = { rowIdx, coIdx }
-        driverDropdownSearchQuery.value = ""
-    }
-
-    const closeCoDriverDropdown = () => {
-        activeCoDriverSearchIndex.value = null
-        driverDropdownSearchQuery.value = ""
-    }
-
-    const selectCoDriverForRow = (row, coIdx, driver) => {
-        if (!row.co_driver_ids) row.co_driver_ids = []
-        if (driver) {
-            row.co_driver_ids[coIdx] = driver.id
-            if (!row.team_id && driver.team) {
-                row.team_id = driver.team
-            }
-        } else {
-            row.co_driver_ids.splice(coIdx, 1)
-        }
-        closeCoDriverDropdown()
-    }
-
-    const addCoDriverToRow = (row) => {
-        if (!row.co_driver_ids) row.co_driver_ids = []
-        row.co_driver_ids.push("")
-        const coIdx = row.co_driver_ids.length - 1
-        const rowIdx = displayedResultsRows.value.indexOf(row)
-        if (rowIdx !== -1) {
-            openCoDriverDropdown(rowIdx, coIdx)
-        }
-    }
-
-    const removeCoDriverFromRow = (row, coIdx) => {
-        if (!row.co_driver_ids) return
-        row.co_driver_ids.splice(coIdx, 1)
-        if (activeCoDriverSearchIndex.value?.coIdx === coIdx) {
-            closeCoDriverDropdown()
-        }
-    }
 
     const activeTeamSearchRowIndex = ref(null)
     const teamDropdownSearchQuery = ref("")
@@ -2022,10 +2020,21 @@
 
     const getPoleDriverId = (classId) => {
         const key = classId || '__overall__'
+        // If explicitly set (including cleared to ""), respect the state
+        if (poleDriverIds.value[key] !== undefined) {
+            return poleDriverIds.value[key] || ""
+        }
+        if (!classId && poleDriverIds.value[''] !== undefined) {
+            return poleDriverIds.value[''] || ""
+        }
+
         const clsLen = availableClassesForSchedule.value?.length || 0
         const rows = resultsRows.value || []
         if (rows.length > 0) {
-            const row = rows.find(r => (!classId || (r.class_id || '') === classId || clsLen <= 1) && (r.is_pole || Number(r.grid_position) === 1))
+            const row = rows.find(r => {
+                const matchClass = (clsLen > 1 && classId) ? (r.class_id || '') === classId : true
+                return matchClass && (r.is_pole || Number(r.grid_position) === 1)
+            })
             if (row) {
                 const entityId = isTeamEvent.value
                     ? getTeamRowEntryKey(row)
@@ -2035,10 +2044,9 @@
                     return entityId
                 }
             }
+            poleDriverIds.value[key] = ""
             return ""
         }
-        if (poleDriverIds.value[key]) return poleDriverIds.value[key]
-        if (poleDriverIds.value['']) return poleDriverIds.value['']
         return ""
     }
 
@@ -2053,13 +2061,15 @@
 
         ;(resultsRows.value || []).forEach(row => {
             const rowClass = row.class_id || ""
-            const targetClass = classId || ""
-            if (!classId || rowClass === targetClass || clsLen <= 1) {
+            const matchClass = (clsLen > 1 && classId) ? rowClass === classId : true
+            if (matchClass) {
                 let isMatch = false
-                if (isTeamEvent.value) {
-                    isMatch = isRowMatchTeamEntity(row, strId)
-                } else {
-                    isMatch = Boolean(strId && row.driver_id && String(row.driver_id).toLowerCase() === strId.toLowerCase())
+                if (strId) {
+                    if (isTeamEvent.value) {
+                        isMatch = isRowMatchTeamEntity(row, strId)
+                    } else {
+                        isMatch = Boolean(row.driver_id && String(row.driver_id).toLowerCase() === strId.toLowerCase())
+                    }
                 }
 
                 if (isMatch) {
@@ -2103,10 +2113,21 @@
 
     const getFastestLapDriverId = (classId) => {
         const key = classId || '__overall__'
+        // If explicitly set (including cleared to ""), respect the state
+        if (fastestLapDriverIds.value[key] !== undefined) {
+            return fastestLapDriverIds.value[key] || ""
+        }
+        if (!classId && fastestLapDriverIds.value[''] !== undefined) {
+            return fastestLapDriverIds.value[''] || ""
+        }
+
         const clsLen = availableClassesForSchedule.value?.length || 0
         const rows = resultsRows.value || []
         if (rows.length > 0) {
-            const row = rows.find(r => (!classId || (r.class_id || '') === classId || clsLen <= 1) && r.fastest_lap)
+            const row = rows.find(r => {
+                const matchClass = (clsLen > 1 && classId) ? (r.class_id || '') === classId : true
+                return matchClass && r.fastest_lap
+            })
             if (row) {
                 const entityId = isTeamEvent.value
                     ? getTeamRowEntryKey(row)
@@ -2116,10 +2137,9 @@
                     return entityId
                 }
             }
+            fastestLapDriverIds.value[key] = ""
             return ""
         }
-        if (fastestLapDriverIds.value[key]) return fastestLapDriverIds.value[key]
-        if (fastestLapDriverIds.value['']) return fastestLapDriverIds.value['']
         return ""
     }
 
@@ -2128,19 +2148,26 @@
         fastestLapDriverIds.value[key] = driverOrTeamId || ""
         if (!classId) fastestLapDriverIds.value[''] = driverOrTeamId || ""
 
+        if (!driverOrTeamId) {
+            fastestLapTimes.value[key] = ""
+            if (!classId) fastestLapTimes.value[''] = ""
+        }
+
         const clsLen = availableClassesForSchedule.value?.length || 0
         const strId = driverOrTeamId ? String(driverOrTeamId).trim() : ""
         let matched = false
 
         ;(resultsRows.value || []).forEach(row => {
             const rowClass = row.class_id || ""
-            const targetClass = classId || ""
-            if (!classId || rowClass === targetClass || clsLen <= 1) {
+            const matchClass = (clsLen > 1 && classId) ? rowClass === classId : true
+            if (matchClass) {
                 let isMatch = false
-                if (isTeamEvent.value) {
-                    isMatch = isRowMatchTeamEntity(row, strId)
-                } else {
-                    isMatch = Boolean(strId && row.driver_id && String(row.driver_id).toLowerCase() === strId.toLowerCase())
+                if (strId) {
+                    if (isTeamEvent.value) {
+                        isMatch = isRowMatchTeamEntity(row, strId)
+                    } else {
+                        isMatch = Boolean(row.driver_id && String(row.driver_id).toLowerCase() === strId.toLowerCase())
+                    }
                 }
 
                 if (isMatch) {
@@ -2182,10 +2209,21 @@
 
     const getFastestLapTime = (classId) => {
         const key = classId || '__overall__'
-        if (fastestLapTimes.value[key]) return fastestLapTimes.value[key]
-        if (fastestLapTimes.value['']) return fastestLapTimes.value['']
+        // If there's no fastest lap driver, there is no fastest lap time
+        if (!getFastestLapDriverId(classId)) {
+            return ""
+        }
+        if (fastestLapTimes.value[key] !== undefined && fastestLapTimes.value[key] !== null) {
+            return fastestLapTimes.value[key]
+        }
+        if (!classId && fastestLapTimes.value[''] !== undefined && fastestLapTimes.value[''] !== null) {
+            return fastestLapTimes.value['']
+        }
         const clsLen = availableClassesForSchedule.value?.length || 0
-        const row = (resultsRows.value || []).find(r => (!classId || (r.class_id || '') === classId || clsLen <= 1) && r.fastest_lap)
+        const row = (resultsRows.value || []).find(r => {
+            const matchClass = (clsLen > 1 && classId) ? (r.class_id || '') === classId : true
+            return matchClass && r.fastest_lap
+        })
         if (row && row.best_lap) {
             fastestLapTimes.value[key] = row.best_lap
             return row.best_lap
@@ -2195,12 +2233,16 @@
 
     const onFastestLapTimeChange = (classId, timeStr) => {
         const key = classId || '__overall__'
-        fastestLapTimes.value[key] = timeStr
-        if (!classId) fastestLapTimes.value[''] = timeStr
+        const val = timeStr || ""
+        fastestLapTimes.value[key] = val
+        if (!classId) fastestLapTimes.value[''] = val
         const clsLen = availableClassesForSchedule.value?.length || 0
-        const row = (resultsRows.value || []).find(r => (!classId || (r.class_id || '') === classId || clsLen <= 1) && r.fastest_lap)
+        const row = (resultsRows.value || []).find(r => {
+            const matchClass = (clsLen > 1 && classId) ? (r.class_id || '') === classId : true
+            return matchClass && r.fastest_lap
+        })
         if (row) {
-            row.best_lap = timeStr
+            row.best_lap = val
         }
     }
 
@@ -2397,6 +2439,25 @@
         }
     }
 
+    const formatPenaltyOnBlur = (row) => {
+        if (!row) return
+        const val = row.penalty_time_sec
+        if (val === null || val === undefined || String(val).trim() === '') {
+            row.penalty_time_sec = ''
+            row.has_penalty = false
+            return
+        }
+        const cleaned = String(val).trim().replace(/s$/i, '').replace(/detik$/i, '').trim()
+        const num = parseFloat(cleaned)
+        if (!isNaN(num) && num > 0) {
+            row.penalty_time_sec = num.toFixed(3)
+            row.has_penalty = true
+        } else {
+            row.penalty_time_sec = ''
+            row.has_penalty = false
+        }
+    }
+
     const fetchRaceResultsForSchedule = async () => {
         if (!selectedScheduleId.value) {
             resultsRows.value = []
@@ -2492,9 +2553,10 @@
 
                 const mapped = validEntries.map(e => {
                     const res = e.results.find(r => r.session_type === selectedSessionType.value || (!r.session_type && selectedSessionType.value === 'race')) || {}
-                    const penSec = res.penalty_time_ns ? (Number(res.penalty_time_ns) / 1000000000) : null
+                    const penSec = (res.penalty_time_ns && Number(res.penalty_time_ns) > 0)
+                        ? (Number(res.penalty_time_ns) / 1000000000).toFixed(3)
+                        : (res.has_penalty ? "0.000" : "")
                     const leadDriverId = isTeamEvent.value ? "" : (e.driver_id || "")
-                    const coDriverIds = []
                     const driverClassId = e.class_id || (leadDriverId && seasonDriverClassesMap.value.get(leadDriverId)) || (availableClassesForSchedule.value.length === 1 ? availableClassesForSchedule.value[0].id : "")
                     return {
                         _rowId: 'row_' + Math.random().toString(36).substring(2, 9),
@@ -2504,8 +2566,7 @@
                         scoring_position: res.scoring_position ?? res.classified_position ?? 1,
                         class_id: driverClassId,
                         driver_id: leadDriverId,
-                        co_driver_ids: coDriverIds,
-                        team_id: e.team_id || "",
+                        team_id: isExistingTeam ? (e.team_id || "") : "",
                         car_number: e.car_number,
                         car_model: e.car_model || "",
                         status: res.status || "finished",
@@ -2517,7 +2578,7 @@
                             ? (selectedSessionType.value === 'qualifying' ? formatLapTime(res.total_time_ms) : formatTotalTime(res.total_time_ms))
                             : (res.best_lap_ms ? formatLapTime(res.best_lap_ms) : ""),
                         total_time_ms: res.total_time_ms,
-                        has_penalty: Boolean(res.has_penalty),
+                        has_penalty: Boolean(res.has_penalty || (res.penalty_time_ns && Number(res.penalty_time_ns) > 0)),
                         penalty_time_sec: penSec,
                         fastest_lap: Boolean(res.fastest_lap),
                         no_points: Boolean(res.no_points)
@@ -2554,7 +2615,6 @@
 
         const rows = parsed.map((item, idx) => {
             let leadDriverId = ""
-            let coDriverIds = []
             let matchedTeamId = null
 
             if (isTeamEvent.value) {
@@ -2565,31 +2625,12 @@
                 }
             } else {
                 const cleanName = item.driverName?.toLowerCase().trim()
-                const rawDriverNames = item.driverNames && item.driverNames.length > 0 ? item.driverNames : (item.driverName ? [item.driverName] : [])
-                const matchedDriverIds = []
-                for (const rawName of rawDriverNames) {
-                    const clean = rawName.toLowerCase().trim()
-                    const found = drivers.value.find(d => d.name?.toLowerCase().trim() === clean)
-                    if (found && !matchedDriverIds.includes(found.id)) {
-                        matchedDriverIds.push(found.id)
-                    }
-                }
-
                 const matchedDriver = drivers.value.find(d => {
                     const dName = d.name?.toLowerCase().trim()
                     return dName === cleanName || (item.driverNames && item.driverNames.some(dn => dName === dn.toLowerCase().trim()))
                 })
-
-                leadDriverId = matchedDriverIds[0] || (matchedDriver ? matchedDriver.id : "")
-                coDriverIds = matchedDriverIds.slice(1)
-
-                if (matchedDriver && matchedDriver.team) {
-                    matchedTeamId = matchedDriver.team
-                } else if (item.teamName && item.teamName !== "-") {
-                    const tName = item.teamName.toLowerCase().trim()
-                    const foundTeam = teamsList.value.find(t => t.name?.toLowerCase().trim() === tName)
-                    if (foundTeam) matchedTeamId = foundTeam.id
-                }
+                leadDriverId = matchedDriver ? matchedDriver.id : ""
+                matchedTeamId = null
             }
 
             const classHay = (item.raceClass || item.carClass || item.teamClass || "").toLowerCase().trim()
@@ -2618,7 +2659,6 @@
                 scoring_position: idx + 1,
                 class_id: matchedClassId,
                 driver_id: leadDriverId,
-                co_driver_ids: coDriverIds,
                 team_id: matchedTeamId || "",
                 car_number: !isNaN(carNum) ? carNum : null,
                 car_model: item.carModel !== "-" ? item.carModel : "",
@@ -2632,8 +2672,8 @@
                     ? (idx === 0 ? (item.bestLap || (item.bestLapMs > 0 ? formatLapTime(item.bestLapMs) : "")) : (item.gap && item.gap !== "-" ? item.gap : (item.bestLap || (item.bestLapMs > 0 ? formatLapTime(item.bestLapMs) : ""))))
                     : (item.gap && item.gap !== "-" ? item.gap : (idx === 0 && item.totalTime ? item.totalTimeFormatted : "")),
                 total_time_ms: item.totalTime || null,
-                has_penalty: Boolean(item.hasPenalty),
-                penalty_time_sec: item.penaltyTime || null,
+                has_penalty: Boolean(item.hasPenalty || (item.penaltyTime && Number(item.penaltyTime) > 0)),
+                penalty_time_sec: (item.penaltyTime && Number(item.penaltyTime) > 0) ? Number(item.penaltyTime).toFixed(3) : (item.hasPenalty ? "0.000" : ""),
                 fastest_lap: Boolean(item.isFastestLap),
                 no_points: false
             }
@@ -2664,6 +2704,321 @@
         }
         reader.readAsText(file)
         e.target.value = ""
+    }
+
+    const parseCsvText = (csvString) => {
+        if (!csvString) return []
+        let content = csvString
+        if (content.charCodeAt(0) === 0xFEFF) {
+            content = content.slice(1)
+        }
+        const firstLine = content.split(/\r?\n/)[0] || ""
+        const delimiter = (firstLine.includes(";") && !firstLine.includes(",")) ? ";" : ","
+
+        const rows = []
+        let currentRow = []
+        let currentCell = ""
+        let inQuotes = false
+
+        for (let i = 0; i < content.length; i++) {
+            const char = content[i]
+            const nextChar = content[i + 1]
+
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    currentCell += '"'
+                    i++
+                } else {
+                    inQuotes = !inQuotes
+                }
+            } else if (char === delimiter && !inQuotes) {
+                currentRow.push(currentCell.trim())
+                currentCell = ""
+            } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                if (char === '\r' && nextChar === '\n') {
+                    i++
+                }
+                currentRow.push(currentCell.trim())
+                if (currentRow.some(c => c !== "")) {
+                    rows.push(currentRow)
+                }
+                currentRow = []
+                currentCell = ""
+            } else {
+                currentCell += char
+            }
+        }
+        if (currentCell !== "" || currentRow.length > 0) {
+            currentRow.push(currentCell.trim())
+            if (currentRow.some(c => c !== "")) {
+                rows.push(currentRow)
+            }
+        }
+        return rows
+    }
+
+    const populateRowsFromParsedCsv = (csvText) => {
+        const rawRows = parseCsvText(csvText)
+        if (rawRows.length < 2) {
+            showToast("File CSV kosong atau tidak memiliki baris data", "error")
+            return
+        }
+
+        const headerRow = rawRows[0].map(h => h.toLowerCase().trim().replace(/^[\uFEFF\s]+/, ""))
+        const findCol = (terms) => headerRow.findIndex(h => terms.some(t => h === t || h.startsWith(t) || h.includes(t)))
+
+        const classIndex = findCol(["class", "kelas", "kategori"])
+        const posIndex = findCol(["position", "pos", "posisi", "p"])
+        const nameIndex = findCol(["name", "nama", "driver", "pembalap", "team", "tim"])
+        const noIndex = findCol(["no", "number", "car number", "car_number", "nomor", "#"])
+        const carIndex = findCol(["car", "mobil", "car model", "model", "vehicle", "kendaraan"])
+        const lapsIndex = findCol(["total laps", "laps", "lap", "num laps", "total lap", "putaran"])
+        const bestLapIndex = findCol(["best lap", "bestlap", "waktu terbaik", "fastest lap"])
+        const totalTimeIndex = findCol(["total time", "totaltime", "total waktu", "time", "waktu"])
+        const pointsIndex = findCol(["points", "point", "pts", "poin"])
+        const statusIndex = findCol(["status"])
+
+        if (nameIndex === -1 && carIndex === -1) {
+            showToast("Kolom Nama Pembalap ('Name') tidak ditemukan dalam file CSV!", "error")
+            return
+        }
+
+        const dataRows = rawRows.slice(1).filter(r => r.some(c => c && c.trim() !== ""))
+        if (dataRows.length === 0) {
+            showToast("Tidak ada data pembalap dalam file CSV", "error")
+            return
+        }
+
+        // If multiple distinct classes are in CSV, set selectedEntryClassId to ALL so all rows are visible
+        const distinctClasses = new Set()
+        if (classIndex !== -1) {
+            dataRows.forEach(r => {
+                const c = (r[classIndex] || "").trim()
+                if (c) distinctClasses.add(c)
+            })
+        }
+        if (distinctClasses.size > 1) {
+            selectedEntryClassId.value = "ALL"
+        }
+
+        // Pre-parse lap times to determine overall fastest lap
+        const parsedRowsData = dataRows.map((r, idx) => {
+            const rawClass = classIndex !== -1 ? (r[classIndex] || "").trim() : ""
+            const rawPos = posIndex !== -1 ? (r[posIndex] || "").trim() : ""
+            const rawName = nameIndex !== -1 ? (r[nameIndex] || "").trim() : ""
+            const rawNo = noIndex !== -1 ? (r[noIndex] || "").trim() : ""
+            const rawCar = carIndex !== -1 ? (r[carIndex] || "").trim() : ""
+            const rawLaps = lapsIndex !== -1 ? (r[lapsIndex] || "").trim() : ""
+            const rawBestLap = bestLapIndex !== -1 ? (r[bestLapIndex] || "").trim() : ""
+            const rawTotalTime = totalTimeIndex !== -1 ? (r[totalTimeIndex] || "").trim() : ""
+            const rawPoints = pointsIndex !== -1 ? (r[pointsIndex] || "").trim() : ""
+            const rawStatus = statusIndex !== -1 ? (r[statusIndex] || "").trim() : ""
+
+            // Parse Best Lap
+            let bestLapMs = null
+            let bestLapStr = ""
+            if (rawBestLap && rawBestLap !== "-" && rawBestLap !== "0") {
+                if (rawBestLap.includes(":")) {
+                    bestLapMs = parseTimeToMs(rawBestLap)
+                    bestLapStr = bestLapMs ? formatLapTime(bestLapMs) : rawBestLap
+                } else {
+                    const num = Number(rawBestLap)
+                    if (!isNaN(num) && num > 0) {
+                        bestLapMs = Math.round(num)
+                        bestLapStr = formatLapTime(bestLapMs)
+                    } else {
+                        bestLapStr = rawBestLap
+                    }
+                }
+            }
+
+            // Parse Total Time
+            let totalTimeMs = null
+            let totalTimeStr = ""
+            if (rawTotalTime && rawTotalTime !== "-" && rawTotalTime !== "0") {
+                if (rawTotalTime.includes(":")) {
+                    totalTimeMs = parseTimeToMs(rawTotalTime)
+                    totalTimeStr = totalTimeMs
+                        ? (selectedSessionType.value === 'qualifying' ? formatLapTime(totalTimeMs) : formatTotalTime(totalTimeMs))
+                        : rawTotalTime
+                } else {
+                    const num = Number(rawTotalTime)
+                    if (!isNaN(num) && num > 0) {
+                        totalTimeMs = Math.round(num)
+                        totalTimeStr = selectedSessionType.value === 'qualifying' ? formatLapTime(totalTimeMs) : formatTotalTime(totalTimeMs)
+                    } else {
+                        totalTimeStr = rawTotalTime
+                    }
+                }
+            }
+
+            return {
+                rawClass,
+                rawPos,
+                rawName,
+                rawNo,
+                rawCar,
+                rawLaps,
+                rawPoints,
+                rawStatus,
+                bestLapMs,
+                bestLapStr,
+                totalTimeMs,
+                totalTimeStr,
+                origIdx: idx
+            }
+        })
+
+        // Find fastest lap in session
+        const validBestLaps = parsedRowsData.map(p => p.bestLapMs).filter(ms => ms && ms > 0)
+        const fastestLapInRace = validBestLaps.length > 0 ? Math.min(...validBestLaps) : 0
+
+        let matchedDriversCount = 0
+        let totalDriversWithNames = 0
+
+        const rows = parsedRowsData.map((item, idx) => {
+            const cleanName = item.rawName.toLowerCase().replace(/\s+/g, " ").trim()
+            if (cleanName) totalDriversWithNames++
+
+            let leadDriverId = ""
+            let matchedTeamId = null
+
+            if (isTeamEvent.value) {
+                const foundTeam = teamsList.value.find(t => t.name?.toLowerCase().replace(/\s+/g, " ").trim() === cleanName)
+                if (foundTeam) {
+                    matchedTeamId = foundTeam.id
+                    matchedDriversCount++
+                } else {
+                    const matchedDriver = drivers.value.find(d => d.name?.toLowerCase().replace(/\s+/g, " ").trim() === cleanName)
+                    if (matchedDriver) {
+                        matchedDriversCount++
+                        leadDriverId = matchedDriver.id
+                        if (matchedDriver.teams?.id) {
+                            matchedTeamId = matchedDriver.teams.id
+                        }
+                    }
+                }
+            } else {
+                const matchedDriver = drivers.value.find(d => d.name?.toLowerCase().replace(/\s+/g, " ").trim() === cleanName)
+                if (matchedDriver) {
+                    leadDriverId = matchedDriver.id
+                    matchedDriversCount++
+                }
+            }
+
+            // Class matching
+            const classHay = item.rawClass.toLowerCase().trim()
+            let matchedClassId = ""
+            if (classHay && availableClassesForSchedule.value.length > 0) {
+                const foundCls = availableClassesForSchedule.value.find(c => {
+                    const cName = c.name?.toLowerCase().trim()
+                    return cName === classHay || classHay.includes(cName) || cName.includes(classHay)
+                })
+                if (foundCls) matchedClassId = foundCls.id
+            }
+
+            if (!matchedClassId) {
+                if (selectedEntryClassId.value !== "ALL") {
+                    matchedClassId = selectedEntryClassId.value
+                } else if (!isTeamEvent.value && leadDriverId && seasonDriverClassesMap.value.has(leadDriverId)) {
+                    matchedClassId = seasonDriverClassesMap.value.get(leadDriverId)
+                } else if (availableClassesForSchedule.value.length === 1) {
+                    matchedClassId = availableClassesForSchedule.value[0].id
+                }
+            }
+
+            const carNum = item.rawNo ? parseInt(item.rawNo, 10) : null
+            const posNum = item.rawPos ? parseInt(item.rawPos, 10) : (idx + 1)
+            const numLaps = item.rawLaps ? parseInt(item.rawLaps, 10) : null
+
+            // Status determination
+            let status = "finished"
+            if (item.rawStatus) {
+                const s = item.rawStatus.toLowerCase().trim()
+                if (s === "dsq" || s.includes("disq")) status = "dsq"
+                else if (s === "dns") status = "dns"
+                else if (s === "dnf" || s.includes("ret")) status = "dnf"
+                else status = "finished"
+            } else {
+                if (numLaps === 0 && (!item.bestLapMs || item.bestLapMs === 0) && (!item.totalTimeMs || item.totalTimeMs === 0)) {
+                    status = "dns"
+                }
+            }
+
+            const isQualifying = selectedSessionType.value === 'qualifying'
+            const isPole = (isQualifying && posNum === 1) || (idx === 0 && isQualifying)
+            const isFastestLap = item.bestLapMs && item.bestLapMs > 0 && item.bestLapMs === fastestLapInRace
+
+            return {
+                _rowId: 'row_' + Math.random().toString(36).substring(2, 9),
+                id: null,
+                event_entry_id: null,
+                position: posNum || (idx + 1),
+                scoring_position: posNum || (idx + 1),
+                class_id: matchedClassId,
+                driver_id: leadDriverId,
+                team_id: matchedTeamId || "",
+                car_number: !isNaN(carNum) ? carNum : null,
+                car_model: item.rawCar || "",
+                status,
+                grid_position: isPole ? 1 : null,
+                is_pole: isPole,
+                num_laps: !isNaN(numLaps) ? numLaps : null,
+                best_lap: item.bestLapStr || "",
+                best_lap_ms: item.bestLapMs || null,
+                total_time: item.totalTimeStr || "",
+                total_time_ms: item.totalTimeMs || null,
+                has_penalty: false,
+                penalty_time_sec: "",
+                fastest_lap: Boolean(isFastestLap),
+                no_points: false
+            }
+        })
+
+        if (selectedEntryClassId.value !== "ALL") {
+            const otherClassesRows = resultsRows.value.filter(r => r.class_id !== selectedEntryClassId.value)
+            resultsRows.value = [...otherClassesRows, ...rows]
+        } else {
+            resultsRows.value = rows
+        }
+        recalculateScoringPositions()
+        syncTopDriversFromRows()
+
+        showToast(`File CSV berhasil dimuat! (${matchedDriversCount}/${totalDriversWithNames} nama cocok dengan database)`)
+    }
+
+    const handleResultsCsvUpload = (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = (evt) => {
+            try {
+                const text = evt.target.result
+                populateRowsFromParsedCsv(text)
+            } catch (err) {
+                console.error("CSV upload error:", err)
+                showToast("Gagal memproses file CSV: " + (err.message || "format tidak valid"), "error")
+            }
+        }
+        reader.readAsText(file)
+        e.target.value = ""
+    }
+
+    const downloadResultsCsvTemplate = () => {
+        const csvContent = "Class,Position,Name,No,Car,Total Laps,Best Lap,Total Time,Points\n" +
+            "Alien,1,Aryadi Wishnu,60,Ferrari 296 GT3,35,01:40.465,3641834,152\n" +
+            "Alien,2,Derrek Daniel,575,Lexus RC F GT3,35,01:40.672,3665128,130\n" +
+            "Sepuh,3,Pratama Aji,22,Ford Mustang GT3,35,01:41.747,3715086,95\n" +
+            "Kroco,4,Farrel Zeva,99,AMR V8 Vantage,35,01:42.787,3737889,70\n"
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.setAttribute("href", url)
+        link.setAttribute("download", "template_hasil_balapan.csv")
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
     }
 
     const openSaveResultsModal = () => {
@@ -2701,17 +3056,13 @@
         if (selectedSessionType.value !== 'qualifying') {
             activeResultClasses.value.forEach(cls => {
                 const poleDId = getPoleDriverId(cls.id)
-                if (poleDId) {
-                    onPoleDriverChange(cls.id, poleDId)
-                }
+                onPoleDriverChange(cls.id, poleDId || "")
+
                 const flDId = getFastestLapDriverId(cls.id)
-                if (flDId) {
-                    onFastestLapDriverChange(cls.id, flDId)
-                }
+                onFastestLapDriverChange(cls.id, flDId || "")
+
                 const flTime = getFastestLapTime(cls.id)
-                if (flTime) {
-                    onFastestLapTimeChange(cls.id, flTime)
-                }
+                onFastestLapTimeChange(cls.id, flTime || "")
             })
         }
 
@@ -2759,13 +3110,11 @@
                         entryId = entryMap.get(String(row.driver_id))
                     }
                 }
-                const allRowDrivers = isTeamEvent.value ? [] : [row.driver_id, ...(row.co_driver_ids || [])].filter(Boolean)
-
                 const entryPayload = {
                     schedule_id: schedId,
-                    entry_type: isTeamEvent.value ? "team" : ((row.co_driver_ids && row.co_driver_ids.length > 0) ? "team" : "driver"),
-                    driver_id: isTeamEvent.value ? null : (row.driver_id || (allRowDrivers[0] || null)),
-                    team_id: row.team_id ? Number(row.team_id) : null,
+                    entry_type: isTeamEvent.value ? "team" : "driver",
+                    driver_id: isTeamEvent.value ? null : (row.driver_id || null),
+                    team_id: isTeamEvent.value ? (row.team_id ? Number(row.team_id) : null) : null,
                     car_number: row.car_number ? Number(row.car_number) : null,
                     car_model: row.car_model || null,
                     class_id: row.class_id || null
@@ -2793,40 +3142,40 @@
                         .eq("id", entryId)
                 }
 
-                // If drivers have an assigned class and season exists, save to season_driver_classes for all drivers
+                // If driver has an assigned class and season exists, save to season_driver_classes
                 const seasonId = currentScheduleSeason.value?.id || selectedSchedule.value?.season_id
-                if (seasonId && row.class_id && allRowDrivers.length > 0) {
-                    for (const dId of allRowDrivers) {
-                        const { data: existingSdc } = await $supabase
-                            .from("season_driver_classes")
-                            .select("id")
-                            .eq("season_id", seasonId)
-                            .eq("driver_id", dId)
-                            .maybeSingle()
+                if (seasonId && row.class_id && !isTeamEvent.value && row.driver_id) {
+                    const dId = row.driver_id
+                    const { data: existingSdc } = await $supabase
+                        .from("season_driver_classes")
+                        .select("id")
+                        .eq("season_id", seasonId)
+                        .eq("driver_id", dId)
+                        .maybeSingle()
 
-                        if (existingSdc) {
-                            await $supabase
-                                .from("season_driver_classes")
-                                .update({ class_id: row.class_id })
-                                .eq("id", existingSdc.id)
-                        } else {
-                            await $supabase
-                                .from("season_driver_classes")
-                                .insert({
-                                    season_id: seasonId,
-                                    driver_id: dId,
-                                    class_id: row.class_id
-                                })
-                        }
-                        seasonDriverClassesMap.value.set(dId, row.class_id)
+                    if (existingSdc) {
+                        await $supabase
+                            .from("season_driver_classes")
+                            .update({ class_id: row.class_id })
+                            .eq("id", existingSdc.id)
+                    } else {
+                        await $supabase
+                            .from("season_driver_classes")
+                            .insert({
+                                season_id: seasonId,
+                                driver_id: dId,
+                                class_id: row.class_id
+                            })
                     }
+                    seasonDriverClassesMap.value.set(dId, row.class_id)
                 }
 
                 const parsedTotalMs = row.total_time ? parseTimeToMs(row.total_time) : null
                 const parsedBestMs = row.best_lap ? parseTimeToMs(row.best_lap) : null
                 const totalMs = parsedTotalMs || row.total_time_ms
                 const bestMs = parsedBestMs || row.best_lap_ms || (sessType === 'qualifying' ? totalMs : null)
-                const penNs = row.penalty_time_sec ? Math.round(Number(row.penalty_time_sec) * 1000000000) : null
+                const penNum = (row.penalty_time_sec !== null && row.penalty_time_sec !== undefined && String(row.penalty_time_sec).trim() !== '') ? parseFloat(String(row.penalty_time_sec).trim()) : null
+                const penNs = (penNum !== null && !isNaN(penNum) && penNum > 0) ? Math.round(penNum * 1000000000) : null
                 const isPolePosition = (sessType === 'qualifying' && (Number(row.scoring_position) === 1 || i === 0)) || row.is_pole || Number(row.grid_position) === 1
 
                 const resultPayload = {
@@ -2839,7 +3188,7 @@
                     num_laps: (sessType !== 'qualifying' && row.num_laps !== null && row.num_laps !== '' && !isNaN(Number(row.num_laps))) ? Number(row.num_laps) : null,
                     best_lap_ms: bestMs || null,
                     total_time_ms: totalMs || null,
-                    has_penalty: sessType === 'qualifying' ? false : Boolean(row.has_penalty),
+                    has_penalty: sessType === 'qualifying' ? false : Boolean((penNs && penNs > 0) || row.has_penalty),
                     penalty_time_ns: sessType === 'qualifying' ? null : penNs,
                     fastest_lap: sessType === 'qualifying' ? false : Boolean(row.fastest_lap),
                     is_provisional: Boolean(isResultsProvisional.value),
@@ -3409,6 +3758,7 @@
     const isAddRoundsModalOpen = ref(false)
     const addRoundsSearch = ref("")
     const addRoundsSelection = ref([]) // [{ schedule_id, session_type }]
+    const addRoundsDisplayLimit = ref(80)
     const savingRounds = ref(false)
 
     const standingsTypeOptions = [
@@ -3629,7 +3979,7 @@
         }
         loadingRounds.value = true
         try {
-            const { data, error } = await $supabase
+            let { data, error } = await $supabase
                 .from("championship_events")
                 .select(`
                     id,
@@ -3638,6 +3988,7 @@
                     session_type,
                     points_system_id,
                     points_multiplier,
+                    scoring_mode,
                     schedule (
                         id,
                         round,
@@ -3657,6 +4008,39 @@
                     )
                 `)
                 .eq("championship_id", selectedChampionshipId.value)
+
+            if (error && (error.message?.includes("scoring_mode") || error.code === "PGRST204" || error.code === "42703")) {
+                const res = await $supabase
+                    .from("championship_events")
+                    .select(`
+                        id,
+                        championship_id,
+                        schedule_id,
+                        session_type,
+                        points_system_id,
+                        points_multiplier,
+                        schedule (
+                            id,
+                            round,
+                            circuit,
+                            date,
+                            season,
+                            country,
+                            events (
+                                name,
+                                organizers (
+                                    abbreviation
+                                ),
+                                games (
+                                    abbreviation
+                                )
+                            )
+                        )
+                    `)
+                    .eq("championship_id", selectedChampionshipId.value)
+                data = res.data
+                error = res.error
+            }
 
             if (error) throw error
 
@@ -3746,6 +4130,15 @@
 
             if (error) throw error
             standingsRows.value = data || []
+
+            // Auto-heal: If standings are empty in DB but this championship has rounds, recalculate automatically
+            if (standingsRows.value.length === 0 && selectedChampionship.value && championshipRounds.value.length > 0) {
+                setTimeout(() => {
+                    if (standingsRows.value.length === 0 && selectedChampionship.value) {
+                        handleRecalculateChampionship(true)
+                    }
+                }, 300)
+            }
         } catch (err) {
             console.error("Error fetching standings:", err)
             showToast(err.message || "Gagal memuat klasemen", "error")
@@ -4000,6 +4393,181 @@
     }
 
     // ---- Rounds (championship_events) ----
+    const formatRoundDisplay = (r) => {
+        if (!r && r !== 0) return "R?"
+        const s = String(r).trim()
+        if (/^(r\d|round|grup|group|putaran)/i.test(s)) return s
+        if (/^\d+$/.test(s)) return `R${s}`
+        return s
+    }
+
+    const ID_DAYS = ["minggu", "senin", "selasa", "rabu", "kamis", "jumat", "sabtu"]
+    const EN_DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+    const ID_MONTHS_LONG = ["januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"]
+    const ID_MONTHS_SHORT = ["jan", "feb", "mar", "apr", "mei", "jun", "jul", "agu", "agt", "sep", "okt", "nov", "des"]
+    const EN_MONTHS_LONG = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
+    const EN_MONTHS_SHORT = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+
+    const scheduleHaystackMap = new Map()
+
+    const expandGroupVariations = (text, parts) => {
+        if (!text && text !== 0) return
+        const str = String(text).trim()
+        if (!str) return
+        const lower = str.toLowerCase()
+
+        // 1. Explicit group patterns: "group A", "grup A", "grp A", "group 1", etc.
+        const groupMatches = lower.match(/(?:group|grup|grp)\s*([a-z0-9]+)/gi)
+        if (groupMatches) {
+            for (const gm of groupMatches) {
+                const m = gm.match(/(?:group|grup|grp)\s*([a-z0-9]+)/i)
+                if (m && m[1]) {
+                    const g = m[1].toLowerCase()
+                    parts.push(
+                        `group ${g}`,
+                        `grup ${g}`,
+                        `grp ${g}`,
+                        `group${g}`,
+                        `grup${g}`,
+                        `group`,
+                        `grup`,
+                        `grp`
+                    )
+                }
+            }
+        }
+
+        // 2. Attached number-letter patterns like "1A", "1B", "R1A", "R1 B"
+        const numLetterMatches = lower.match(/\b(?:r|round\s*)?(\d+)\s*([a-z])\b/gi)
+        if (numLetterMatches) {
+            for (const nlm of numLetterMatches) {
+                const m = nlm.match(/\b(?:r|round\s*)?(\d+)\s*([a-z])\b/i)
+                if (m && m[2]) {
+                    const letter = m[2].toLowerCase()
+                    parts.push(
+                        `group ${letter}`,
+                        `grup ${letter}`,
+                        `grp ${letter}`,
+                        `group`,
+                        `grup`,
+                        `grp`
+                    )
+                }
+            }
+        }
+
+        // 3. Single letter or short code (e.g. "A", "B", "C")
+        if (/^[a-zA-Z]$/.test(str)) {
+            const letter = lower
+            parts.push(
+                `group ${letter}`,
+                `grup ${letter}`,
+                `grp ${letter}`,
+                `group${letter}`,
+                `grup${letter}`,
+                `group`,
+                `grup`,
+                `grp`
+            )
+        }
+    }
+
+    const buildScheduleBaseHaystack = (sched) => {
+        const parts = []
+
+        // Event & Game & Organizer
+        if (sched.events) {
+            if (sched.events.name) {
+                parts.push(sched.events.name)
+                expandGroupVariations(sched.events.name, parts)
+            }
+            if (sched.events.organizers) {
+                if (sched.events.organizers.name) parts.push(sched.events.organizers.name)
+                if (sched.events.organizers.abbreviation) parts.push(sched.events.organizers.abbreviation)
+            }
+            if (sched.events.games) {
+                if (sched.events.games.name) parts.push(sched.events.games.name)
+                if (sched.events.games.abbreviation) parts.push(sched.events.games.abbreviation)
+            }
+        }
+
+        // Circuit & Country
+        if (sched.circuit) parts.push(sched.circuit)
+        if (sched.country) parts.push(sched.country)
+        if (sched.country_2) parts.push(sched.country_2)
+
+        // Season
+        if (sched.season) {
+            const s = String(sched.season)
+            parts.push(s, `s${s}`, `season ${s}`, `musim ${s}`)
+        }
+
+        // Round & Group
+        const roundRaw = sched.round ? String(sched.round).trim() : ""
+        if (roundRaw) {
+            parts.push(roundRaw)
+            parts.push(`round ${roundRaw}`, `ronde ${roundRaw}`, `putaran ${roundRaw}`, `r${roundRaw}`, `r ${roundRaw}`)
+            expandGroupVariations(roundRaw, parts)
+        }
+        if (sched.group !== undefined && sched.group !== null && sched.group !== "") {
+            const g = String(sched.group).trim()
+            parts.push(g, `group ${g}`, `grup ${g}`, `grp ${g}`)
+            expandGroupVariations(g, parts)
+        }
+
+        // Fast Date Variations (Zero Intl / toLocaleDateString overhead)
+        const addDateVariations = (dateVal) => {
+            if (!dateVal) return
+            const d = new Date(dateVal)
+            if (isNaN(d.getTime())) {
+                parts.push(String(dateVal))
+                return
+            }
+            parts.push(String(dateVal))
+            const year = d.getFullYear()
+            const month = d.getMonth() + 1
+            const monthIdx = d.getMonth()
+            const day = d.getDate()
+            const dayIdx = d.getDay()
+            const pad = (n) => String(n).padStart(2, "0")
+            const mm = pad(month)
+            const dd = pad(day)
+
+            parts.push(`${year}-${mm}-${dd}`, `${year}/${mm}/${dd}`, `${dd}-${mm}-${year}`, `${dd}/${mm}/${year}`, `${day}/${month}/${year}`)
+            parts.push(`${dd}-${mm}`, `${dd}/${mm}`, `${day}/${month}`, `${day}-${month}`)
+            parts.push(String(year))
+
+            if (ID_DAYS[dayIdx]) parts.push(ID_DAYS[dayIdx])
+            if (EN_DAYS[dayIdx]) parts.push(EN_DAYS[dayIdx])
+            if (ID_MONTHS_LONG[monthIdx]) parts.push(ID_MONTHS_LONG[monthIdx], `${day} ${ID_MONTHS_LONG[monthIdx]} ${year}`, `${day} ${ID_MONTHS_LONG[monthIdx]}`)
+            if (ID_MONTHS_SHORT[monthIdx]) parts.push(ID_MONTHS_SHORT[monthIdx], `${day} ${ID_MONTHS_SHORT[monthIdx]} ${year}`)
+            if (EN_MONTHS_LONG[monthIdx]) parts.push(EN_MONTHS_LONG[monthIdx], `${EN_MONTHS_LONG[monthIdx]} ${day} ${year}`, `${EN_MONTHS_LONG[monthIdx]} ${day}`)
+            if (EN_MONTHS_SHORT[monthIdx]) parts.push(EN_MONTHS_SHORT[monthIdx], `${EN_MONTHS_SHORT[monthIdx]} ${day}`)
+        }
+
+        addDateVariations(sched.date)
+        if (sched.finish_date && sched.finish_date !== sched.date) {
+            addDateVariations(sched.finish_date)
+        }
+
+        return parts.join(" ").toLowerCase()
+    }
+
+    const sessionTypeSearchMap = {
+        race: "race balapan",
+        race_1: "race 1 race1 r1 balapan 1",
+        race_2: "race 2 race2 r2 balapan 2",
+        race_3: "race 3 race3 r3 balapan 3",
+        qualifying: "qualifying kualifikasi quali q"
+    }
+
+    const getSessionOptionSearchString = (opt) => {
+        const val = String(opt?.value || "").toLowerCase()
+        const label = String(opt?.label || "").toLowerCase()
+        const mapped = sessionTypeSearchMap[val] || ""
+        return `${label} ${val} ${val.replace(/_/g, " ")} ${val.replace(/_/g, "")} ${mapped}`
+    }
+
     const availableRoundsToAdd = computed(() => {
         const existing = new Set(championshipRounds.value.map(r => `${r.schedule_id}::${r.session_type}`))
         const list = allSchedulesList.value.length > 0 ? allSchedulesList.value : schedules.value
@@ -4008,20 +4576,28 @@
 
         const out = []
         for (const sched of list) {
-            if (words.length > 0) {
-                const orgAbbr = sched.events?.organizers?.abbreviation || ""
-                const orgName = sched.events?.organizers?.name || ""
-                const evName = sched.events?.name || ""
-                const circuit = sched.circuit || ""
-                const round = String(sched.round || "")
-                const season = sched.season ? `s${sched.season} season ${sched.season}` : ""
-                const dateStr = sched.date ? formatDateOnly(sched.date) : ""
-                const hay = `${dateStr} ${orgAbbr} ${evName} ${orgName} ${season} round ${round} ${circuit}`.toLowerCase()
-                if (!words.every(w => hay.includes(w))) continue
+            let schedHay = scheduleHaystackMap.get(sched.id)
+            if (!schedHay) {
+                schedHay = buildScheduleBaseHaystack(sched)
+                scheduleHaystackMap.set(sched.id, schedHay)
             }
+
             for (const opt of sessionTypeOptions) {
                 const key = `${sched.id}::${opt.value}`
                 if (existing.has(key)) continue
+
+                if (words.length > 0) {
+                    const optHay = getSessionOptionSearchString(opt)
+                    let match = true
+                    for (const w of words) {
+                        if (!schedHay.includes(w) && !optHay.includes(w)) {
+                            match = false
+                            break
+                        }
+                    }
+                    if (!match) continue
+                }
+
                 out.push({
                     key,
                     schedule_id: sched.id,
@@ -4043,15 +4619,24 @@
             showToast("Buat sistem poin terlebih dahulu di tab Sistem Poin", "error")
             return
         }
+        if (allSchedulesList.value.length === 0) {
+            fetchAllSchedulesList()
+        }
         addRoundsSearch.value = ""
         addRoundsSelection.value = []
+        addRoundsDisplayLimit.value = 80
         isAddRoundsModalOpen.value = true
     }
+
+    watch(addRoundsSearch, () => {
+        addRoundsDisplayLimit.value = 80
+    })
 
     const closeAddRoundsModal = () => {
         isAddRoundsModalOpen.value = false
         addRoundsSelection.value = []
         addRoundsSearch.value = ""
+        addRoundsDisplayLimit.value = 80
     }
 
     const toggleRoundSelection = (key) => {
@@ -4090,11 +4675,17 @@
                     schedule_id: scheduleId,
                     session_type: sessionType,
                     points_system_id: defaultSystem,
-                    points_multiplier: 1
+                    points_multiplier: 1,
+                    scoring_mode: "auto"
                 }
             })
 
-            const { error } = await $supabase.from("championship_events").insert(payload)
+            let { error } = await $supabase.from("championship_events").insert(payload)
+            if (error && (error.message?.includes("scoring_mode") || error.code === "PGRST204" || error.code === "42703")) {
+                const fallbackPayload = payload.map(({ scoring_mode, ...rest }) => rest)
+                const res = await $supabase.from("championship_events").insert(fallbackPayload)
+                error = res.error
+            }
             if (error) throw error
 
             showToast(`${payload.length} ronde berhasil ditambahkan!`)
@@ -4115,12 +4706,17 @@
             const payload = {}
             if (field === "points_system_id") payload.points_system_id = value || null
             else if (field === "points_multiplier") payload.points_multiplier = Number(value) || 1
+            else if (field === "scoring_mode") payload.scoring_mode = value || "auto"
             else return
 
-            const { error } = await $supabase
+            let { error } = await $supabase
                 .from("championship_events")
                 .update(payload)
                 .eq("id", round.id)
+            if (error && field === "scoring_mode" && (error.message?.includes("scoring_mode") || error.code === "PGRST204" || error.code === "42703")) {
+                // Column not added to DB yet, maintain in local state
+                error = null
+            }
             if (error) throw error
 
             Object.assign(round, payload)
@@ -4166,6 +4762,8 @@
     }
 
     // ---- Recalculation ----
+    const recalculatingAll = ref(false)
+
     const handleRecalculateChampionship = async (silent = false) => {
         if (!selectedChampionship.value) return
         recalculating.value = true
@@ -4186,6 +4784,35 @@
             showToast(err.message || "Gagal menghitung ulang klasemen", "error")
         } finally {
             recalculating.value = false
+        }
+    }
+
+    const handleRecalculateAllChampionships = async () => {
+        const list = filteredChampionships.value.length > 0 ? filteredChampionships.value : championships.value
+        if (list.length === 0) {
+            showToast("Tidak ada championship untuk dihitung ulang", "error")
+            return
+        }
+        recalculatingAll.value = true
+        try {
+            let totalRows = 0
+            for (const c of list) {
+                const summary = await recalculateChampionship($supabase, {
+                    id: c.id,
+                    name: getChampionshipName(c),
+                    standings_type: c.standings_type,
+                    class_id: c.class_id,
+                    season_id: c.season_id
+                })
+                totalRows += summary.rowsWritten
+            }
+            if (selectedChampionshipId.value) await fetchStandings()
+            showToast(`${list.length} championship berhasil dihitung ulang (${totalRows} total baris)!`)
+        } catch (err) {
+            console.error("Error recalculating all championships:", err)
+            showToast(err.message || "Gagal menghitung ulang semua championship", "error")
+        } finally {
+            recalculatingAll.value = false
         }
     }
 
@@ -4551,9 +5178,9 @@
                                 <th class="px-2 sm:px-3 py-3 w-[6%]">Waktu</th>
                                 <th class="px-3 sm:px-4 py-3 w-[26%]">Event</th>
                                 <th class="px-1.5 sm:px-2 py-3 w-[6%]">Round</th>
-                                <th class="px-3 sm:px-4 py-3 w-[25%]">Sirkuit</th>
+                                <th class="px-3 sm:px-4 py-3 w-[19%]">Sirkuit</th>
                                 <th class="px-2 sm:px-3 py-3 text-center w-[9%]">Stream</th>
-                                <th class="px-2 sm:px-3 py-3 text-center w-[10%]">Status</th>
+                                <th class="px-2 sm:px-3 py-3 text-center w-[16%]">Status</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-sm">
@@ -5394,6 +6021,30 @@
                                     class="hidden"
                                 />
                             </label>
+
+                            <label
+                                class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border border-emerald-300 dark:border-emerald-800 shadow-xs"
+                                title="Upload hasil balapan dari file .csv (Format: Class, Position, Name, No, Car, Total Laps, Best Lap, Total Time, Points)"
+                            >
+                                <Icon name="material-symbols:table-chart" class="text-base text-emerald-600 dark:text-emerald-400" />
+                                <span>Upload CSV</span>
+                                <input
+                                    type="file"
+                                    accept=".csv,text/csv"
+                                    @change="handleResultsCsvUpload"
+                                    class="hidden"
+                                />
+                            </label>
+
+                            <button
+                                type="button"
+                                @click="downloadResultsCsvTemplate"
+                                class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 border border-gray-300 dark:border-slate-700"
+                                title="Unduh contoh template format CSV hasil balapan"
+                            >
+                                <Icon name="material-symbols:download" class="text-base text-gray-500" />
+                                <span>Template CSV</span>
+                            </button>
                         </div>
                     </div>
 
@@ -5564,6 +6215,16 @@
                                                     </template>
                                                 </div>
                                                 <div class="flex items-center gap-1 shrink-0 text-gray-400">
+                                                    <span
+                                                        v-if="getPoleDriverId(cls.id)"
+                                                        role="button"
+                                                        tabindex="0"
+                                                        @click.stop="selectTopDriver('pole', cls.id, null)"
+                                                        class="p-0.5 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition cursor-pointer"
+                                                        title="Kosongkan Pole Position (Null)"
+                                                    >
+                                                        <Icon name="material-symbols:close" class="text-sm" />
+                                                    </span>
                                                     <Icon name="material-symbols:search" class="text-sm" />
                                                     <Icon name="material-symbols:keyboard-arrow-down-rounded" class="text-base" />
                                                 </div>
@@ -5615,7 +6276,7 @@
                                                         :class="{ 'bg-red-50 dark:bg-red-950/40 font-bold': String(getPoleDriverId(cls.id)) === String(d.id) }"
                                                     >
                                                         <div class="flex items-center gap-2 min-w-0">
-                                                             <Icon
+                                                            <Icon
                                                                 v-if="!isTeamEvent && d.countries?.code"
                                                                 :name="`flag-${d.countries.code.toLowerCase()}-4x3`"
                                                                 class="rounded-xs shrink-0 text-sm"
@@ -5717,6 +6378,16 @@
                                                         </template>
                                                     </div>
                                                     <div class="flex items-center gap-1 shrink-0 text-gray-400">
+                                                        <span
+                                                            v-if="getFastestLapDriverId(cls.id)"
+                                                            role="button"
+                                                            tabindex="0"
+                                                            @click.stop="selectTopDriver('fastest_lap', cls.id, null)"
+                                                            class="p-0.5 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition cursor-pointer"
+                                                            title="Kosongkan Fastest Lap (Null)"
+                                                        >
+                                                            <Icon name="material-symbols:close" class="text-sm" />
+                                                        </span>
                                                         <Icon name="material-symbols:search" class="text-sm" />
                                                         <Icon name="material-symbols:keyboard-arrow-down-rounded" class="text-base" />
                                                     </div>
@@ -5832,9 +6503,10 @@
                                                 type="text"
                                                 :value="getFastestLapTime(cls.id)"
                                                 @input="onFastestLapTimeChange(cls.id, $event.target.value)"
+                                                :disabled="!getFastestLapDriverId(cls.id)"
                                                 placeholder="1:23.456"
                                                 title="Catatan Waktu Lap Tercepat"
-                                                class="w-24 sm:w-28 shrink-0 p-2 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
+                                                class="w-24 sm:w-28 shrink-0 p-2 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-red-500 disabled:opacity-40 disabled:cursor-not-allowed"
                                             />
                                         </div>
                                     </div>
@@ -5904,34 +6576,33 @@
                                 <tr v-if="!isTeamEvent">
                                     <th class="px-2 py-3 text-center w-[4%]">Pos</th>
                                     <th class="px-2 py-3 text-center w-[5%]">No.</th>
-                                    <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[32%]' : 'w-[23%]'">Pembalap (Driver / Co-Drivers) <span class="text-red-300">*</span></th>
+                                    <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[52%]' : 'w-[31%]'">Pembalap (Driver) <span class="text-red-300">*</span></th>
                                     <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[16%]' : 'w-[13%]'">Kelas (Class)</th>
                                     <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[8%]' : 'w-[7%]'">Pos Kelas</th>
-                                    <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[20%]' : 'w-[16%]'">Tim (Team)</th>
                                     <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Status</th>
                                     <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[5%]">Laps</th>
                                     <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[11%]' : 'w-[9%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[5%]">Penalti</th>
+                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[13%]" title="Penalti dalam detik (contoh: 10.000)">Penalti (s)</th>
                                     <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
                                     <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
                                 </tr>
                                 <tr v-else>
                                     <th class="px-2 py-3 text-center w-[4%]">Pos</th>
                                     <th class="px-2 py-3 text-center w-[6%]">No.</th>
-                                    <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[46%]' : 'w-[33%]'">Tim (Team Name) <span class="text-red-300">*</span></th>
+                                    <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[46%]' : 'w-[25%]'">Tim (Team Name) <span class="text-red-300">*</span></th>
                                     <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[20%]' : 'w-[16%]'">Kelas (Class)</th>
                                     <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[10%]' : 'w-[8%]'">Pos Kelas</th>
                                     <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Status</th>
                                     <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[5%]">Laps</th>
                                     <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[14%]' : 'w-[10%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[5%]">Penalti</th>
+                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[13%]" title="Penalti dalam detik (contoh: 10.000)">Penalti (s)</th>
                                     <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
                                     <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-xs">
                                 <tr v-if="loadingResults" class="text-center py-8">
-                                    <td :colspan="isTeamEvent ? (selectedSessionType === 'qualifying' ? 7 : 11) : (selectedSessionType === 'qualifying' ? 8 : 12)" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                    <td :colspan="selectedSessionType === 'qualifying' ? 7 : 11" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                                         <div class="flex items-center justify-center gap-2">
                                             <Icon name="material-symbols:refresh" class="animate-spin text-xl text-red-700" />
                                             <span>Memuat data hasil balapan...</span>
@@ -5940,7 +6611,7 @@
                                 </tr>
 
                                 <tr v-else-if="displayedResultsRows.length === 0" class="text-center py-8">
-                                    <td :colspan="isTeamEvent ? (selectedSessionType === 'qualifying' ? 7 : 11) : (selectedSessionType === 'qualifying' ? 8 : 12)" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                    <td :colspan="selectedSessionType === 'qualifying' ? 7 : 11" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                                         <div class="flex flex-col items-center justify-center gap-2">
                                             <span>Belum ada baris posisi{{ selectedEntryClassId !== 'ALL' ? ' untuk kelas ini' : '' }}. Klik tombol "+1 Baris" untuk menambahkan posisi.</span>
                                         </div>
@@ -6117,280 +6788,148 @@
                                         </div>
                                     </td>
 
-                                    <!-- Driver Column with Live Search & Co-Drivers (Individual Mode) -->
+                                    <!-- Driver Column with Live Search (Individual Mode) -->
                                     <td v-if="!isTeamEvent" class="px-3 py-2.5">
-                                        <div class="flex flex-col gap-1.5">
-                                            <!-- Lead / Primary Driver -->
-                                            <div class="relative">
-                                                <!-- Trigger Button / Display -->
-                                                <button
-                                                    type="button"
-                                                    @click="openDriverDropdown(idx)"
-                                                    class="w-full p-2 text-left rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer flex items-center justify-between gap-1.5 transition hover:border-red-600"
-                                                    :class="{ 'ring-1 ring-red-500 border-red-500': activeDriverSearchRowIndex === idx }"
-                                                >
-                                                    <div class="flex items-center gap-1.5 min-w-0 overflow-hidden truncate">
-                                                        <span v-if="row.co_driver_ids && row.co_driver_ids.length > 0" class="text-[10px] px-1 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold shrink-0">D1</span>
-                                                        <template v-if="row.driver_id && getDriverById(row.driver_id)">
-                                                            <Icon
-                                                                v-if="getDriverById(row.driver_id)?.countries?.code"
-                                                                :name="`flag-${getDriverById(row.driver_id).countries.code.toLowerCase()}-4x3`"
-                                                                class="rounded-xs shrink-0"
-                                                            />
-                                                            <span class="truncate font-bold text-black dark:text-white">
-                                                                {{ getDriverById(row.driver_id)?.name }}
-                                                            </span>
-                                                            <span
-                                                                v-if="getDriverById(row.driver_id)?.rating"
-                                                                class="text-[10px] px-1 py-0.5 rounded text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-800 font-normal shrink-0"
-                                                            >
-                                                                {{ getDriverById(row.driver_id)?.rating }}
-                                                            </span>
-                                                        </template>
-                                                        <template v-else>
-                                                            <span class="text-gray-400 dark:text-gray-500 italic">-- Cari & Pilih Pembalap --</span>
-                                                        </template>
-                                                    </div>
-                                                    <div class="flex items-center gap-1 shrink-0 text-gray-400">
-                                                        <Icon name="material-symbols:search" class="text-sm" />
-                                                        <Icon name="material-symbols:keyboard-arrow-down-rounded" class="text-base" />
-                                                    </div>
-                                                </button>
-
-                                                <!-- Dropdown Popover with Live Search -->
-                                                <div
-                                                    v-if="activeDriverSearchRowIndex === idx"
-                                                    class="absolute left-0 w-72 sm:w-80 max-w-[90vw] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1.5"
-                                                    :class="idx >= displayedResultsRows.length - 3 && displayedResultsRows.length > 2 ? 'bottom-full mb-1' : 'top-full mt-1'"
-                                                    @click.stop
-                                                >
-                                                    <!-- Search Box -->
-                                                    <div class="relative flex items-center">
-                                                        <Icon name="material-symbols:search" class="absolute left-2.5 text-gray-400 text-sm pointer-events-none" />
-                                                        <input
-                                                            v-model="driverDropdownSearchQuery"
-                                                            type="text"
-                                                            autofocus
-                                                            placeholder="Ketik nama, tim, atau negara..."
-                                                            class="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-medium"
-                                                            @keydown.esc="closeDriverDropdown"
-                                                        />
-                                                        <button
-                                                            v-if="driverDropdownSearchQuery"
-                                                            type="button"
-                                                            @click="driverDropdownSearchQuery = ''"
-                                                            class="absolute right-2 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                                                            title="Hapus pencarian"
-                                                        >
-                                                            <Icon name="material-symbols:close" class="text-xs" />
-                                                        </button>
-                                                    </div>
-
-                                                    <!-- List of Drivers -->
-                                                    <div class="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-800/60 rounded-lg border border-gray-100 dark:border-slate-800">
-                                                        <!-- Option: Clear Driver -->
-                                                        <button
-                                                            type="button"
-                                                            @click="selectDriverForRow(row, null)"
-                                                            class="w-full px-2.5 py-1.5 text-left text-xs font-semibold hover:bg-red-50 dark:hover:bg-slate-800/80 text-red-600 dark:text-red-400 transition cursor-pointer flex items-center gap-1.5"
-                                                        >
-                                                            <Icon name="material-symbols:block" class="text-sm" />
-                                                            <span>Tanpa Pembalap (Kosongkan)</span>
-                                                        </button>
-
-                                                        <!-- Filtered Driver Items -->
-                                                        <button
-                                                            v-for="d in filteredDriversForDropdown"
-                                                            :key="d.id"
-                                                            type="button"
-                                                            @click="selectDriverForRow(row, d)"
-                                                            class="w-full px-2.5 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-between gap-2"
-                                                            :class="{ 'bg-red-50 dark:bg-red-950/40 font-bold': row.driver_id === d.id }"
-                                                        >
-                                                            <div class="flex items-center gap-2 min-w-0">
-                                                                <Icon
-                                                                    v-if="d.countries?.code"
-                                                                    :name="`flag-${d.countries.code.toLowerCase()}-4x3`"
-                                                                    class="rounded-xs shrink-0 text-sm"
-                                                                />
-                                                                <div class="flex flex-col min-w-0">
-                                                                    <span class="truncate text-black dark:text-white font-medium">
-                                                                        {{ d.name }}
-                                                                    </span>
-                                                                    <span v-if="d.teams?.name" class="text-[10px] text-gray-400 dark:text-gray-500 truncate">
-                                                                        {{ d.teams.name }}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-
-                                                            <div class="flex items-center gap-1 shrink-0">
-                                                                <span
-                                                                    v-if="d.rating"
-                                                                    class="px-1.5 py-0.5 rounded text-[10px] font-bold"
-                                                                    :class="getRatingStyle(d.rating)"
-                                                                >
-                                                                    {{ d.rating }}
-                                                                </span>
-                                                                <Icon
-                                                                    v-if="row.driver_id === d.id"
-                                                                    name="material-symbols:check"
-                                                                    class="text-red-700 dark:text-red-400 text-base"
-                                                                />
-                                                            </div>
-                                                        </button>
-
-                                                        <div v-if="filteredDriversForDropdown.length === 0" class="p-3 text-center text-xs text-gray-400">
-                                                            Tidak ditemukan pembalap yang cocok
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="flex items-center justify-between text-[10px] text-gray-400 px-1 pt-0.5">
-                                                        <span>Ditemukan: {{ filteredDriversForDropdown.length }} pembalap</span>
-                                                        <button
-                                                            type="button"
-                                                            @click="closeDriverDropdown"
-                                                            class="text-gray-500 hover:text-black dark:hover:text-white underline cursor-pointer"
-                                                        >
-                                                            Tutup (Esc)
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Backdrop to close dropdown when clicking outside -->
-                                                <div
-                                                    v-if="activeDriverSearchRowIndex === idx"
-                                                    class="fixed inset-0 z-40 bg-transparent"
-                                                    @click="closeDriverDropdown"
-                                                />
-                                            </div>
-
-                                            <!-- Co-Drivers list (if any) -->
-                                            <div
-                                                v-for="(coId, coIdx) in (row.co_driver_ids || [])"
-                                                :key="coIdx"
-                                                class="flex items-center gap-1 relative"
-                                            >
-                                                <span class="text-[10px] px-1 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-bold shrink-0">
-                                                    D{{ coIdx + 2 }}
-                                                </span>
-
-                                                <div class="relative flex-1">
-                                                    <button
-                                                        type="button"
-                                                        @click="openCoDriverDropdown(idx, coIdx)"
-                                                        class="w-full p-1.5 text-left rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer flex items-center justify-between gap-1 transition hover:border-red-600"
-                                                        :class="{ 'ring-1 ring-red-500 border-red-500': activeCoDriverSearchIndex?.rowIdx === idx && activeCoDriverSearchIndex?.coIdx === coIdx }"
-                                                    >
-                                                        <div class="flex items-center gap-1 min-w-0 overflow-hidden truncate">
-                                                            <template v-if="coId && getDriverById(coId)">
-                                                                <Icon
-                                                                    v-if="getDriverById(coId)?.countries?.code"
-                                                                    :name="`flag-${getDriverById(coId).countries.code.toLowerCase()}-4x3`"
-                                                                    class="rounded-xs shrink-0"
-                                                                />
-                                                                <span class="truncate font-semibold text-black dark:text-white">
-                                                                    {{ getDriverById(coId)?.name }}
-                                                                </span>
-                                                            </template>
-                                                            <template v-else>
-                                                                <span class="text-gray-400 dark:text-gray-500 italic">-- Pilih Co-Driver --</span>
-                                                            </template>
-                                                        </div>
-                                                        <Icon name="material-symbols:keyboard-arrow-down-rounded" class="text-sm text-gray-400 shrink-0" />
-                                                    </button>
-
-                                                    <!-- Co-Driver Popover -->
-                                                    <div
-                                                        v-if="activeCoDriverSearchIndex?.rowIdx === idx && activeCoDriverSearchIndex?.coIdx === coIdx"
-                                                        class="absolute left-0 w-72 sm:w-80 max-w-[90vw] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1.5"
-                                                        :class="idx >= displayedResultsRows.length - 3 && displayedResultsRows.length > 2 ? 'bottom-full mb-1' : 'top-full mt-1'"
-                                                        @click.stop
-                                                    >
-                                                        <div class="relative flex items-center">
-                                                            <Icon name="material-symbols:search" class="absolute left-2.5 text-gray-400 text-sm pointer-events-none" />
-                                                            <input
-                                                                v-model="driverDropdownSearchQuery"
-                                                                type="text"
-                                                                autofocus
-                                                                placeholder="Ketik nama co-driver..."
-                                                                class="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-medium"
-                                                                @keydown.esc="closeCoDriverDropdown"
-                                                            />
-                                                            <button
-                                                                v-if="driverDropdownSearchQuery"
-                                                                type="button"
-                                                                @click="driverDropdownSearchQuery = ''"
-                                                                class="absolute right-2 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                                                            >
-                                                                <Icon name="material-symbols:close" class="text-xs" />
-                                                            </button>
-                                                        </div>
-
-                                                        <div class="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-800/60 rounded-lg border border-gray-100 dark:border-slate-800">
-                                                            <button
-                                                                v-for="d in filteredDriversForDropdown"
-                                                                :key="d.id"
-                                                                type="button"
-                                                                @click="selectCoDriverForRow(row, coIdx, d)"
-                                                                class="w-full px-2.5 py-1.5 text-left text-xs hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-between gap-2"
-                                                                :class="{ 'bg-red-50 dark:bg-red-950/40 font-bold': coId === d.id }"
-                                                            >
-                                                                <div class="flex items-center gap-1.5 min-w-0">
-                                                                    <Icon
-                                                                        v-if="d.countries?.code"
-                                                                        :name="`flag-${d.countries.code.toLowerCase()}-4x3`"
-                                                                        class="rounded-xs shrink-0 text-sm"
-                                                                    />
-                                                                    <span class="truncate text-black dark:text-white font-medium">
-                                                                        {{ d.name }}
-                                                                    </span>
-                                                                </div>
-                                                                <Icon
-                                                                    v-if="coId === d.id"
-                                                                    name="material-symbols:check"
-                                                                    class="text-red-700 dark:text-red-400 text-base"
-                                                                />
-                                                            </button>
-                                                        </div>
-
-                                                        <div class="flex items-center justify-between text-[10px] text-gray-400 px-1 pt-0.5">
-                                                            <span>{{ filteredDriversForDropdown.length }} pembalap</span>
-                                                            <button
-                                                                type="button"
-                                                                @click="closeCoDriverDropdown"
-                                                                class="text-gray-500 hover:text-black dark:hover:text-white underline cursor-pointer"
-                                                            >
-                                                                Tutup
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    <div
-                                                        v-if="activeCoDriverSearchIndex?.rowIdx === idx && activeCoDriverSearchIndex?.coIdx === coIdx"
-                                                        class="fixed inset-0 z-40 bg-transparent"
-                                                        @click="closeCoDriverDropdown"
-                                                    />
-                                                </div>
-
-                                                <button
-                                                    type="button"
-                                                    @click="removeCoDriverFromRow(row, coIdx)"
-                                                    class="p-1 text-gray-400 hover:text-red-600 transition cursor-pointer rounded"
-                                                    title="Hapus Co-Driver"
-                                                >
-                                                    <Icon name="material-symbols:close" class="text-sm" />
-                                                </button>
-                                            </div>
-
-                                            <!-- Add Co-Driver button -->
+                                        <div class="relative">
+                                            <!-- Trigger Button / Display -->
                                             <button
                                                 type="button"
-                                                @click="addCoDriverToRow(row)"
-                                                class="self-start text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline cursor-pointer flex items-center gap-1 pt-0.5"
+                                                @click="openDriverDropdown(idx)"
+                                                class="w-full p-2 text-left rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer flex items-center justify-between gap-1.5 transition hover:border-red-600"
+                                                :class="{ 'ring-1 ring-red-500 border-red-500': activeDriverSearchRowIndex === idx }"
                                             >
-                                                <Icon name="material-symbols:person-add" class="text-xs" />
-                                                <span>+ Tambah Co-Driver</span>
+                                                <div class="flex items-center gap-1.5 min-w-0 overflow-hidden truncate">
+                                                    <template v-if="row.driver_id && getDriverById(row.driver_id)">
+                                                        <Icon
+                                                            v-if="getDriverById(row.driver_id)?.countries?.code"
+                                                            :name="`flag-${getDriverById(row.driver_id).countries.code.toLowerCase()}-4x3`"
+                                                            class="rounded-xs shrink-0"
+                                                        />
+                                                        <span class="truncate font-bold text-black dark:text-white">
+                                                            {{ getDriverById(row.driver_id)?.name }}
+                                                        </span>
+                                                        <span
+                                                            v-if="getDriverById(row.driver_id)?.rating"
+                                                            class="text-[10px] px-1 py-0.5 rounded text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-800 font-normal shrink-0"
+                                                        >
+                                                            {{ getDriverById(row.driver_id)?.rating }}
+                                                        </span>
+                                                    </template>
+                                                    <template v-else>
+                                                        <span class="text-gray-400 dark:text-gray-500 italic">-- Cari & Pilih Pembalap --</span>
+                                                    </template>
+                                                </div>
+                                                <div class="flex items-center gap-1 shrink-0 text-gray-400">
+                                                    <Icon name="material-symbols:search" class="text-sm" />
+                                                    <Icon name="material-symbols:keyboard-arrow-down-rounded" class="text-base" />
+                                                </div>
                                             </button>
+
+                                            <!-- Dropdown Popover with Live Search -->
+                                            <div
+                                                v-if="activeDriverSearchRowIndex === idx"
+                                                class="absolute left-0 w-72 sm:w-80 max-w-[90vw] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1.5"
+                                                :class="idx >= displayedResultsRows.length - 3 && displayedResultsRows.length > 2 ? 'bottom-full mb-1' : 'top-full mt-1'"
+                                                @click.stop
+                                            >
+                                                <!-- Search Box -->
+                                                <div class="relative flex items-center">
+                                                    <Icon name="material-symbols:search" class="absolute left-2.5 text-gray-400 text-sm pointer-events-none" />
+                                                    <input
+                                                        v-model="driverDropdownSearchQuery"
+                                                        type="text"
+                                                        autofocus
+                                                        placeholder="Ketik nama, tim, atau negara..."
+                                                        class="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-medium"
+                                                        @keydown.esc="closeDriverDropdown"
+                                                    />
+                                                    <button
+                                                        v-if="driverDropdownSearchQuery"
+                                                        type="button"
+                                                        @click="driverDropdownSearchQuery = ''"
+                                                        class="absolute right-2 text-gray-400 hover:text-red-600 transition cursor-pointer"
+                                                        title="Hapus pencarian"
+                                                    >
+                                                        <Icon name="material-symbols:close" class="text-xs" />
+                                                    </button>
+                                                </div>
+
+                                                <!-- List of Drivers -->
+                                                <div class="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-800/60 rounded-lg border border-gray-100 dark:border-slate-800">
+                                                    <!-- Option: Clear Driver -->
+                                                    <button
+                                                        type="button"
+                                                        @click="selectDriverForRow(row, null)"
+                                                        class="w-full px-2.5 py-1.5 text-left text-xs font-semibold hover:bg-red-50 dark:hover:bg-slate-800/80 text-red-600 dark:text-red-400 transition cursor-pointer flex items-center gap-1.5"
+                                                    >
+                                                        <Icon name="material-symbols:block" class="text-sm" />
+                                                        <span>Tanpa Pembalap (Kosongkan)</span>
+                                                    </button>
+
+                                                    <!-- Filtered Driver Items -->
+                                                    <button
+                                                        v-for="d in filteredDriversForDropdown"
+                                                        :key="d.id"
+                                                        type="button"
+                                                        @click="selectDriverForRow(row, d)"
+                                                        class="w-full px-2.5 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-between gap-2"
+                                                        :class="{ 'bg-red-50 dark:bg-red-950/40 font-bold': row.driver_id === d.id }"
+                                                    >
+                                                        <div class="flex items-center gap-2 min-w-0">
+                                                            <Icon
+                                                                v-if="d.countries?.code"
+                                                                :name="`flag-${d.countries.code.toLowerCase()}-4x3`"
+                                                                class="rounded-xs shrink-0 text-sm"
+                                                            />
+                                                            <div class="flex flex-col min-w-0">
+                                                                <span class="truncate text-black dark:text-white font-medium">
+                                                                    {{ d.name }}
+                                                                </span>
+                                                                <span v-if="d.teams?.name" class="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                                                                    {{ d.teams.name }}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="flex items-center gap-1 shrink-0">
+                                                            <span
+                                                                v-if="d.rating"
+                                                                class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                                                                :class="getRatingStyle(d.rating)"
+                                                            >
+                                                                {{ d.rating }}
+                                                            </span>
+                                                            <Icon
+                                                                v-if="row.driver_id === d.id"
+                                                                name="material-symbols:check"
+                                                                class="text-red-700 dark:text-red-400 text-base"
+                                                            />
+                                                        </div>
+                                                    </button>
+
+                                                    <div v-if="filteredDriversForDropdown.length === 0" class="p-3 text-center text-xs text-gray-400">
+                                                        Tidak ditemukan pembalap yang cocok
+                                                    </div>
+                                                </div>
+
+                                                <div class="flex items-center justify-between text-[10px] text-gray-400 px-1 pt-0.5">
+                                                    <span>Ditemukan: {{ filteredDriversForDropdown.length }} pembalap</span>
+                                                    <button
+                                                        type="button"
+                                                        @click="closeDriverDropdown"
+                                                        class="text-gray-500 hover:text-black dark:hover:text-white underline cursor-pointer"
+                                                    >
+                                                        Tutup (Esc)
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Backdrop to close dropdown when clicking outside -->
+                                            <div
+                                                v-if="activeDriverSearchRowIndex === idx"
+                                                class="fixed inset-0 z-40 bg-transparent"
+                                                @click="closeDriverDropdown"
+                                            />
                                         </div>
                                     </td>
 
@@ -6424,123 +6963,7 @@
                                         </div>
                                     </td>
 
-                                    <!-- Team Column with Live Search (Individual Mode) -->
-                                    <td v-if="!isTeamEvent" class="px-3 py-2.5">
-                                        <div class="relative">
-                                            <!-- Trigger Button / Display -->
-                                            <button
-                                                type="button"
-                                                @click="openTeamDropdown(idx)"
-                                                class="w-full p-2 text-left rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer flex items-center justify-between gap-1.5 transition hover:border-red-600"
-                                                :class="{ 'ring-1 ring-red-500 border-red-500': activeTeamSearchRowIndex === idx }"
-                                            >
-                                                <div class="flex items-center gap-1.5 min-w-0 overflow-hidden truncate">
-                                                    <template v-if="row.team_id && getTeamById(row.team_id)">
-                                                        <Icon name="material-symbols:groups" class="text-xs text-red-700 shrink-0" />
-                                                        <span class="truncate font-medium text-black dark:text-white">
-                                                            {{ getTeamById(row.team_id)?.name }}
-                                                        </span>
-                                                    </template>
-                                                    <template v-else>
-                                                        <span class="text-gray-400 dark:text-gray-500 italic">Tanpa Tim / Independen</span>
-                                                    </template>
-                                                </div>
-                                                <div class="flex items-center gap-1 shrink-0 text-gray-400">
-                                                    <Icon name="material-symbols:search" class="text-sm" />
-                                                    <Icon name="material-symbols:keyboard-arrow-down-rounded" class="text-base" />
-                                                </div>
-                                            </button>
 
-                                            <!-- Dropdown Popover with Live Search -->
-                                            <div
-                                                v-if="activeTeamSearchRowIndex === idx"
-                                                class="absolute left-0 w-64 sm:w-72 max-w-[90vw] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1.5"
-                                                :class="idx >= displayedResultsRows.length - 3 && displayedResultsRows.length > 2 ? 'bottom-full mb-1' : 'top-full mt-1'"
-                                                @click.stop
-                                            >
-                                                <!-- Search Box -->
-                                                <div class="relative flex items-center">
-                                                    <Icon name="material-symbols:search" class="absolute left-2.5 text-gray-400 text-sm pointer-events-none" />
-                                                    <input
-                                                        v-model="teamDropdownSearchQuery"
-                                                        type="text"
-                                                        autofocus
-                                                        placeholder="Ketik nama tim..."
-                                                        class="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-medium"
-                                                        @keydown.esc="closeTeamDropdown"
-                                                    />
-                                                    <button
-                                                        v-if="teamDropdownSearchQuery"
-                                                        type="button"
-                                                        @click="teamDropdownSearchQuery = ''"
-                                                        class="absolute right-2 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                                                        title="Hapus pencarian"
-                                                    >
-                                                        <Icon name="material-symbols:close" class="text-xs" />
-                                                    </button>
-                                                </div>
-
-                                                <!-- List of Teams -->
-                                                <div class="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-800/60 rounded-lg border border-gray-100 dark:border-slate-800">
-                                                    <!-- Option: Clear Team / Independent -->
-                                                    <button
-                                                        type="button"
-                                                        @click="selectTeamForRow(row, null)"
-                                                        class="w-full px-2.5 py-1.5 text-left text-xs font-semibold hover:bg-red-50 dark:hover:bg-slate-800/80 text-gray-600 dark:text-gray-300 transition cursor-pointer flex items-center gap-1.5"
-                                                        :class="{ 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 font-bold': !row.team_id }"
-                                                    >
-                                                        <Icon name="material-symbols:person" class="text-sm" />
-                                                        <span>Tanpa Tim / Independen</span>
-                                                    </button>
-
-                                                    <!-- Filtered Team Items -->
-                                                    <button
-                                                        v-for="t in filteredTeamsForDropdown"
-                                                        :key="t.id"
-                                                        type="button"
-                                                        @click="selectTeamForRow(row, t)"
-                                                        class="w-full px-2.5 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-between gap-2"
-                                                        :class="{ 'bg-red-50 dark:bg-red-950/40 font-bold': row.team_id === t.id }"
-                                                    >
-                                                        <div class="flex items-center gap-2 min-w-0">
-                                                            <Icon name="material-symbols:groups" class="text-xs text-red-700 shrink-0" />
-                                                            <span class="truncate text-black dark:text-white font-medium">
-                                                                {{ t.name }}
-                                                            </span>
-                                                        </div>
-
-                                                        <Icon
-                                                            v-if="row.team_id === t.id"
-                                                            name="material-symbols:check"
-                                                            class="text-red-700 dark:text-red-400 text-base shrink-0"
-                                                        />
-                                                    </button>
-
-                                                    <div v-if="filteredTeamsForDropdown.length === 0" class="p-3 text-center text-xs text-gray-400">
-                                                        Tidak ditemukan tim yang cocok
-                                                    </div>
-                                                </div>
-
-                                                <div class="flex items-center justify-between text-[10px] text-gray-400 px-1 pt-0.5">
-                                                    <span>Ditemukan: {{ filteredTeamsForDropdown.length }} tim</span>
-                                                    <button
-                                                        type="button"
-                                                        @click="closeTeamDropdown"
-                                                        class="text-gray-500 hover:text-black dark:hover:text-white underline cursor-pointer"
-                                                    >
-                                                        Tutup (Esc)
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <!-- Backdrop to close dropdown when clicking outside -->
-                                            <div
-                                                v-if="activeTeamSearchRowIndex === idx"
-                                                class="fixed inset-0 z-40 bg-transparent"
-                                                @click="closeTeamDropdown"
-                                            />
-                                        </div>
-                                    </td>
 
                                     <!-- Status Column -->
                                     <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">
@@ -6577,7 +7000,7 @@
                                         <input
                                             v-model="row.total_time"
                                             type="text"
-                                            :placeholder="selectedSessionType === 'qualifying' ? (idx === 0 ? '1:23.456' : '0.123') : '+5.123s'"
+                                            :placeholder="selectedSessionType === 'qualifying' ? (idx === 0 ? '1:23.456' : '0.123') : '0.123'"
                                             :title="selectedSessionType === 'qualifying' ? 'Catatan Waktu Kualifikasi atau Selisih Gap' : 'Selisih Gap atau Total Waktu'"
                                             class="w-full p-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
                                         />
@@ -6585,25 +7008,18 @@
 
                                     <!-- Penalty Column -->
                                     <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">
-                                        <div class="flex items-center justify-center gap-1">
+                                        <div class="flex items-center justify-center">
                                             <input
-                                                :id="`pen-${idx}`"
-                                                v-model="row.has_penalty"
-                                                type="checkbox"
-                                                class="w-4 h-4 accent-red-700 rounded cursor-pointer shrink-0"
-                                                title="Ada Penalti"
+                                                v-model="row.penalty_time_sec"
+                                                type="text"
+                                                placeholder="0.000"
+                                                @blur="formatPenaltyOnBlur(row)"
+                                                title="Penalti dalam detik (contoh: 10.000)"
+                                                class="w-full max-w-[85px] p-1.5 text-xs text-center rounded-lg border font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
+                                                :class="row.penalty_time_sec && Number(row.penalty_time_sec) > 0
+                                                    ? 'border-rose-400 bg-rose-50 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200'
+                                                    : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white'"
                                             />
-                                            <div v-if="row.has_penalty" class="flex items-center gap-0.5">
-                                                <input
-                                                    v-model="row.penalty_time_sec"
-                                                    type="number"
-                                                    step="any"
-                                                    placeholder="0"
-                                                    title="Waktu Penalti"
-                                                    class="w-12 p-1 text-xs rounded-md border border-rose-400 bg-rose-50 dark:bg-rose-950 text-rose-900 dark:text-rose-200 text-center font-bold focus:outline-none"
-                                                />
-                                                <span class="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">detik</span>
-                                            </div>
                                         </div>
                                     </td>
 
@@ -6933,15 +7349,27 @@
                                 {{ standingsSummary.scoredRounds }}/{{ standingsSummary.rounds }} ronde ada hasil
                             </span>
                         </div>
-                        <button
-                            @click="handleRecalculateChampionship(false)"
-                            :disabled="recalculating"
-                            class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                            <Icon v-if="recalculating" name="material-symbols:refresh" class="animate-spin text-base" />
-                            <Icon v-else name="material-symbols:calculate" class="text-base" />
-                            <span>Hitung Ulang Klasemen</span>
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button
+                                @click="handleRecalculateAllChampionships"
+                                :disabled="recalculating || recalculatingAll"
+                                class="px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                                title="Hitung ulang semua championship di filter ini"
+                            >
+                                <Icon v-if="recalculatingAll" name="material-symbols:refresh" class="animate-spin text-base" />
+                                <Icon v-else name="material-symbols:sync" class="text-base" />
+                                <span>Hitung Ulang Semua ({{ filteredChampionships.length }})</span>
+                            </button>
+                            <button
+                                @click="handleRecalculateChampionship(false)"
+                                :disabled="recalculating || recalculatingAll"
+                                class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                            >
+                                <Icon v-if="recalculating" name="material-symbols:refresh" class="animate-spin text-base" />
+                                <Icon v-else name="material-symbols:calculate" class="text-base" />
+                                <span>Hitung Ulang Klasemen</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -7015,6 +7443,7 @@
                                         <th class="px-3 py-2.5 text-left font-bold whitespace-nowrap">Jadwal / Ronde</th>
                                         <th class="px-3 py-2.5 text-left font-bold whitespace-nowrap">Sesi</th>
                                         <th class="px-3 py-2.5 text-left font-bold whitespace-nowrap">Sistem Poin</th>
+                                        <th class="px-3 py-2.5 text-left font-bold whitespace-nowrap">Mode Poin</th>
                                         <th class="px-3 py-2.5 text-center font-bold whitespace-nowrap">Pengali</th>
                                         <th class="px-3 py-2.5 text-center font-bold whitespace-nowrap">Hasil</th>
                                         <th class="px-3 py-2.5 text-center font-bold whitespace-nowrap">Aksi</th>
@@ -7044,7 +7473,7 @@
                                                         :name="`flag-${round.schedule.country.toLowerCase()}-4x3`"
                                                         class="rounded-sm shrink-0"
                                                     />
-                                                    <span>R{{ round.schedule?.round || '?' }} — {{ round.schedule?.circuit || 'TBA' }}</span>
+                                                    <span>{{ formatRoundDisplay(round.schedule?.round) }} — {{ round.schedule?.circuit || 'TBA' }}</span>
                                                     <span>•</span>
                                                     <span>{{ formatDateOnly(round.schedule?.date) }}</span>
                                                 </div>
@@ -7076,6 +7505,20 @@
                                             <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
                                                 {{ summarizePointsSystem(pointsSystemsMapLocal.get(round.points_system_id) || {}) }}
                                             </p>
+                                        </td>
+                                        <td class="px-3 py-2.5">
+                                            <div class="relative min-w-[130px]">
+                                                <select
+                                                    :value="round.scoring_mode || 'auto'"
+                                                    @change="updateRoundConfig(round, 'scoring_mode', $event.target.value)"
+                                                    class="w-full p-1.5 pr-7 appearance-none rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                                                >
+                                                    <option value="auto">Auto (Per Kelas)</option>
+                                                    <option value="overall">Overall</option>
+                                                    <option value="in_class">Per Kelas</option>
+                                                </select>
+                                                <Icon name="material-symbols:keyboard-arrow-down-rounded" class="absolute right-1.5 top-2 text-sm text-gray-400 pointer-events-none" />
+                                            </div>
                                         </td>
                                         <td class="px-3 py-2.5 text-center">
                                             <input
@@ -9076,7 +9519,7 @@
                             <input
                                 v-model="addRoundsSearch"
                                 type="text"
-                                placeholder="Cari event / sirkuit / ronde..."
+                                placeholder="Cari event / grup / sirkuit / tanggal / ronde / sesi..."
                                 class="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500"
                             />
                             <Icon name="material-symbols:search" class="absolute left-3 top-3 text-base text-gray-400" />
@@ -9116,7 +9559,7 @@
 
                     <div v-else class="max-h-80 overflow-y-auto flex flex-col gap-1.5 p-1">
                         <button
-                            v-for="opt in availableRoundsToAdd"
+                            v-for="opt in availableRoundsToAdd.slice(0, addRoundsDisplayLimit)"
                             :key="opt.key"
                             type="button"
                             @click="toggleRoundSelection(opt.key)"
@@ -9143,7 +9586,10 @@
                                     </span>
                                 </div>
                                 <div class="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                                    <span>R{{ opt.schedule.round || '?' }} — {{ opt.schedule.circuit || 'TBA' }}</span>
+                                    <span v-if="opt.schedule.group" class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">
+                                        Grup {{ opt.schedule.group }}
+                                    </span>
+                                    <span>{{ formatRoundDisplay(opt.schedule.round) }} — {{ opt.schedule.circuit || 'TBA' }}</span>
                                     <span>•</span>
                                     <span>{{ formatDateOnly(opt.schedule.date) }}</span>
                                 </div>
@@ -9156,6 +9602,14 @@
                             >
                                 {{ opt.sessionLabel }}
                             </span>
+                        </button>
+                        <button
+                            v-if="availableRoundsToAdd.length > addRoundsDisplayLimit"
+                            type="button"
+                            @click="addRoundsDisplayLimit += 80"
+                            class="py-2.5 px-4 text-center text-xs font-bold text-red-700 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 bg-gray-50 hover:bg-gray-100 dark:bg-slate-900 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                        >
+                            Tampilkan lebih banyak (+80 sesi dari {{ availableRoundsToAdd.length }})...
                         </button>
                     </div>
 

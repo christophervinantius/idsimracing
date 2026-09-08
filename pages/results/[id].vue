@@ -165,7 +165,7 @@
     const { data: champEvents } = await useAsyncData(`schedule-champ-events-${scheduleId.value}`, async () => {
         if (!scheduleId.value) return []
         try {
-            const { data, error } = await $supabase
+            let { data, error } = await $supabase
                 .from("championship_events")
                 .select(`
                     id,
@@ -174,6 +174,7 @@
                     session_type,
                     points_system_id,
                     points_multiplier,
+                    scoring_mode,
                     points_system:points_systems (
                         id,
                         name,
@@ -189,6 +190,35 @@
                     )
                 `)
                 .eq("schedule_id", scheduleId.value)
+
+            if (error && (error.message?.includes("scoring_mode") || error.code === "PGRST204" || error.code === "42703")) {
+                const retry = await $supabase
+                    .from("championship_events")
+                    .select(`
+                        id,
+                        championship_id,
+                        schedule_id,
+                        session_type,
+                        points_system_id,
+                        points_multiplier,
+                        points_system:points_systems (
+                            id,
+                            name,
+                            points_system_rules (
+                                position,
+                                points
+                            ),
+                            points_bonuses (
+                                bonus_type,
+                                points,
+                                requires_classification
+                            )
+                        )
+                    `)
+                    .eq("schedule_id", scheduleId.value)
+                data = retry.data
+                error = retry.error
+            }
 
             if (error) {
                 console.warn("Supabase champ events fetch error:", error)
@@ -614,9 +644,10 @@
         })
 
         const inClassGridMap = new Map() // item -> inClassGridPosition
+        const isFirstRaceSession = !activeSessionTab.value || activeSessionTab.value === 'race' || activeSessionTab.value === 'race_1' || activeSessionTab.value === 'race1'
         entriesByClass.forEach((classItems) => {
             const itemsWithStart = classItems.map(({ item, idx }) => {
-                const qRes = item.entry.results?.find(r => r.session_type === 'qualifying')
+                const qRes = isFirstRaceSession ? item.entry.results?.find(r => r.session_type === 'qualifying') : null
                 const qScoring = qRes ? Number(qRes.scoring_position) : null
                 const qClassified = qRes ? Number(qRes.classified_position) : null
                 const rawGrid = Number(item.result.grid_position) || null
@@ -822,7 +853,7 @@
                 bestLapMs,
                 bestLap: bestLapMs > 0 ? formatLapTime(bestLapMs) : "-",
                 isFastestLap: isFastest,
-                isPole: (effectiveGridPos === 1) || Number(result.grid_position) === 1,
+                isPole: Number(result.grid_position) === 1,
                 qualifyingLapTime,
                 gap,
                 classId,
@@ -877,6 +908,9 @@
         return activeSessionTab.value === 'q' || activeSessionTab.value === 'qualifying'
     })
 
+    // Progression column hidden for now
+    const showProgressionColumn = false
+
     const hasPointsColumn = computed(() => {
         if (isQualifyingSession.value) return false
         if (isTeamSession.value) return true
@@ -920,9 +954,7 @@
         return (availableClasses.value?.length || 0) > 1
     })
 
-    const hasNumberColumn = computed(() => {
-        return parsedRows.value?.some(r => r && r.carNumber) || false
-    })
+    const hasNumberColumn = false
 
     watch(availableClasses, (classes) => {
         if (classes && classes.length > 0) {
@@ -970,12 +1002,6 @@
         if (!pole && rows.length > 0) {
             if (isQualifyingSession.value) {
                 pole = rows[0]
-            } else {
-                const withGrid = rows.filter(r => Number(r.gridPosition) > 0)
-                if (withGrid.length > 0) {
-                    withGrid.sort((a, b) => Number(a.gridPosition) - Number(b.gridPosition))
-                    pole = withGrid[0]
-                }
             }
         }
 
@@ -1399,7 +1425,7 @@
                                 <th class="py-2.5 px-2 lg:px-4 text-center w-11 min-w-[44px] max-w-[44px]">{{ $t('position') }}</th>
                                 <th class="py-2.5 px-2 lg:px-3 text-center w-14 min-w-[52px] max-w-[52px]">{{ $t('carNumber') || 'No.' }}</th>
                                 <th class="py-2.5 px-3 lg:px-4 min-w-[160px]">{{ $t('team') || 'Tim' }}</th>
-                                <th v-if="!isQualifyingSession" class="py-2.5 px-2 text-center min-w-[50px]" :title="$t('progressionTooltip') || 'Perubahan Posisi (Start vs Finish)'">{{ $t('progression') }}</th>
+                                <th v-if="showProgressionColumn && !isQualifyingSession" class="py-2.5 px-2 text-center min-w-[50px]" :title="$t('progressionTooltip') || 'Perubahan Posisi (Start vs Finish)'">{{ $t('progression') }}</th>
                                 <th v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('laps') }}</th>
                                 <th class="py-2.5 px-3 lg:px-4 text-center min-w-[90px]" :class="isQualifyingSession ? 'whitespace-nowrap' : ''">{{ isQualifyingSession ? $t('fastestLapGap') : $t('timeGap') }}</th>
                                 <th v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('penalty') }}</th>
@@ -1409,9 +1435,7 @@
                             <tr v-else>
                                 <th class="py-2.5 px-2 lg:px-4 text-center w-11 min-w-[44px] max-w-[44px]">{{ $t('position') }}</th>
                                 <th class="py-2.5 px-3 lg:px-4 text-left min-w-[150px] lg:min-w-[180px]">{{ $t('driver') }}</th>
-                                <th v-if="hasNumberColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[50px] hidden md:table-cell">{{ $t('carNumber') }}</th>
-                                <th class="py-2.5 px-3 lg:px-4 min-w-[120px] lg:min-w-[150px]">{{ $t('team') }}</th>
-                                <th v-if="!isQualifyingSession" class="py-2.5 px-2 text-center min-w-[50px]" :title="$t('progressionTooltip') || 'Perubahan Posisi (Start vs Finish)'">{{ $t('progression') }}</th>
+                                <th v-if="showProgressionColumn && !isQualifyingSession" class="py-2.5 px-2 text-center min-w-[50px]" :title="$t('progressionTooltip') || 'Perubahan Posisi (Start vs Finish)'">{{ $t('progression') }}</th>
                                 <th v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('laps') }}</th>
                                 <th class="py-2.5 px-3 lg:px-4 text-center min-w-[90px]" :class="isQualifyingSession ? 'whitespace-nowrap' : ''">{{ isQualifyingSession ? $t('fastestLapGap') : $t('timeGap') }}</th>
                                 <th v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('penalty') }}</th>
@@ -1446,34 +1470,34 @@
                                      </td>
 
                                      <!-- Progression (+/-) -->
-                                     <td v-if="!isQualifyingSession" class="py-2.5 px-2 text-center text-xs lg:text-sm">
+                                     <td v-if="showProgressionColumn && !isQualifyingSession" class="py-2.5 px-2 text-center text-sm lg:text-base">
                                          <div
                                              v-if="item.posDiff !== null && item.gridPosition > 0"
-                                             class="inline-flex items-center justify-center gap-0.5 font-bold"
+                                             class="inline-flex items-center justify-center gap-0.5 font-bold mx-auto text-center"
                                              :title="`Start P${item.gridPosition} → Finish P${hasMulticlass ? (item.classPosition || (rowIdx + 1)) : item.position} (${item.posDiff > 0 ? '+' + item.posDiff : (item.posDiff < 0 ? item.posDiff : '=')})`"
                                          >
                                              <span
                                                  v-if="item.posDiff > 0"
-                                                 class="inline-flex items-center text-emerald-600 dark:text-emerald-400 font-bold"
+                                                 class="inline-flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold"
                                              >
-                                                 <Icon name="material-symbols:arrow-drop-up" class="text-base lg:text-lg -mr-0.5" />
+                                                 <Icon name="material-symbols:arrow-drop-up" class="text-lg lg:text-xl -mr-0.5" />
                                                  <span>{{ item.posDiff }}</span>
                                              </span>
                                              <span
                                                  v-else-if="item.posDiff < 0"
-                                                 class="inline-flex items-center text-rose-600 dark:text-rose-400 font-bold"
+                                                 class="inline-flex items-center justify-center text-rose-600 dark:text-rose-400 font-bold"
                                              >
-                                                 <Icon name="material-symbols:arrow-drop-down" class="text-base lg:text-lg -mr-0.5" />
+                                                 <Icon name="material-symbols:arrow-drop-down" class="text-lg lg:text-xl -mr-0.5" />
                                                  <span>{{ Math.abs(item.posDiff) }}</span>
                                              </span>
                                              <span
                                                  v-else
-                                                 class="inline-flex items-center text-gray-400 dark:text-gray-500 font-bold"
+                                                 class="inline-flex items-center justify-center text-gray-400 dark:text-gray-500 font-bold"
                                              >
-                                                 <Icon name="material-symbols:remove" class="text-xs lg:text-sm" />
+                                                 <Icon name="material-symbols:remove" class="text-sm lg:text-base" />
                                              </span>
                                          </div>
-                                         <span v-else class="text-gray-400 text-xs">-</span>
+                                         <span v-else class="text-gray-400 inline-block text-center text-sm lg:text-base">-</span>
                                      </td>
 
                                      <!-- Laps -->
@@ -1527,77 +1551,49 @@
                                          {{ hasMulticlass ? (item.classPosition || (rowIdx + 1)) : item.position }}
                                      </td>
 
-                                     <!-- Driver / Team -->
+                                     <!-- Driver -->
                                      <td class="py-2.5 px-3 lg:px-4 whitespace-nowrap">
-                                         <div class="text-sm lg:text-base flex flex-col leading-snug">
-                                             <div class="flex items-center gap-1.5 flex-nowrap">
-                                                 <template v-if="item.driversList && item.driversList.length > 0">
-                                                     <div v-for="(d, dIdx) in item.driversList" :key="d.id || dIdx" class="flex items-center gap-1.5 shrink-0">
-                                                         <Icon
-                                                             v-if="getDriverCountryCode(d.country || d)"
-                                                             :name="`flag-${getDriverCountryCode(d.country || d)}-4x3`"
-                                                             mode="svg"
-                                                             class="w-4 h-3 lg:w-4.5 lg:h-3.5 rounded-xs shadow-xs shrink-0"
-                                                         />
-                                                         <span class="font-bold">{{ d.name }}</span>
-                                                         <span v-if="dIdx < item.driversList.length - 1" class="text-gray-400 font-normal">/</span>
-                                                     </div>
-                                                 </template>
-                                                 <template v-else>
-                                                     <Icon
-                                                         v-if="getDriverCountryCode(item.nation || item.driverCountry)"
-                                                         :name="`flag-${getDriverCountryCode(item.nation || item.driverCountry)}-4x3`"
-                                                         mode="svg"
-                                                         class="w-4 h-3 lg:w-4.5 lg:h-3.5 rounded-xs shadow-xs shrink-0"
-                                                     />
-                                                     <span v-for="(name, nIdx) in (item.driverNames && item.driverNames.length ? item.driverNames : [item.driverName])" :key="nIdx" class="font-bold shrink-0">
-                                                         {{ name }}
-                                                         <span v-if="nIdx < (item.driverNames?.length || 1) - 1" class="text-gray-400 font-normal">/</span>
-                                                     </span>
-                                                 </template>
-                                             </div>
+                                         <div class="text-sm lg:text-base flex items-center gap-1.5 flex-nowrap leading-snug">
+                                             <Icon
+                                                 v-if="getDriverCountryCode(item.driverCountry || item.nation)"
+                                                 :name="`flag-${getDriverCountryCode(item.driverCountry || item.nation)}-4x3`"
+                                                 mode="svg"
+                                                 class="w-4 h-3 lg:w-4.5 lg:h-3.5 rounded-xs shadow-xs shrink-0"
+                                             />
+                                             <span class="font-bold">{{ item.driverName }}</span>
                                          </div>
                                      </td>
 
-                                     <!-- Number -->
-                                     <td v-if="hasNumberColumn" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base hidden md:table-cell">
-                                         {{ item.carNumber || '-' }}
-                                     </td>
-
-                                     <!-- Team -->
-                                     <td class="py-2.5 px-3 lg:px-4 text-sm lg:text-base whitespace-nowrap">
-                                         {{ item.teamName || item.team }}
-                                     </td>
 
                                      <!-- Progression (+/-) -->
-                                     <td v-if="!isQualifyingSession" class="py-2.5 px-2 text-center text-xs lg:text-sm">
+                                     <td v-if="showProgressionColumn && !isQualifyingSession" class="py-2.5 px-2 text-center text-sm lg:text-base">
                                          <div
                                              v-if="item.posDiff !== null && item.gridPosition > 0"
-                                             class="inline-flex items-center justify-center gap-0.5 font-bold"
+                                             class="inline-flex items-center justify-center gap-0.5 font-bold mx-auto text-center"
                                              :title="`Start P${item.gridPosition} → Finish P${hasMulticlass ? (item.classPosition || (rowIdx + 1)) : item.position} (${item.posDiff > 0 ? '+' + item.posDiff : (item.posDiff < 0 ? item.posDiff : '=')})`"
                                          >
                                              <span
                                                  v-if="item.posDiff > 0"
-                                                 class="inline-flex items-center text-emerald-600 dark:text-emerald-400 font-bold"
+                                                 class="inline-flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold"
                                              >
-                                                 <Icon name="material-symbols:arrow-drop-up" class="text-base lg:text-lg -mr-0.5" />
+                                                 <Icon name="material-symbols:arrow-drop-up" class="text-lg lg:text-xl -mr-0.5" />
                                                  <span>{{ item.posDiff }}</span>
                                              </span>
                                              <span
                                                  v-else-if="item.posDiff < 0"
-                                                 class="inline-flex items-center text-rose-600 dark:text-rose-400 font-bold"
+                                                 class="inline-flex items-center justify-center text-rose-600 dark:text-rose-400 font-bold"
                                              >
-                                                 <Icon name="material-symbols:arrow-drop-down" class="text-base lg:text-lg -mr-0.5" />
+                                                 <Icon name="material-symbols:arrow-drop-down" class="text-lg lg:text-xl -mr-0.5" />
                                                  <span>{{ Math.abs(item.posDiff) }}</span>
                                              </span>
                                              <span
                                                  v-else
-                                                 class="inline-flex items-center text-gray-400 dark:text-gray-500 font-bold"
+                                                 class="inline-flex items-center justify-center text-gray-400 dark:text-gray-500 font-bold"
                                              >
-                                                 <Icon name="material-symbols:remove" class="text-xs lg:text-sm" />
+                                                 <Icon name="material-symbols:remove" class="text-sm lg:text-base" />
                                              </span>
                                          </div>
-                                         <span v-else class="text-gray-400 text-xs">-</span>
+                                         <span v-else class="text-gray-400 inline-block text-center text-sm lg:text-base">-</span>
                                      </td>
 
                                      <!-- Laps -->

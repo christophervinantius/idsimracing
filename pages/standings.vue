@@ -118,12 +118,24 @@
         return [...map.values()].sort((a, b) => (b.season_number || 0) - (a.season_number || 0))
     })
 
-    // Available Classes for selected event + season
+    // Available Standings Types for selected event + season (independent of class so Team Standings is never hidden)
+    const availableTypes = computed(() => {
+        const set = new Set()
+        for (const champ of championships.value || []) {
+            if (selectedEventId.value && champ.seasons?.events?.id !== selectedEventId.value) continue
+            if (selectedSeasonId.value && champ.season_id !== selectedSeasonId.value) continue
+            if (champ.standings_type) set.add(champ.standings_type)
+        }
+        return [...set]
+    })
+
+    // Available Classes for selected event + season + standings type
     const availableClasses = computed(() => {
         const map = new Map()
         for (const champ of championships.value || []) {
             if (selectedEventId.value && champ.seasons?.events?.id !== selectedEventId.value) continue
             if (selectedSeasonId.value && champ.season_id !== selectedSeasonId.value) continue
+            if (selectedType.value && champ.standings_type !== selectedType.value) continue
             const key = champ.class_id ? String(champ.class_id) : "overall"
             const label = champ.classes?.name || "Overall"
             if (!map.has(key)) map.set(key, { value: key, label })
@@ -131,20 +143,7 @@
         return [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
     })
 
-    // Available Standings Types for selected event + season + class
-    const availableTypes = computed(() => {
-        const set = new Set()
-        for (const champ of championships.value || []) {
-            if (selectedEventId.value && champ.seasons?.events?.id !== selectedEventId.value) continue
-            if (selectedSeasonId.value && champ.season_id !== selectedSeasonId.value) continue
-            const key = champ.class_id ? String(champ.class_id) : "overall"
-            if (selectedClassKey.value && key !== selectedClassKey.value) continue
-            if (champ.standings_type) set.add(champ.standings_type)
-        }
-        return [...set]
-    })
-
-    // Automatic cascade of filters
+    // Automatic cascade of filters: Event -> Season -> Type -> Class
     watchEffect(() => {
         if (availableEvents.value.length > 0) {
             if (!selectedEventId.value || !availableEvents.value.some(e => e.id === selectedEventId.value)) {
@@ -166,22 +165,22 @@
     })
 
     watchEffect(() => {
-        if (availableClasses.value.length > 0) {
-            if (!selectedClassKey.value || !availableClasses.value.some(c => c.value === selectedClassKey.value)) {
-                selectedClassKey.value = availableClasses.value[0].value
-            }
-        } else {
-            selectedClassKey.value = "overall"
-        }
-    })
-
-    watchEffect(() => {
         if (availableTypes.value.length > 0) {
             if (!selectedType.value || !availableTypes.value.includes(selectedType.value)) {
                 selectedType.value = availableTypes.value[0]
             }
         } else {
             selectedType.value = "driver"
+        }
+    })
+
+    watchEffect(() => {
+        if (availableClasses.value.length > 0) {
+            if (!selectedClassKey.value || !availableClasses.value.some(c => c.value === selectedClassKey.value)) {
+                selectedClassKey.value = availableClasses.value[0].value
+            }
+        } else {
+            selectedClassKey.value = "overall"
         }
     })
 
@@ -440,7 +439,7 @@
             }
 
             // 2. Fetch Championship Rounds
-            const { data: roundsData, error: roundsErr } = await $supabase
+            let { data: roundsData, error: roundsErr } = await $supabase
                 .from("championship_events")
                 .select(`
                     id,
@@ -449,6 +448,7 @@
                     session_type,
                     points_system_id,
                     points_multiplier,
+                    scoring_mode,
                     schedule (
                         id,
                         round,
@@ -460,6 +460,31 @@
                     )
                 `)
                 .eq("championship_id", selectedChampionshipId.value)
+
+            if (roundsErr && (roundsErr.message?.includes("scoring_mode") || roundsErr.code === "PGRST204" || roundsErr.code === "42703")) {
+                const res = await $supabase
+                    .from("championship_events")
+                    .select(`
+                        id,
+                        championship_id,
+                        schedule_id,
+                        session_type,
+                        points_system_id,
+                        points_multiplier,
+                        schedule (
+                            id,
+                            round,
+                            circuit,
+                            date,
+                            season,
+                            country,
+                            country_2
+                        )
+                    `)
+                    .eq("championship_id", selectedChampionshipId.value)
+                roundsData = res.data
+                roundsErr = res.error
+            }
 
             if (roundsErr) {
                 console.warn("Rounds fetch error:", roundsErr)
@@ -488,11 +513,7 @@
             const newMap = new Map()
 
             const matchSession = (roundType, sessType) => {
-                const rt = String(roundType || "race").toLowerCase().trim()
-                const st = String(sessType || "race").toLowerCase().trim()
-                if (rt === st) return true
-                if ((rt === "race" || rt === "race_1" || rt === "race1") && (st === "race" || st === "race_1" || st === "race1")) return true
-                return false
+                return matchSessionType(roundType, sessType)
             }
 
             for (const round of roundsData || []) {
@@ -502,16 +523,54 @@
                 const isClassChampionship = Boolean(selectedChampionship.value?.class_id)
                 const targetClassId = selectedChampionship.value?.class_id ? String(selectedChampionship.value.class_id) : null
 
+                let effectiveScoringMode = "in_class"
+                if (isClassChampionship) {
+                    effectiveScoringMode = "in_class"
+                } else if (round.scoring_mode === "overall") {
+                    effectiveScoringMode = "overall"
+                } else if (round.scoring_mode === "in_class") {
+                    effectiveScoringMode = "in_class"
+                } else {
+                    effectiveScoringMode = round.session_type === "qualifying" ? "in_class" : "overall"
+                }
+
                 const session = sessions.find(
                     s => s.schedule_id === round.schedule_id && matchSession(round.session_type, s.session_type)
                 )
 
+                let overallFastestResult = null
+                if (effectiveScoringMode === "overall" && session && session.results) {
+                    const candidatesWithTime = session.results.filter(r => (r.best_lap_ms ?? 0) > 0)
+                    if (candidatesWithTime.length > 0) {
+                        overallFastestResult = candidatesWithTime.reduce((best, cur) =>
+                            (cur.best_lap_ms < best.best_lap_ms) ? cur : best
+                        )
+                    } else {
+                        const flCandidates = session.results.filter(r => r.fastest_lap)
+                        if (flCandidates.length > 0) {
+                            overallFastestResult = flCandidates.reduce((best, cur) => {
+                                const posBest = best.classified_position ?? 9999
+                                const posCur = cur.classified_position ?? 9999
+                                return posCur < posBest ? cur : best
+                            })
+                        }
+                    }
+                }
+
                 const qualifyingSession = sessions.find(
-                    s => s.schedule_id === round.schedule_id && String(s.session_type || "").toLowerCase().trim() === "qualifying"
+                    s => s.schedule_id === round.schedule_id && matchSessionType("qualifying", s.session_type)
                 )
 
+                const isFirstRaceSession = (
+                    String(round.session_type || 'race').toLowerCase().trim() === 'race' ||
+                    String(round.session_type || '').toLowerCase().trim() === 'race_1' ||
+                    String(round.session_type || '').toLowerCase().trim() === 'race1'
+                )
+                const hasGridPositionsInSession = Boolean(session?.results?.some(r => Number(r.grid_position) > 0))
+
                 const poleKeys = new Set()
-                if (qualifyingSession) {
+                // Only fall back to qualifying if this is the first race session AND the race session has no grid positions recorded at all
+                if (qualifyingSession && isFirstRaceSession && !hasGridPositionsInSession) {
                     for (const qr of qualifyingSession.results || []) {
                         if (targetClassId && qr.class_id && String(qr.class_id) !== targetClassId) continue
                         const qpos = isClassChampionship ? (qr.scoring_position ?? qr.classified_position) : (qr.classified_position ?? qr.scoring_position)
@@ -553,11 +612,23 @@
                             }
                         }
 
+                        const isFastestLap = (effectiveScoringMode === "overall" && !isClassChampionship)
+                            ? (overallFastestResult !== null && r === overallFastestResult)
+                            : Boolean(r.fastest_lap)
+
+                        const posForScoring = effectiveScoringMode === "overall"
+                            ? (r.classified_position ?? r.scoring_position)
+                            : (r.scoring_position ?? r.classified_position)
+                        const canScorePosition = isScoringStatus(r.status) && isClassified(r) && !r.no_points
+                        const positionPoints = canScorePosition ? getPositionPoints(system, posForScoring) : 0
+
                         for (const key of entityKeys) {
-                            const isPole = poleKeys.has(key) || (isClassChampionship ? Number(r.grid_position) === 1 : (Number(r.grid_position) === 1 && Number(r.classified_position) === 1))
+                            const isPole = Number(r.grid_position) === 1 || poleKeys.has(key)
                             const pts = calculateResultPoints(system, r, {
                                 isPole,
-                                multiplier
+                                isFastestLap,
+                                multiplier,
+                                scoringMode: effectiveScoringMode
                             })
 
                             entriesMap.set(key, {
@@ -565,8 +636,10 @@
                                 classified_position: r.classified_position,
                                 status: r.status,
                                 isPole,
-                                fastest_lap: Boolean(r.fastest_lap),
+                                fastest_lap: isFastestLap,
                                 points: pts,
+                                position_points: positionPoints,
+                                no_points: Boolean(r.no_points),
                                 driver_id: r.driver_id,
                                 driver_ids: r.driver_ids,
                                 class_id: r.class_id
@@ -582,6 +655,31 @@
             }
 
             progressionMap.value = newMap
+
+            // Auto-heal: If DB standings rows were empty but rounds have results, recalculate and repopulate DB
+            if (standings.value.length === 0 && selectedChampionship.value && (roundsData || []).length > 0) {
+                const hasAnyResults = [...newMap.values()].some(v => v.hasResults)
+                if (hasAnyResults) {
+                    recalculateChampionship($supabase, selectedChampionship.value, systemsMap)
+                        .then(async (res) => {
+                            if (res.rowsWritten > 0) {
+                                const { data: healedData } = await $supabase
+                                    .from("standings")
+                                    .select(`
+                                        id, entity_type, driver_id, team_id, car_number, points, wins, podiums, position, updated_at,
+                                        drivers ( id, name, rating, country_name, countries ( code, name ), teams ( id, name ) ),
+                                        teams ( id, name )
+                                    `)
+                                    .eq("championship_id", selectedChampionshipId.value)
+                                    .order("position", { ascending: true })
+                                if (healedData && healedData.length > 0) {
+                                    standings.value = healedData
+                                }
+                            }
+                        })
+                        .catch(err => console.warn("Auto-heal recalculation:", err))
+                }
+            }
         } catch (e) {
             console.error("Standings fetch error:", e)
             standings.value = []
@@ -607,7 +705,8 @@
             return { text: "", isBlank: true, bgClass: "bg-transparent" }
         }
 
-        const entry = sessionData.entries.get(key)
+        const entry = sessionData.entries.get(key) ||
+            (entityType.value === "team" ? sessionData.entries.get(String(row.team_id)) : null)
         if (!entry) {
             return { text: "", isBlank: true, bgClass: "bg-transparent" }
         }
@@ -645,9 +744,20 @@
         }
 
         const isClassChampionship = Boolean(selectedChampionship.value?.class_id)
-        const pos = isClassChampionship
-            ? (entry.scoring_position ?? entry.classified_position)
-            : (entry.classified_position ?? entry.scoring_position)
+        let effectiveScoringMode = "in_class"
+        if (isClassChampionship) {
+            effectiveScoringMode = "in_class"
+        } else if (rnd?.scoring_mode === "overall") {
+            effectiveScoringMode = "overall"
+        } else if (rnd?.scoring_mode === "in_class") {
+            effectiveScoringMode = "in_class"
+        } else {
+            effectiveScoringMode = rnd?.session_type === "qualifying" ? "in_class" : "overall"
+        }
+
+        const pos = effectiveScoringMode === "overall"
+            ? (entry.classified_position ?? entry.scoring_position)
+            : (entry.scoring_position ?? entry.classified_position)
 
         if (pos === null || pos === undefined) {
             return { text: "-", bgClass: "bg-transparent text-gray-400" }
@@ -655,13 +765,15 @@
 
         let bgClass = "bg-blue-100 dark:bg-blue-900/40 text-blue-950 dark:text-blue-200 font-medium" // Non-points
 
-        if (pos === 1) {
+        if (entry.no_points) {
+            bgClass = "bg-black text-white font-medium"
+        } else if (pos === 1) {
             bgClass = "bg-yellow-200 dark:bg-yellow-500/80 text-yellow-950 dark:text-black font-medium"
         } else if (pos === 2) {
             bgClass = "bg-slate-300 dark:bg-slate-400 text-slate-950 dark:text-black font-medium"
         } else if (pos === 3) {
             bgClass = "bg-amber-200 dark:bg-amber-500/80 text-amber-950 dark:text-black font-medium"
-        } else if (entry.points > 0) {
+        } else if ((entry.position_points ?? 0) > 0) {
             bgClass = "bg-emerald-100 dark:bg-emerald-800/60 text-emerald-950 dark:text-emerald-100 font-medium"
         }
 
@@ -670,6 +782,7 @@
             pos,
             isPole: Boolean(entry.isPole),
             fastestLap: Boolean(entry.fastest_lap),
+            noPoints: Boolean(entry.no_points),
             bgClass
         }
     }
@@ -747,6 +860,41 @@
 
     const visibleStandings = computed(() => {
         let list = standings.value.filter(r => r.entity_type === entityType.value)
+
+        // Self-healing fallback: if the database standings table currently has 0 rows
+        // synthesize the standings rows dynamically from progressionMap so users always see results.
+        if (list.length === 0 && progressionMap.value.size > 0 && selectedChampionship.value) {
+            const synthMap = new Map()
+            for (const round of sortedRounds.value || []) {
+                const sessionData = progressionMap.value.get(round.id) ||
+                    progressionMap.value.get(`${round.schedule_id}::${round.session_type || 'race'}`) ||
+                    progressionMap.value.get(String(round.schedule_id))
+                if (!sessionData?.entries) continue
+
+                for (const [key, entry] of sessionData.entries.entries()) {
+                    const cur = synthMap.get(key) || {
+                        id: `synth_${key}`,
+                        entity_type: entityType.value,
+                        driver_id: entry.driver_id || (entityType.value === "driver" ? key : null),
+                        team_id: entityType.value === "team" ? (key.includes("::") ? Number(key.split("::")[0]) : Number(key)) : null,
+                        car_number: entityType.value === "team" && key.includes("::") ? Number(key.split("::")[1]) : null,
+                        points: 0,
+                        wins: 0,
+                        podiums: 0,
+                        position: 1
+                    }
+                    cur.points += (Number(entry.points) || 0)
+                    const pos = entry.scoring_position ?? entry.classified_position
+                    if (pos === 1) cur.wins += 1
+                    if (pos && pos <= 3) cur.podiums += 1
+                    synthMap.set(key, cur)
+                }
+            }
+            if (synthMap.size > 0) {
+                list = [...synthMap.values()]
+            }
+        }
+
         if (list.length === 0) return []
 
         // If the championship itself is already scoped to a specific class, all its standings rows belong to that class.
@@ -1027,7 +1175,7 @@
                             <th class="px-2 lg:px-4 py-2 text-center font-bold min-w-[150px] lg:min-w-[180px]">
                                 {{ entityType === 'driver' ? $t('driver') : $t('carNumber') }}
                             </th>
-                            <th class="px-2 lg:px-4 py-2 text-center font-bold min-w-[120px] lg:min-w-[150px]">
+                            <th v-if="entityType !== 'driver'" class="px-2 lg:px-4 py-2 text-center font-bold min-w-[120px] lg:min-w-[150px]">
                                 {{ $t('team') }}
                             </th>
                             <th
@@ -1108,9 +1256,8 @@
                                 </div>
                                 <span v-else>{{ row.car_number ? `${row.car_number}` : '-' }}</span>
                             </td>
-                            <td class="px-2 lg:px-4 py-2 font-medium whitespace-nowrap text-left">
-                                <span v-if="entityType === 'driver'">{{ row.drivers?.teams?.name || '-' }}</span>
-                                <span v-else>{{ row.teams?.name || '-' }}</span>
+                            <td v-if="entityType !== 'driver'" class="px-2 lg:px-4 py-2 font-medium whitespace-nowrap text-left">
+                                <span>{{ row.teams?.name || '-' }}</span>
                             </td>
                             <td
                                 v-for="rnd in sortedRounds"
@@ -1120,6 +1267,7 @@
                                 <div
                                     class="w-full h-full min-h-[36px] flex items-center justify-center font-medium px-1 select-none"
                                     :class="getMatrixCellData(row, rnd).bgClass"
+                                    :title="getMatrixCellData(row, rnd).noPoints ? 'Tanpa Poin (No points)' : ''"
                                 >
                                     <span v-if="!getMatrixCellData(row, rnd).isBlank" class="relative inline-flex items-center">
                                         <span>{{ getMatrixCellData(row, rnd).text }}</span>
