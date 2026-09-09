@@ -257,15 +257,24 @@
     )
 
     const multiclassEventIds = computed(() => {
-        const counts = new Map()
+        const classesByEvent = new Map()
         for (const c of (allEventClasses.value || [])) {
             if (c.event_id) {
-                counts.set(c.event_id, (counts.get(c.event_id) || 0) + 1)
+                if (!classesByEvent.has(c.event_id)) classesByEvent.set(c.event_id, new Set())
+                classesByEvent.get(c.event_id).add(c.name || c.id)
+            }
+        }
+        for (const st of (driverStandings.value || [])) {
+            const evId = st.championships?.seasons?.events?.id
+            const clsName = st.championships?.classes?.name
+            if (evId && clsName) {
+                if (!classesByEvent.has(evId)) classesByEvent.set(evId, new Set())
+                classesByEvent.get(evId).add(clsName)
             }
         }
         const set = new Set()
-        for (const [eventId, count] of counts.entries()) {
-            if (count > 1) {
+        for (const [eventId, classSet] of classesByEvent.entries()) {
+            if (classSet.size > 1) {
                 set.add(eventId)
             }
         }
@@ -650,20 +659,8 @@
                     })
                     : 0
 
-                const pos = res.classified_position ?? res.scoring_position
-                const status = String(res.status || "finished").toLowerCase().trim()
-                const isFinished = status === "finished" || (!status.includes("dnf") && !status.includes("dns") && !status.includes("dsq") && !status.includes("disqualified"))
-                const isWin = !isQuali && isFinished && pos === 1
-                const isPodium = !isQuali && isFinished && pos >= 1 && pos <= 3
-
-                // Progression (+/-)
-                const gridPos = Number(res.grid_position) || 0
-                const finishPos = Number(pos) || 0
-                const posDiff = (gridPos > 0 && finishPos > 0) ? (gridPos - finishPos) : null
-
                 // Resolve Multiclass & Class
                 const evId = event?.id
-                const isMulticlass = evId ? multiclassEventIds.value.has(evId) : false
                 let resolvedClass = entry.classes?.name || null
                 if (!resolvedClass && entry.class_id && allEventClasses.value) {
                     resolvedClass = allEventClasses.value.find(c => c.id === entry.class_id)?.name || null
@@ -674,7 +671,25 @@
                         resolvedClass = teamParsed.teamClass
                     }
                 }
+                const hasDifferentScoringPos = Number(res.scoring_position) > 0 &&
+                    Number(res.classified_position) > 0 &&
+                    Number(res.scoring_position) !== Number(res.classified_position)
+                const isMulticlass = (evId ? multiclassEventIds.value.has(evId) : false) || hasDifferentScoringPos
                 const raceClass = isMulticlass ? (resolvedClass || "-") : "-"
+
+                // In multiclass races, position refers to that class only (scoring_position)
+                const pos = isMulticlass
+                    ? (Number(res.scoring_position) > 0 ? Number(res.scoring_position) : Number(res.classified_position))
+                    : (Number(res.classified_position) > 0 ? Number(res.classified_position) : Number(res.scoring_position))
+                const status = String(res.status || "finished").toLowerCase().trim()
+                const isFinished = status === "finished" || (!status.includes("dnf") && !status.includes("dns") && !status.includes("dsq") && !status.includes("disqualified"))
+                const isWin = !isQuali && isFinished && pos === 1
+                const isPodium = !isQuali && isFinished && pos >= 1 && pos <= 3
+
+                // Progression (+/-)
+                const gridPos = Number(res.grid_position) || 0
+                const finishPos = Number(pos) || 0
+                const posDiff = (gridPos > 0 && finishPos > 0) ? (gridPos - finishPos) : null
 
                 list.push({
                     id: res.id,
@@ -699,6 +714,8 @@
                     teamName: entry.teams?.name || "-",
                     gridPosition: gridPos,
                     finishPosition: finishPos,
+                    overallPosition: Number(res.classified_position) || null,
+                    classPosition: Number(res.scoring_position) || null,
                     posDiff,
                     status,
                     isDnf: status === "dnf",
