@@ -329,6 +329,19 @@
         return list
     })
 
+    const isSeasonOngoing = computed(() => {
+        if (!sortedRounds.value || sortedRounds.value.length === 0) return false
+        const now = new Date()
+        return sortedRounds.value.some(rnd => {
+            const s = rnd.schedule
+            if (!s) return false
+            if (s.is_postponed) return true
+            const d = s.finish_date || s.date
+            if (!d) return true
+            return new Date(d) >= now
+        })
+    })
+
     const fetchStandings = async () => {
         if (!selectedChampionshipId.value) {
             standings.value = []
@@ -454,6 +467,8 @@
                         round,
                         circuit,
                         date,
+                        finish_date,
+                        is_postponed,
                         season,
                         country,
                         country_2
@@ -476,6 +491,8 @@
                             round,
                             circuit,
                             date,
+                            finish_date,
+                            is_postponed,
                             season,
                             country,
                             country_2
@@ -1242,7 +1259,11 @@
                             class="border-b border-slate-300 dark:border-slate-700 text-center hover:opacity-95 text-black dark:text-white bg-red-50 dark:bg-slate-950"
                         >
                             <td class="px-2 lg:px-4 py-2 font-medium">
-                                {{ row.position || '-' }}
+                                <span v-if="row.position" class="relative inline-flex items-center justify-center">
+                                    <span>{{ row.position }}</span>
+                                    <sup v-if="isSeasonOngoing" class="font-bold text-[10px] lg:text-xs ml-0.5">*</sup>
+                                </span>
+                                <span v-else>-</span>
                             </td>
                             <td class="px-2 lg:px-4 py-2 font-medium whitespace-nowrap" :class="entityType === 'driver' ? 'text-left' : 'text-center'">
                                 <div v-if="entityType === 'driver'" class="flex items-center gap-1.5">
@@ -1252,7 +1273,15 @@
                                         mode="svg"
                                         class="w-4 h-3 lg:w-4.5 lg:h-3.5 rounded-xs shadow-xs shrink-0"
                                     />
-                                    <span>{{ row.drivers?.name || '-' }}</span>
+                                    <NuxtLink
+                                        v-if="(row.driver_id || row.drivers?.id || row.drivers?.name) && (row.drivers?.name && row.drivers.name !== '-')"
+                                        :to="`/drivers/${row.driver_id || row.drivers?.id || encodeURIComponent(row.drivers.name)}`"
+                                        target="_blank"
+                                        class="hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer font-bold"
+                                    >
+                                        {{ row.drivers?.name }}
+                                    </NuxtLink>
+                                    <span v-else>{{ row.drivers?.name || '-' }}</span>
                                 </div>
                                 <span v-else>{{ row.car_number ? `${row.car_number}` : '-' }}</span>
                             </td>

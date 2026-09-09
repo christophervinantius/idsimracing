@@ -836,6 +836,7 @@
                 position: finishPos,
                 classPosition: classFinishPos,
                 isTeamEntry,
+                driverId: entry.driver_id,
                 driverName,
                 driverNames: driverNames.length > 0 ? driverNames : [driverName],
                 driversList: allDriversList,
@@ -1039,6 +1040,8 @@
         if (!fastest || !fastest.bestLap || fastest.bestLap === "-") return null
         const teamNameOnly = cleanTeamName(fastest.teamName || fastest.team || 'Team')
         return {
+            driverId: fastest.driverId || null,
+            isTeamEntry: Boolean(fastest.isTeamEntry),
             driverName: fastest.isTeamEntry
                 ? (fastest.carNumber ? `${fastest.carNumber} - ${teamNameOnly}` : teamNameOnly)
                 : fastest.driverName,
@@ -1409,7 +1412,15 @@
                     <span class="font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
                         <span>{{ $t('fastestLap') || 'Fastest Lap' }}:</span>
                     </span>
-                    <span class="font-bold text-black dark:text-white">{{ sessionFastestLap.driverName }}</span>
+                    <NuxtLink
+                        v-if="!sessionFastestLap.isTeamEntry && (sessionFastestLap.driverId || sessionFastestLap.driverName)"
+                        :to="`/drivers/${sessionFastestLap.driverId || encodeURIComponent(sessionFastestLap.driverName)}`"
+                        target="_blank"
+                        class="font-bold text-black dark:text-white hover:text-purple-700 dark:hover:text-purple-400 hover:underline cursor-pointer"
+                    >
+                        {{ sessionFastestLap.driverName }}
+                    </NuxtLink>
+                    <span v-else class="font-bold text-black dark:text-white">{{ sessionFastestLap.driverName }}</span>
                     <!-- <span class="font-bold text-black dark:text-white">—</span> -->
                     <span class="font-bold text-black dark:text-white">({{ sessionFastestLap.time }})</span>
                 </div>
@@ -1560,7 +1571,15 @@
                                                  mode="svg"
                                                  class="w-4 h-3 lg:w-4.5 lg:h-3.5 rounded-xs shadow-xs shrink-0"
                                              />
-                                             <span class="font-bold">{{ item.driverName }}</span>
+                                             <NuxtLink
+                                                 v-if="item.driverId || item.driverName"
+                                                 :to="`/drivers/${item.driverId || encodeURIComponent(item.driverName)}`"
+                                                 target="_blank"
+                                                 class="font-bold hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer"
+                                             >
+                                                 {{ item.driverName }}
+                                             </NuxtLink>
+                                             <span v-else class="font-bold">{{ item.driverName }}</span>
                                          </div>
                                      </td>
 

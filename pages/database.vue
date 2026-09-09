@@ -425,16 +425,24 @@
                         :key="driver.id"
                         class="text-center border-b border-slate-300 dark:border-slate-700 bg-red-50 dark:bg-slate-950 hover:bg-red-100 dark:hover:bg-slate-800"
                     >
-                        <td class="w-full px-2 lg:px-4 py-2 flex items-center gap-1 lg:gap-2 font-bold text-sm lg:text-base">
-                            <div v-if="driver.countries?.code">
-                                <Icon
-                                    :name="`flag-${driver.countries.code.toLowerCase()}-4x3`"
-                                    mode="svg"
-                                    class="rounded-sm lg:rounded-md"
-                                />
-                            </div>
-                            <div class="text-left">
-                                {{ driver.name }}
+                        <td class="w-5/10 px-2 lg:px-4 py-2 text-left">
+                            <div class="flex items-center gap-1 lg:gap-2 font-bold text-sm lg:text-base">
+                                <div v-if="driver.countries?.code">
+                                    <Icon
+                                        :name="`flag-${driver.countries.code.toLowerCase()}-4x3`"
+                                        mode="svg"
+                                        class="rounded-sm lg:rounded-md shrink-0"
+                                    />
+                                </div>
+                                <NuxtLink
+                                    v-if="driver.id || driver.name"
+                                    :to="`/drivers/${driver.id || encodeURIComponent(driver.name)}`"
+                                    target="_blank"
+                                    class="hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer"
+                                >
+                                    {{ driver.name }}
+                                </NuxtLink>
+                                <span v-else>{{ driver.name }}</span>
                             </div>
                         </td>
                         <td
