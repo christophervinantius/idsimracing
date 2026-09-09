@@ -1415,7 +1415,6 @@
                     <NuxtLink
                         v-if="!sessionFastestLap.isTeamEntry && (sessionFastestLap.driverId || sessionFastestLap.driverName)"
                         :to="`/drivers/${sessionFastestLap.driverId || encodeURIComponent(sessionFastestLap.driverName)}`"
-                        target="_blank"
                         class="font-bold text-black dark:text-white hover:text-purple-700 dark:hover:text-purple-400 hover:underline cursor-pointer"
                     >
                         {{ sessionFastestLap.driverName }}
@@ -1574,7 +1573,6 @@
                                              <NuxtLink
                                                  v-if="item.driverId || item.driverName"
                                                  :to="`/drivers/${item.driverId || encodeURIComponent(item.driverName)}`"
-                                                 target="_blank"
                                                  class="font-bold hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer"
                                              >
                                                  {{ item.driverName }}

@@ -264,7 +264,6 @@
             <NuxtLink
                 v-if="getStatus(date, finish_date, is_postponed) === t('finished') && id && has_result"
                 :to="`/results/${id}`"
-                target="_blank" 
                 class="text-sm lg:text-base text-white bg-red-700 hover:bg-red-800 px-2 py-1 rounded-md font-bold cursor-pointer flex items-center gap-1 shadow-sm transition"
             >
                 <span>{{ $t("viewResults") }}</span>
@@ -292,7 +291,6 @@
             <NuxtLink
                 v-if="getStatus(date, finish_date, is_postponed) !== t('finished') && id && has_result"
                 :to="`/results/${id}`"
-                target="_blank" 
                 class="text-sm lg:text-base text-white bg-red-700 hover:bg-red-800 px-2 py-1 rounded-md font-bold cursor-pointer flex items-center gap-1 shadow-sm transition"
             >
                 <span>{{ $t("viewResults") }}</span>

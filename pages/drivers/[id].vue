@@ -521,7 +521,16 @@
 
     const countryName = computed(() => {
         if (!driver.value) return ""
-        return driver.value.countries?.name || driver.value.country || ""
+        if (driver.value.countries?.name) return driver.value.countries.name
+        const raw = driver.value.country
+        if (!raw || typeof raw !== "string") return ""
+        const clean = raw.toLowerCase().trim()
+        for (const [key, val] of Object.entries(COUNTRY_MAP)) {
+            if (val.code === clean || val.abbr?.toLowerCase() === clean || key === clean) {
+                return key.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+            }
+        }
+        return raw
     })
 
     // Card background & border matching driver rating from database.vue
@@ -1068,7 +1077,7 @@
 
     const navigateToResult = (scheduleId) => {
         if (scheduleId) {
-            window.open(`/results/${scheduleId}`, '_blank')
+            navigateTo(`/results/${scheduleId}`)
         }
     }
 
@@ -1116,6 +1125,10 @@
                 </div>
 
                 <div class="flex flex-col gap-1 mt-2">
+                    <div v-if="countryName" class="text-base lg:text-lg">
+                        <span>{{ countryName }}</span>
+                    </div>
+
                     <div v-if="driver.teams?.name || driver.team" class="text-base lg:text-lg">
                         <span>{{ driver.teams?.name || driver.team }}</span>
                     </div>

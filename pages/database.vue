@@ -437,7 +437,6 @@
                                 <NuxtLink
                                     v-if="driver.id || driver.name"
                                     :to="`/drivers/${driver.id || encodeURIComponent(driver.name)}`"
-                                    target="_blank"
                                     class="hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer"
                                 >
                                     {{ driver.name }}
