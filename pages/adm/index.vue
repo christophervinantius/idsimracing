@@ -1811,17 +1811,49 @@
         reindexPositions()
     }
 
+    // Directive for auto-focusing elements when rendered (e.g. popover inputs)
+    const vFocus = {
+        mounted: (el) => {
+            el.focus()
+            if (typeof el.select === 'function' && el.type !== 'checkbox') {
+                el.select()
+            }
+        }
+    }
+
     const activeDriverSearchRowIndex = ref(null)
     const driverDropdownSearchQuery = ref("")
+    const highlightedDriverIndex = ref(0)
 
-    const openDriverDropdown = (idx) => {
+    const openDriverDropdown = (idx, initialChar = "") => {
         activeDriverSearchRowIndex.value = idx
-        driverDropdownSearchQuery.value = ""
+        driverDropdownSearchQuery.value = initialChar
+        highlightedDriverIndex.value = initialChar ? 1 : 0
+        nextTick(() => {
+            const searchInput = document.querySelector(`[data-driver-search="${idx}"]`)
+            if (searchInput) {
+                searchInput.focus()
+                if (initialChar) {
+                    searchInput.setSelectionRange(initialChar.length, initialChar.length)
+                }
+            }
+            scrollHighlightedDriverIntoView()
+        })
     }
 
     const closeDriverDropdown = () => {
         activeDriverSearchRowIndex.value = null
         driverDropdownSearchQuery.value = ""
+        highlightedDriverIndex.value = 0
+    }
+
+    const scrollHighlightedDriverIntoView = () => {
+        nextTick(() => {
+            const el = document.querySelector(`[data-driver-option="${highlightedDriverIndex.value}"]`)
+            if (el) {
+                el.scrollIntoView({ block: 'nearest' })
+            }
+        })
     }
 
     const getDriverById = (id) => {
@@ -1844,6 +1876,17 @@
         }).slice(0, 100)
     })
 
+    const selectableDrivers = computed(() => {
+        return [
+            { id: null, name: 'Tanpa Pembalap (Kosongkan)', isClear: true },
+            ...filteredDriversForDropdown.value
+        ]
+    })
+
+    watch(driverDropdownSearchQuery, (newVal) => {
+        highlightedDriverIndex.value = (newVal && newVal.trim() && filteredDriversForDropdown.value.length > 0) ? 1 : 0
+    })
+
     const selectDriverForRow = (row, driver) => {
         row.driver_id = driver ? driver.id : ""
         onDriverSelected(row)
@@ -1853,15 +1896,37 @@
 
     const activeTeamSearchRowIndex = ref(null)
     const teamDropdownSearchQuery = ref("")
+    const highlightedTeamIndex = ref(0)
 
-    const openTeamDropdown = (idx) => {
+    const openTeamDropdown = (idx, initialChar = "") => {
         activeTeamSearchRowIndex.value = idx
-        teamDropdownSearchQuery.value = ""
+        teamDropdownSearchQuery.value = initialChar
+        highlightedTeamIndex.value = initialChar ? 1 : 0
+        nextTick(() => {
+            const searchInput = document.querySelector(`[data-team-search="${idx}"]`)
+            if (searchInput) {
+                searchInput.focus()
+                if (initialChar) {
+                    searchInput.setSelectionRange(initialChar.length, initialChar.length)
+                }
+            }
+            scrollHighlightedTeamIntoView()
+        })
     }
 
     const closeTeamDropdown = () => {
         activeTeamSearchRowIndex.value = null
         teamDropdownSearchQuery.value = ""
+        highlightedTeamIndex.value = 0
+    }
+
+    const scrollHighlightedTeamIntoView = () => {
+        nextTick(() => {
+            const el = document.querySelector(`[data-team-option="${highlightedTeamIndex.value}"]`)
+            if (el) {
+                el.scrollIntoView({ block: 'nearest' })
+            }
+        })
     }
 
     const getTeamById = (id) => {
@@ -1879,6 +1944,17 @@
         }).slice(0, 100)
     })
 
+    const selectableTeams = computed(() => {
+        return [
+            { id: null, name: 'Tanpa Tim (Kosongkan)', isClear: true },
+            ...filteredTeamsForDropdown.value
+        ]
+    })
+
+    watch(teamDropdownSearchQuery, (newVal) => {
+        highlightedTeamIndex.value = (newVal && newVal.trim() && filteredTeamsForDropdown.value.length > 0) ? 1 : 0
+    })
+
     const selectTeamForRow = (row, team) => {
         row.team_id = team ? team.id : ""
         if (selectedEntryClassId.value !== "ALL") {
@@ -1888,6 +1964,305 @@
         }
         recalculateScoringPositions()
         closeTeamDropdown()
+    }
+
+    // ==========================================
+    // GRID KEYBOARD NAVIGATION
+    // ==========================================
+    const getMaxGridCol = () => {
+        return selectedSessionType.value === 'qualifying' ? 4 : 8
+    }
+
+    const getVisibleRowIndices = () => {
+        const indices = []
+        const rows = displayedResultsRows.value
+        rows.forEach((row, idx) => {
+            const isVisible = selectedEntryClassId.value !== 'ALL' || resultsClassFilter.value === 'ALL' || row.class_id === resultsClassFilter.value
+            if (isVisible) {
+                indices.push(idx)
+            }
+        })
+        return indices
+    }
+
+    const getNextVisibleRowIndex = (currentIdx) => {
+        const visible = getVisibleRowIndices()
+        const pos = visible.indexOf(currentIdx)
+        if (pos !== -1 && pos < visible.length - 1) {
+            return visible[pos + 1]
+        }
+        return currentIdx
+    }
+
+    const getPrevVisibleRowIndex = (currentIdx) => {
+        const visible = getVisibleRowIndices()
+        const pos = visible.indexOf(currentIdx)
+        if (pos > 0) {
+            return visible[pos - 1]
+        }
+        return currentIdx
+    }
+
+    const focusCell = (rowIdx, colIdx, selectText = true) => {
+        nextTick(() => {
+            const el = document.querySelector(`[data-grid-row="${rowIdx}"][data-grid-col="${colIdx}"]`)
+            if (el) {
+                el.focus()
+                if (selectText && typeof el.select === 'function' && el.type !== 'checkbox') {
+                    el.select()
+                }
+            }
+        })
+    }
+
+    const handleResultsGridKeydown = (rowIdx, colIdx, event) => {
+        const maxCol = getMaxGridCol()
+        const target = event.target
+        const isTextInput = target && (target.tagName === 'INPUT') && (target.type === 'text' || target.type === 'number')
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            const prevRow = getPrevVisibleRowIndex(rowIdx)
+            focusCell(prevRow, colIdx, true)
+            return
+        }
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            const nextRow = getNextVisibleRowIndex(rowIdx)
+            focusCell(nextRow, colIdx, true)
+            return
+        }
+
+        if (event.key === 'Enter') {
+            event.preventDefault()
+            const nextRow = getNextVisibleRowIndex(rowIdx)
+            focusCell(nextRow, colIdx, true)
+            return
+        }
+
+        if (event.key === 'ArrowLeft') {
+            let canMoveLeft = true
+            if (isTextInput && target.selectionStart !== null && target.selectionEnd !== null) {
+                const isAllSelected = target.selectionStart === 0 && target.selectionEnd === String(target.value || '').length
+                const isAtStart = target.selectionStart === 0 && target.selectionEnd === 0
+                canMoveLeft = isAllSelected || isAtStart
+            }
+            if (canMoveLeft) {
+                event.preventDefault()
+                if (colIdx > 0) {
+                    focusCell(rowIdx, colIdx - 1, true)
+                } else {
+                    const prevRow = getPrevVisibleRowIndex(rowIdx)
+                    if (prevRow !== rowIdx) {
+                        focusCell(prevRow, maxCol, true)
+                    }
+                }
+            }
+            return
+        }
+
+        if (event.key === 'ArrowRight') {
+            let canMoveRight = true
+            if (isTextInput && target.selectionStart !== null && target.selectionEnd !== null) {
+                const valLen = String(target.value || '').length
+                const isAllSelected = target.selectionStart === 0 && target.selectionEnd === valLen
+                const isAtEnd = target.selectionStart === valLen && target.selectionEnd === valLen
+                canMoveRight = isAllSelected || isAtEnd
+            }
+            if (canMoveRight) {
+                event.preventDefault()
+                if (colIdx < maxCol) {
+                    focusCell(rowIdx, colIdx + 1, true)
+                } else {
+                    const nextRow = getNextVisibleRowIndex(rowIdx)
+                    if (nextRow !== rowIdx) {
+                        focusCell(nextRow, 0, true)
+                    }
+                }
+            }
+            return
+        }
+    }
+
+    const handleDriverCellKeydown = (idx, event) => {
+        if (activeDriverSearchRowIndex.value === idx) return
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            const prevRow = getPrevVisibleRowIndex(idx)
+            focusCell(prevRow, 1, false)
+            return
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            const nextRow = getNextVisibleRowIndex(idx)
+            focusCell(nextRow, 1, false)
+            return
+        }
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault()
+            focusCell(idx, 0, true)
+            return
+        }
+        if (event.key === 'ArrowRight') {
+            event.preventDefault()
+            focusCell(idx, 2, false)
+            return
+        }
+        if (event.key === 'Enter' || event.key === ' ' || event.key === 'F2') {
+            event.preventDefault()
+            openDriverDropdown(idx)
+            return
+        }
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+            event.preventDefault()
+            const row = displayedResultsRows.value[idx]
+            if (row) selectDriverForRow(row, null)
+            return
+        }
+        if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+            event.preventDefault()
+            openDriverDropdown(idx, event.key)
+            return
+        }
+    }
+
+    const handleDriverSearchKeydown = (row, idx, event) => {
+        const list = selectableDrivers.value
+        if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            if (highlightedDriverIndex.value < list.length - 1) {
+                highlightedDriverIndex.value++
+                scrollHighlightedDriverIntoView()
+            }
+            return
+        }
+        if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            if (highlightedDriverIndex.value > 0) {
+                highlightedDriverIndex.value--
+                scrollHighlightedDriverIntoView()
+            }
+            return
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault()
+            const selected = list[highlightedDriverIndex.value]
+            if (selected) {
+                selectDriverForRow(row, selected.isClear ? null : selected)
+            }
+            closeDriverDropdown()
+            const nextRow = getNextVisibleRowIndex(idx)
+            focusCell(nextRow, 1, false)
+            return
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault()
+            closeDriverDropdown()
+            focusCell(idx, 1, false)
+            return
+        }
+        if (event.key === 'Tab') {
+            event.preventDefault()
+            const selected = list[highlightedDriverIndex.value]
+            if (selected && driverDropdownSearchQuery.value.trim()) {
+                selectDriverForRow(row, selected.isClear ? null : selected)
+            }
+            closeDriverDropdown()
+            focusCell(idx, event.shiftKey ? 0 : 2, true)
+            return
+        }
+    }
+
+    const handleTeamCellKeydown = (idx, event) => {
+        if (activeTeamSearchRowIndex.value === idx) return
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            const prevRow = getPrevVisibleRowIndex(idx)
+            focusCell(prevRow, 1, false)
+            return
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            const nextRow = getNextVisibleRowIndex(idx)
+            focusCell(nextRow, 1, false)
+            return
+        }
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault()
+            focusCell(idx, 0, true)
+            return
+        }
+        if (event.key === 'ArrowRight') {
+            event.preventDefault()
+            focusCell(idx, 2, false)
+            return
+        }
+        if (event.key === 'Enter' || event.key === ' ' || event.key === 'F2') {
+            event.preventDefault()
+            openTeamDropdown(idx)
+            return
+        }
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+            event.preventDefault()
+            const row = displayedResultsRows.value[idx]
+            if (row) selectTeamForRow(row, null)
+            return
+        }
+        if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+            event.preventDefault()
+            openTeamDropdown(idx, event.key)
+            return
+        }
+    }
+
+    const handleTeamSearchKeydown = (row, idx, event) => {
+        const list = selectableTeams.value
+        if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            if (highlightedTeamIndex.value < list.length - 1) {
+                highlightedTeamIndex.value++
+                scrollHighlightedTeamIntoView()
+            }
+            return
+        }
+        if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            if (highlightedTeamIndex.value > 0) {
+                highlightedTeamIndex.value--
+                scrollHighlightedTeamIntoView()
+            }
+            return
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault()
+            const selected = list[highlightedTeamIndex.value]
+            if (selected) {
+                selectTeamForRow(row, selected.isClear ? null : selected)
+            }
+            closeTeamDropdown()
+            const nextRow = getNextVisibleRowIndex(idx)
+            focusCell(nextRow, 1, false)
+            return
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault()
+            closeTeamDropdown()
+            focusCell(idx, 1, false)
+            return
+        }
+        if (event.key === 'Tab') {
+            event.preventDefault()
+            const selected = list[highlightedTeamIndex.value]
+            if (selected && teamDropdownSearchQuery.value.trim()) {
+                selectTeamForRow(row, selected.isClear ? null : selected)
+            }
+            closeTeamDropdown()
+            focusCell(idx, event.shiftKey ? 0 : 2, true)
+            return
+        }
     }
 
     const onDriverSelected = (row) => {
@@ -2252,6 +2627,12 @@
     const openTopDriverSearch = (type, classId) => {
         activeTopDriverSearch.value = { type, classId: classId || '' }
         topDriverSearchQuery.value = ""
+        nextTick(() => {
+            const input = document.querySelector(`[data-top-driver-search]`)
+            if (input) {
+                input.focus()
+            }
+        })
     }
 
     const closeTopDriverSearch = () => {
@@ -2439,18 +2820,40 @@
         }
     }
 
+    const parsePenaltyToSec = (val) => {
+        if (val === null || val === undefined || String(val).trim() === '') return null
+        const cleaned = String(val).trim().replace(/^(\+)/, "").replace(/s$/i, '').replace(/detik$/i, '').trim()
+        if (!cleaned || cleaned === "-") return null
+
+        if (cleaned.includes(':')) {
+            const ms = parseTimeToMs(cleaned)
+            return ms !== null ? ms / 1000 : null
+        }
+        const num = parseFloat(cleaned)
+        return (!isNaN(num) && num > 0) ? num : null
+    }
+
+    const formatPenaltyDisplay = (sec) => {
+        if (sec === null || sec === undefined || isNaN(sec) || sec <= 0) return ''
+        if (sec < 60) {
+            return sec.toFixed(3)
+        }
+        const hours = Math.floor(sec / 3600)
+        const minutes = Math.floor((sec % 3600) / 60)
+        const seconds = sec % 60
+        const secPad = seconds.toFixed(3).padStart(6, '0')
+        if (hours > 0) {
+            const minPad = String(minutes).padStart(2, '0')
+            return `${hours}:${minPad}:${secPad}`
+        }
+        return `${minutes}:${secPad}`
+    }
+
     const formatPenaltyOnBlur = (row) => {
         if (!row) return
-        const val = row.penalty_time_sec
-        if (val === null || val === undefined || String(val).trim() === '') {
-            row.penalty_time_sec = ''
-            row.has_penalty = false
-            return
-        }
-        const cleaned = String(val).trim().replace(/s$/i, '').replace(/detik$/i, '').trim()
-        const num = parseFloat(cleaned)
-        if (!isNaN(num) && num > 0) {
-            row.penalty_time_sec = num.toFixed(3)
+        const sec = parsePenaltyToSec(row.penalty_time_sec)
+        if (sec !== null && sec > 0) {
+            row.penalty_time_sec = formatPenaltyDisplay(sec)
             row.has_penalty = true
         } else {
             row.penalty_time_sec = ''
@@ -2554,7 +2957,7 @@
                 const mapped = validEntries.map(e => {
                     const res = e.results.find(r => r.session_type === selectedSessionType.value || (!r.session_type && selectedSessionType.value === 'race')) || {}
                     const penSec = (res.penalty_time_ns && Number(res.penalty_time_ns) > 0)
-                        ? (Number(res.penalty_time_ns) / 1000000000).toFixed(3)
+                        ? formatPenaltyDisplay(Number(res.penalty_time_ns) / 1000000000)
                         : (res.has_penalty ? "0.000" : "")
                     const leadDriverId = isTeamEvent.value ? "" : (e.driver_id || "")
                     const driverClassId = e.class_id || (leadDriverId && seasonDriverClassesMap.value.get(leadDriverId)) || (availableClassesForSchedule.value.length === 1 ? availableClassesForSchedule.value[0].id : "")
@@ -3174,7 +3577,7 @@
                 const parsedBestMs = row.best_lap ? parseTimeToMs(row.best_lap) : null
                 const totalMs = parsedTotalMs || row.total_time_ms
                 const bestMs = parsedBestMs || row.best_lap_ms || (sessType === 'qualifying' ? totalMs : null)
-                const penNum = (row.penalty_time_sec !== null && row.penalty_time_sec !== undefined && String(row.penalty_time_sec).trim() !== '') ? parseFloat(String(row.penalty_time_sec).trim()) : null
+                const penNum = parsePenaltyToSec(row.penalty_time_sec)
                 const penNs = (penNum !== null && !isNaN(penNum) && penNum > 0) ? Math.round(penNum * 1000000000) : null
                 const isPolePosition = (sessType === 'qualifying' && (Number(row.scoring_position) === 1 || i === 0)) || row.is_pole || Number(row.grid_position) === 1
 
@@ -4947,10 +5350,81 @@
         return "Tambah"
     }
 
+    // ==========================================
+    // RESULTS TABLE HORIZONTAL SCROLL SYNC
+    // ==========================================
+    const tableContainerRef = ref(null)
+    const topScrollbarRef = ref(null)
+    const floatingScrollbarRef = ref(null)
+    const tableScrollWidth = ref(1100)
+    const tableClientWidth = ref(1100)
+    const isTableOverflowing = ref(false)
+    let isSyncingScroll = false
+    let tableResizeObserver = null
+
+    const updateTableScrollDimensions = () => {
+        if (!tableContainerRef.value) return
+        const scrollW = tableContainerRef.value.scrollWidth || 0
+        const clientW = tableContainerRef.value.clientWidth || 0
+        tableScrollWidth.value = scrollW
+        tableClientWidth.value = clientW
+        isTableOverflowing.value = scrollW > clientW + 2
+    }
+
+    const syncScroll = (source) => {
+        if (isSyncingScroll) return
+        isSyncingScroll = true
+
+        let targetLeft = 0
+        if (source === 'table' && tableContainerRef.value) {
+            targetLeft = tableContainerRef.value.scrollLeft
+        } else if (source === 'top' && topScrollbarRef.value) {
+            targetLeft = topScrollbarRef.value.scrollLeft
+        } else if (source === 'floating' && floatingScrollbarRef.value) {
+            targetLeft = floatingScrollbarRef.value.scrollLeft
+        }
+
+        if (source !== 'table' && tableContainerRef.value) {
+            tableContainerRef.value.scrollLeft = targetLeft
+        }
+        if (source !== 'top' && topScrollbarRef.value) {
+            topScrollbarRef.value.scrollLeft = targetLeft
+        }
+        if (source !== 'floating' && floatingScrollbarRef.value) {
+            floatingScrollbarRef.value.scrollLeft = targetLeft
+        }
+
+        requestAnimationFrame(() => {
+            isSyncingScroll = false
+        })
+    }
+
+    watch([selectedScheduleId, selectedSessionType, isTeamEvent, () => resultsRows.value.length], () => {
+        nextTick(updateTableScrollDimensions)
+    })
+
     onMounted(() => {
         if (sessionStorage.getItem("admin_authenticated") === "true") {
             isAuthenticated.value = true
             fetchAllAdminData()
+        }
+        nextTick(() => {
+            updateTableScrollDimensions()
+            if (typeof ResizeObserver !== 'undefined' && tableContainerRef.value) {
+                tableResizeObserver = new ResizeObserver(() => {
+                    updateTableScrollDimensions()
+                })
+                tableResizeObserver.observe(tableContainerRef.value)
+            }
+        })
+        window.addEventListener("resize", updateTableScrollDimensions)
+    })
+
+    onBeforeUnmount(() => {
+        window.removeEventListener("resize", updateTableScrollDimensions)
+        if (tableResizeObserver) {
+            tableResizeObserver.disconnect()
+            tableResizeObserver = null
         }
     })
 </script>
@@ -6239,9 +6713,10 @@
                                                 <div class="relative flex items-center">
                                                     <Icon name="material-symbols:search" class="absolute left-2.5 text-gray-400 text-sm pointer-events-none" />
                                                     <input
+                                                        v-focus
+                                                        data-top-driver-search
                                                         v-model="topDriverSearchQuery"
                                                         type="text"
-                                                        autofocus
                                                         :placeholder="isTeamEvent ? 'Ketik nama tim atau nomor mobil...' : 'Ketik nama, tim, atau negara...'"
                                                         class="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-medium"
                                                         @keydown.esc="closeTopDriverSearch"
@@ -6402,9 +6877,10 @@
                                                     <div class="relative flex items-center">
                                                         <Icon name="material-symbols:search" class="absolute left-2.5 text-gray-400 text-sm pointer-events-none" />
                                                         <input
+                                                            v-focus
+                                                            data-top-driver-search
                                                             v-model="topDriverSearchQuery"
                                                             type="text"
-                                                            autofocus
                                                             :placeholder="isTeamEvent ? 'Ketik nama tim atau nomor mobil...' : 'Ketik nama, tim, atau negara...'"
                                                             class="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-medium"
                                                             @keydown.esc="closeTopDriverSearch"
@@ -6569,37 +7045,55 @@
                         </div>
                     </div>
 
-                    <!-- Interactive Table -->
-                    <div class="overflow-x-auto rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm">
-                        <table class="w-full min-w-[950px] table-fixed text-left border-collapse">
-                            <thead class="bg-red-900 dark:bg-red-900 text-white text-xs">
-                                <tr v-if="!isTeamEvent">
-                                    <th class="px-2 py-3 text-center w-[4%]">Pos</th>
-                                    <th class="px-2 py-3 text-center w-[5%]">No.</th>
-                                    <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[52%]' : 'w-[31%]'">Pembalap (Driver) <span class="text-red-300">*</span></th>
-                                    <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[16%]' : 'w-[13%]'">Kelas (Class)</th>
-                                    <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[8%]' : 'w-[7%]'">Pos Kelas</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Status</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[5%]">Laps</th>
-                                    <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[11%]' : 'w-[9%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[13%]" title="Penalti dalam detik (contoh: 10.000)">Penalti (s)</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
-                                    <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
-                                </tr>
-                                <tr v-else>
-                                    <th class="px-2 py-3 text-center w-[4%]">Pos</th>
-                                    <th class="px-2 py-3 text-center w-[6%]">No.</th>
-                                    <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[46%]' : 'w-[25%]'">Tim (Team Name) <span class="text-red-300">*</span></th>
-                                    <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[20%]' : 'w-[16%]'">Kelas (Class)</th>
-                                    <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[10%]' : 'w-[8%]'">Pos Kelas</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Status</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[5%]">Laps</th>
-                                    <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[14%]' : 'w-[10%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[13%]" title="Penalti dalam detik (contoh: 10.000)">Penalti (s)</th>
-                                    <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
-                                    <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
-                                </tr>
-                            </thead>
+                    <!-- Interactive Table with Persistent Scrollbars -->
+                    <div class="relative">
+                        <!-- Top Horizontal Scrollbar (Visible at top of table) -->
+                        <div
+                            v-show="isTableOverflowing"
+                            ref="topScrollbarRef"
+                            @scroll="syncScroll('top')"
+                            class="overflow-x-auto overflow-y-hidden border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 rounded-t-2xl py-1 px-1 transition-all"
+                            style="scrollbar-width: thin;"
+                        >
+                            <div :style="{ width: tableScrollWidth + 'px', height: '8px' }"></div>
+                        </div>
+
+                        <!-- Main Table Container -->
+                        <div
+                            ref="tableContainerRef"
+                            @scroll="syncScroll('table')"
+                            class="overflow-x-auto border border-gray-200 dark:border-slate-800 shadow-sm"
+                            :class="isTableOverflowing ? 'rounded-b-2xl border-t-0' : 'rounded-2xl'"
+                        >
+                            <table class="w-full min-w-[950px] table-fixed text-left border-collapse">
+                                <thead class="bg-red-900 dark:bg-red-900 text-white text-xs">
+                                    <tr v-if="!isTeamEvent">
+                                        <th class="px-2 py-3 text-center w-[4%]">Pos</th>
+                                        <th class="px-2 py-3 text-center w-[5%]">No.</th>
+                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[52%]' : 'w-[31%]'">Pembalap (Driver) <span class="text-red-300">*</span></th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[16%]' : 'w-[10%]'">Kelas (Class)</th>
+                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[8%]' : 'w-[7%]'">Pos Kelas</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Status</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Laps</th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[11%]' : 'w-[10%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[11%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
+                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
+                                    </tr>
+                                    <tr v-else>
+                                        <th class="px-2 py-3 text-center w-[4%]">Pos</th>
+                                        <th class="px-2 py-3 text-center w-[6%]">No.</th>
+                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[46%]' : 'w-[25%]'">Tim (Team Name) <span class="text-red-300">*</span></th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[20%]' : 'w-[13%]'">Kelas (Class)</th>
+                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[10%]' : 'w-[8%]'">Pos Kelas</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Status</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Laps</th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[14%]' : 'w-[11%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[11%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
+                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
+                                    </tr>
+                                </thead>
                             <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-xs">
                                 <tr v-if="loadingResults" class="text-center py-8">
                                     <td :colspan="selectedSessionType === 'qualifying' ? 7 : 11" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
@@ -6669,9 +7163,13 @@
                                     <!-- Car Number Column -->
                                     <td class="px-2 py-2.5 text-center">
                                         <input
+                                            :data-grid-row="idx"
+                                            data-grid-col="0"
                                             v-model.number="row.car_number"
                                             type="number"
                                             placeholder="#"
+                                            @focus="$event.target.select && $event.target.select()"
+                                            @keydown="handleResultsGridKeydown(idx, 0, $event)"
                                             class="w-full max-w-[52px] p-1.5 text-xs text-center rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
                                             title="Nomor Mobil / Subteam Car Number (e.g. 50, 51)"
                                         />
@@ -6683,7 +7181,10 @@
                                             <!-- Trigger Button / Display -->
                                             <button
                                                 type="button"
+                                                :data-grid-row="idx"
+                                                data-grid-col="1"
                                                 @click="openTeamDropdown(idx)"
+                                                @keydown="handleTeamCellKeydown(idx, $event)"
                                                 class="w-full p-2 text-left rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer flex items-center justify-between gap-1.5 transition hover:border-red-600"
                                                 :class="{ 'ring-1 ring-red-500 border-red-500': activeTeamSearchRowIndex === idx }"
                                             >
@@ -6714,12 +7215,13 @@
                                                 <div class="relative flex items-center">
                                                     <Icon name="material-symbols:search" class="absolute left-2.5 text-gray-400 text-sm pointer-events-none" />
                                                     <input
+                                                        v-focus
+                                                        :data-team-search="idx"
                                                         v-model="teamDropdownSearchQuery"
                                                         type="text"
-                                                        autofocus
                                                         placeholder="Ketik nama tim..."
                                                         class="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-medium"
-                                                        @keydown.esc="closeTeamDropdown"
+                                                        @keydown="handleTeamSearchKeydown(row, idx, $event)"
                                                     />
                                                     <button
                                                         v-if="teamDropdownSearchQuery"
@@ -6735,20 +7237,26 @@
                                                 <div class="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-800/60 rounded-lg border border-gray-100 dark:border-slate-800">
                                                     <button
                                                         type="button"
-                                                        @click="selectTeamForRow(row, null)"
+                                                        :data-team-option="0"
+                                                        @click="selectTeamForRow(row, null); closeTeamDropdown(); focusCell(getNextVisibleRowIndex(idx), 1, false);"
                                                         class="w-full px-2.5 py-1.5 text-left text-xs font-semibold hover:bg-red-50 dark:hover:bg-slate-800/80 text-red-600 dark:text-red-400 transition cursor-pointer flex items-center gap-1.5"
+                                                        :class="{ 'bg-red-100 dark:bg-red-950/60 font-bold ring-1 ring-red-400': highlightedTeamIndex === 0 }"
                                                     >
                                                         <Icon name="material-symbols:block" class="text-sm" />
                                                         <span>Tanpa Tim (Kosongkan)</span>
                                                     </button>
 
                                                     <button
-                                                        v-for="t in filteredTeamsForDropdown"
+                                                        v-for="(t, tIdx) in filteredTeamsForDropdown"
                                                         :key="t.id"
+                                                        :data-team-option="tIdx + 1"
                                                         type="button"
-                                                        @click="selectTeamForRow(row, t)"
+                                                        @click="selectTeamForRow(row, t); closeTeamDropdown(); focusCell(getNextVisibleRowIndex(idx), 1, false);"
                                                         class="w-full px-2.5 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-between gap-2"
-                                                        :class="{ 'bg-blue-50 dark:bg-blue-950/40 font-bold': row.team_id === t.id }"
+                                                        :class="{
+                                                            'bg-blue-100/80 dark:bg-blue-900/60 font-bold ring-1 ring-blue-500': highlightedTeamIndex === tIdx + 1,
+                                                            'bg-blue-50 dark:bg-blue-950/40': row.team_id === t.id && highlightedTeamIndex !== tIdx + 1
+                                                        }"
                                                     >
                                                         <div class="flex items-center gap-2 min-w-0">
                                                             <Icon name="material-symbols:groups" class="text-xs text-blue-600 dark:text-blue-400 shrink-0" />
@@ -6794,7 +7302,10 @@
                                             <!-- Trigger Button / Display -->
                                             <button
                                                 type="button"
+                                                :data-grid-row="idx"
+                                                data-grid-col="1"
                                                 @click="openDriverDropdown(idx)"
+                                                @keydown="handleDriverCellKeydown(idx, $event)"
                                                 class="w-full p-2 text-left rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer flex items-center justify-between gap-1.5 transition hover:border-red-600"
                                                 :class="{ 'ring-1 ring-red-500 border-red-500': activeDriverSearchRowIndex === idx }"
                                             >
@@ -6836,12 +7347,13 @@
                                                 <div class="relative flex items-center">
                                                     <Icon name="material-symbols:search" class="absolute left-2.5 text-gray-400 text-sm pointer-events-none" />
                                                     <input
+                                                        v-focus
+                                                        :data-driver-search="idx"
                                                         v-model="driverDropdownSearchQuery"
                                                         type="text"
-                                                        autofocus
                                                         placeholder="Ketik nama, tim, atau negara..."
                                                         class="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-medium"
-                                                        @keydown.esc="closeDriverDropdown"
+                                                        @keydown="handleDriverSearchKeydown(row, idx, $event)"
                                                     />
                                                     <button
                                                         v-if="driverDropdownSearchQuery"
@@ -6859,8 +7371,10 @@
                                                     <!-- Option: Clear Driver -->
                                                     <button
                                                         type="button"
-                                                        @click="selectDriverForRow(row, null)"
+                                                        :data-driver-option="0"
+                                                        @click="selectDriverForRow(row, null); closeDriverDropdown(); focusCell(getNextVisibleRowIndex(idx), 1, false);"
                                                         class="w-full px-2.5 py-1.5 text-left text-xs font-semibold hover:bg-red-50 dark:hover:bg-slate-800/80 text-red-600 dark:text-red-400 transition cursor-pointer flex items-center gap-1.5"
+                                                        :class="{ 'bg-red-100 dark:bg-red-950/60 font-bold ring-1 ring-red-400': highlightedDriverIndex === 0 }"
                                                     >
                                                         <Icon name="material-symbols:block" class="text-sm" />
                                                         <span>Tanpa Pembalap (Kosongkan)</span>
@@ -6868,12 +7382,16 @@
 
                                                     <!-- Filtered Driver Items -->
                                                     <button
-                                                        v-for="d in filteredDriversForDropdown"
+                                                        v-for="(d, dIdx) in filteredDriversForDropdown"
                                                         :key="d.id"
+                                                        :data-driver-option="dIdx + 1"
                                                         type="button"
-                                                        @click="selectDriverForRow(row, d)"
+                                                        @click="selectDriverForRow(row, d); closeDriverDropdown(); focusCell(getNextVisibleRowIndex(idx), 1, false);"
                                                         class="w-full px-2.5 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-between gap-2"
-                                                        :class="{ 'bg-red-50 dark:bg-red-950/40 font-bold': row.driver_id === d.id }"
+                                                        :class="{
+                                                            'bg-red-100/80 dark:bg-slate-800 font-bold ring-1 ring-red-500': highlightedDriverIndex === dIdx + 1,
+                                                            'bg-red-50 dark:bg-red-950/40': row.driver_id === d.id && highlightedDriverIndex !== dIdx + 1
+                                                        }"
                                                     >
                                                         <div class="flex items-center gap-2 min-w-0">
                                                             <Icon
@@ -6937,8 +7455,11 @@
                                     <td class="px-2 py-2.5">
                                         <div class="relative flex items-center">
                                             <select
+                                                :data-grid-row="idx"
+                                                data-grid-col="2"
                                                 v-model="row.class_id"
                                                 @change="onClassSelected(row)"
+                                                @keydown="handleResultsGridKeydown(idx, 2, $event)"
                                                 class="w-full p-1.5 pr-6 appearance-none rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
                                             >
                                                 <option value="">{{ availableClassesForSchedule.length > 0 ? '-- Pilih Kelas --' : 'Overall' }}</option>
@@ -6954,9 +7475,13 @@
                                     <td class="px-2 py-2.5 text-center">
                                         <div class="flex items-center justify-center">
                                             <input
+                                                :data-grid-row="idx"
+                                                data-grid-col="3"
                                                 v-model.number="row.scoring_position"
                                                 type="number"
                                                 min="1"
+                                                @focus="$event.target.select && $event.target.select()"
+                                                @keydown="handleResultsGridKeydown(idx, 3, $event)"
                                                 class="w-12 p-1 text-xs text-center rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
                                                 title="Posisi Kelas / Poin (Scoring Position)"
                                             />
@@ -6968,7 +7493,10 @@
                                     <!-- Status Column -->
                                     <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">
                                         <select
+                                            :data-grid-row="idx"
+                                            data-grid-col="4"
                                             v-model="row.status"
+                                            @keydown="handleResultsGridKeydown(idx, 4, $event)"
                                             class="w-full p-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-bold focus:outline-none cursor-pointer text-center"
                                             :class="{
                                                 'text-emerald-700 dark:text-emerald-400': row.status === 'finished',
@@ -6986,11 +7514,15 @@
                                     <!-- Laps Column -->
                                     <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">
                                         <input
+                                            :data-grid-row="idx"
+                                            data-grid-col="5"
                                             v-model.number="row.num_laps"
                                             type="number"
                                             min="0"
                                             placeholder="0"
-                                            class="w-full max-w-[54px] p-1.5 text-xs text-center rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
+                                            @focus="$event.target.select && $event.target.select()"
+                                            @keydown="handleResultsGridKeydown(idx, 5, $event)"
+                                            class="w-full max-w-[76px] p-1.5 text-xs text-center rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
                                             title="Jumlah Putaran / Laps Selesai"
                                         />
                                     </td>
@@ -6998,8 +7530,12 @@
                                     <!-- Gap / Total Time Column -->
                                     <td class="px-2 py-2.5">
                                         <input
+                                            :data-grid-row="idx"
+                                            :data-grid-col="selectedSessionType === 'qualifying' ? 4 : 6"
                                             v-model="row.total_time"
                                             type="text"
+                                            @focus="$event.target.select && $event.target.select()"
+                                            @keydown="handleResultsGridKeydown(idx, selectedSessionType === 'qualifying' ? 4 : 6, $event)"
                                             :placeholder="selectedSessionType === 'qualifying' ? (idx === 0 ? '1:23.456' : '0.123') : '0.123'"
                                             :title="selectedSessionType === 'qualifying' ? 'Catatan Waktu Kualifikasi atau Selisih Gap' : 'Selisih Gap atau Total Waktu'"
                                             class="w-full p-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
@@ -7010,13 +7546,17 @@
                                     <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">
                                         <div class="flex items-center justify-center">
                                             <input
+                                                :data-grid-row="idx"
+                                                data-grid-col="7"
                                                 v-model="row.penalty_time_sec"
                                                 type="text"
                                                 placeholder="0.000"
+                                                @focus="$event.target.select && $event.target.select()"
                                                 @blur="formatPenaltyOnBlur(row)"
-                                                title="Penalti dalam detik (contoh: 10.000)"
+                                                @keydown="handleResultsGridKeydown(idx, 7, $event)"
+                                                title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)"
                                                 class="w-full max-w-[85px] p-1.5 text-xs text-center rounded-lg border font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
-                                                :class="row.penalty_time_sec && Number(row.penalty_time_sec) > 0
+                                                :class="row.penalty_time_sec && (parsePenaltyToSec(row.penalty_time_sec) || 0) > 0
                                                     ? 'border-rose-400 bg-rose-50 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200'
                                                     : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white'"
                                             />
@@ -7027,7 +7567,10 @@
                                     <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">
                                         <input
                                             :id="`nopts-${idx}`"
+                                            :data-grid-row="idx"
+                                            data-grid-col="8"
                                             v-model="row.no_points"
+                                            @keydown="handleResultsGridKeydown(idx, 8, $event)"
                                             type="checkbox"
                                             class="w-4 h-4 accent-amber-600 rounded cursor-pointer"
                                             title="Centang jika pembalap/tim tidak berhak mendapatkan poin kejuaraan pada sesi ini"
@@ -7052,8 +7595,35 @@
                         </table>
                     </div>
 
+                    <!-- Sticky Floating Bottom Scrollbar (Always visible in viewport while viewing table) -->
+                    <div
+                        v-show="isTableOverflowing"
+                        class="sticky bottom-2 z-20 mt-2 px-3 py-1.5 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-gray-200 dark:border-slate-800 shadow-lg flex flex-col gap-1 transition-all"
+                    >
+                        <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 font-medium px-1 select-none pointer-events-none">
+                            <span class="flex items-center gap-1">
+                                <Icon name="material-symbols:arrow-back" class="text-xs text-red-600 dark:text-red-400" />
+                                <span>Geser Tabel</span>
+                            </span>
+                            <span class="text-[10px] text-gray-400 dark:text-gray-500 hidden sm:inline">Scroll horizontal selalu aktif</span>
+                            <span class="flex items-center gap-1">
+                                <span>Geser Tabel</span>
+                                <Icon name="material-symbols:arrow-forward" class="text-xs text-red-600 dark:text-red-400" />
+                            </span>
+                        </div>
+                        <div
+                            ref="floatingScrollbarRef"
+                            @scroll="syncScroll('floating')"
+                            class="overflow-x-auto overflow-y-hidden rounded"
+                            style="scrollbar-width: thin;"
+                        >
+                            <div :style="{ width: tableScrollWidth + 'px', height: '10px' }"></div>
+                        </div>
+                    </div>
+                </div>
+
                     <!-- Bottom Action Bar & Save Buttons -->
-                    <div class="p-4 rounded-2xl bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-end gap-4 sticky bottom-4 shadow-xl z-20">
+                    <div class="p-4 rounded-2xl bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-end gap-4">
                         <!-- <div class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
                             <span>Selesai: <strong class="text-emerald-700 dark:text-emerald-400">{{ resultsRows.filter(r => r.status === 'finished' && r.driver_id).length }}</strong></span>
                             <span>•</span>

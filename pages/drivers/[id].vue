@@ -887,6 +887,7 @@
         const raceList = processedResults.value.filter(r => r.sessionType !== "qualifying" && r.sessionType !== "q")
         const attributedResultIds = new Set()
         const list = []
+        const now = new Date()
 
         // 1. Process from driver standings
         for (const st of (driverStandings.value || [])) {
@@ -938,7 +939,6 @@
             }, 0)
 
             // Check if championship is concluded or still ongoing
-            const now = new Date()
             const schedList = (champ?.championship_events || [])
                 .map(ce => ce.schedule)
                 .filter(Boolean)
