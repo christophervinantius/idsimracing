@@ -1515,6 +1515,23 @@
         { value: "qualifying", label: "Qualifying" }
     ]
 
+    const getSessionLabel = (sessionType) => {
+        const opt = sessionTypeOptions.find(o => o.value === sessionType)
+        return opt ? opt.label : sessionType
+    }
+
+    const isMoveSessionModalOpen = ref(false)
+    const targetMoveSessionType = ref("race_1")
+    const targetSessionHasResults = ref(false)
+    const targetSessionCount = ref(0)
+    const loadingTargetSessionCheck = ref(false)
+    const moveConflictAction = ref("swap") // 'swap' | 'overwrite'
+    const moveSessionPassword = ref("")
+    const moveSessionPasswordError = ref("")
+    const showMoveSessionPassword = ref(false)
+    const movingSession = ref(false)
+    const suppressFetchOnSessionChange = ref(false)
+
     const fetchAllSchedulesList = async () => {
         try {
             let { data, error } = await $supabase
@@ -3689,6 +3706,219 @@
         }
     }
 
+    const availableTargetSessions = computed(() => {
+        return sessionTypeOptions.filter(opt => opt.value !== selectedSessionType.value)
+    })
+
+    const checkTargetSessionDbStatus = async (targetSess) => {
+        if (!selectedScheduleId.value) {
+            targetSessionHasResults.value = false
+            targetSessionCount.value = 0
+            return
+        }
+        loadingTargetSessionCheck.value = true
+        try {
+            const { data, error } = await $supabase
+                .from("event_entries")
+                .select("id, results(id, session_type)")
+                .eq("schedule_id", selectedScheduleId.value)
+
+            if (error) throw error
+            const validRes = (data || []).flatMap(e => e.results || []).filter(r => 
+                r.session_type === targetSess || (!r.session_type && targetSess === 'race')
+            )
+            targetSessionHasResults.value = validRes.length > 0
+            targetSessionCount.value = validRes.length
+        } catch (err) {
+            console.error("Error checking target session status:", err)
+            targetSessionHasResults.value = false
+            targetSessionCount.value = 0
+        } finally {
+            loadingTargetSessionCheck.value = false
+        }
+    }
+
+    const openMoveSessionModal = async () => {
+        if (!selectedScheduleId.value) return
+        const validRows = isTeamEvent.value
+            ? resultsRows.value.filter(r => r.team_id)
+            : resultsRows.value.filter(r => r.driver_id)
+        if (!hasExistingDbResults.value && validRows.length === 0) {
+            showToast("Tidak ada hasil balapan untuk dipindahkan", "error")
+            return
+        }
+
+        const nextTarget = availableTargetSessions.value[0]?.value || "race_1"
+        targetMoveSessionType.value = nextTarget
+        moveConflictAction.value = "swap"
+        moveSessionPassword.value = ""
+        moveSessionPasswordError.value = ""
+        showMoveSessionPassword.value = false
+        isMoveSessionModalOpen.value = true
+
+        if (hasExistingDbResults.value) {
+            await checkTargetSessionDbStatus(nextTarget)
+        } else {
+            targetSessionHasResults.value = false
+            targetSessionCount.value = 0
+        }
+    }
+
+    const closeMoveSessionModal = () => {
+        isMoveSessionModalOpen.value = false
+        moveSessionPassword.value = ""
+        moveSessionPasswordError.value = ""
+        showMoveSessionPassword.value = false
+        movingSession.value = false
+    }
+
+    watch(targetMoveSessionType, async (newTarget) => {
+        if (isMoveSessionModalOpen.value && hasExistingDbResults.value && newTarget) {
+            await checkTargetSessionDbStatus(newTarget)
+        }
+    })
+
+    const confirmMoveResultsSession = async () => {
+        const sourceSess = selectedSessionType.value
+        const targetSess = targetMoveSessionType.value
+        if (!targetSess || sourceSess === targetSess) return
+
+        // 1. IN-MEMORY DRAFT MODE (not saved in DB yet)
+        if (!hasExistingDbResults.value) {
+            suppressFetchOnSessionChange.value = true
+            selectedSessionType.value = targetSess
+            nextTick(() => {
+                suppressFetchOnSessionChange.value = false
+            })
+            showToast(`Sesi target berhasil diubah ke ${getSessionLabel(targetSess)}. Silakan klik Simpan jika sudah selesai.`)
+            closeMoveSessionModal()
+            return
+        }
+
+        // 2. DATABASE MODE (saved in DB)
+        moveSessionPasswordError.value = ""
+        if (moveSessionPassword.value !== CRUD_PASS) {
+            moveSessionPasswordError.value = "Password admin salah!"
+            return
+        }
+
+        movingSession.value = true
+        try {
+            const schedId = selectedScheduleId.value
+            const { data: entries, error: entriesError } = await $supabase
+                .from("event_entries")
+                .select("id")
+                .eq("schedule_id", schedId)
+
+            if (entriesError) throw entriesError
+            if (!entries || entries.length === 0) {
+                throw new Error("Tidak ditemukan entri untuk jadwal ini.")
+            }
+
+            const entryIds = entries.map(e => e.id)
+
+            if (!targetSessionHasResults.value) {
+                // Empty destination: simply update session_type to target
+                if (sourceSess === 'race') {
+                    const { error: e1 } = await $supabase
+                        .from("results")
+                        .update({ session_type: targetSess })
+                        .in("event_entry_id", entryIds)
+                        .eq("session_type", "race")
+                    const { error: e2 } = await $supabase
+                        .from("results")
+                        .update({ session_type: targetSess })
+                        .in("event_entry_id", entryIds)
+                        .is("session_type", null)
+                    if (e1 && !e2) throw e1
+                    if (e2 && !e1) throw e2
+                } else {
+                    const { error } = await $supabase
+                        .from("results")
+                        .update({ session_type: targetSess })
+                        .in("event_entry_id", entryIds)
+                        .eq("session_type", sourceSess)
+                    if (error) throw error
+                }
+            } else if (moveConflictAction.value === 'swap') {
+                // Swap sessions using a temporary token
+                const tempToken = `__swap_temp_${Date.now()}__`
+
+                // Step 1: source -> tempToken
+                if (sourceSess === 'race') {
+                    await $supabase.from("results").update({ session_type: tempToken }).in("event_entry_id", entryIds).eq("session_type", "race")
+                    await $supabase.from("results").update({ session_type: tempToken }).in("event_entry_id", entryIds).is("session_type", null)
+                } else {
+                    const { error: s1 } = await $supabase.from("results").update({ session_type: tempToken }).in("event_entry_id", entryIds).eq("session_type", sourceSess)
+                    if (s1) throw s1
+                }
+
+                // Step 2: target -> source
+                if (targetSess === 'race') {
+                    await $supabase.from("results").update({ session_type: sourceSess }).in("event_entry_id", entryIds).eq("session_type", "race")
+                    await $supabase.from("results").update({ session_type: sourceSess }).in("event_entry_id", entryIds).is("session_type", null)
+                } else {
+                    const { error: s2 } = await $supabase.from("results").update({ session_type: sourceSess }).in("event_entry_id", entryIds).eq("session_type", targetSess)
+                    if (s2) throw s2
+                }
+
+                // Step 3: tempToken -> target
+                const { error: s3 } = await $supabase.from("results").update({ session_type: targetSess }).in("event_entry_id", entryIds).eq("session_type", tempToken)
+                if (s3) throw s3
+            } else if (moveConflictAction.value === 'overwrite') {
+                // Overwrite: delete target session results first, then move source -> target
+                if (targetSess === 'race') {
+                    await $supabase.from("results").delete().in("event_entry_id", entryIds).eq("session_type", "race")
+                    await $supabase.from("results").delete().in("event_entry_id", entryIds).is("session_type", null)
+                } else {
+                    const { error: dErr } = await $supabase.from("results").delete().in("event_entry_id", entryIds).eq("session_type", targetSess)
+                    if (dErr) throw dErr
+                }
+
+                if (sourceSess === 'race') {
+                    await $supabase.from("results").update({ session_type: targetSess }).in("event_entry_id", entryIds).eq("session_type", "race")
+                    await $supabase.from("results").update({ session_type: targetSess }).in("event_entry_id", entryIds).is("session_type", null)
+                } else {
+                    const { error: mErr } = await $supabase.from("results").update({ session_type: targetSess }).in("event_entry_id", entryIds).eq("session_type", sourceSess)
+                    if (mErr) throw mErr
+                }
+            }
+
+            const successMsg = (targetSessionHasResults.value && moveConflictAction.value === 'swap')
+                ? `Hasil sesi ${getSessionLabel(sourceSess)} berhasil ditukar dengan ${getSessionLabel(targetSess)}!`
+                : `Hasil balapan berhasil dipindahkan ke sesi ${getSessionLabel(targetSess)}!`
+
+            showToast(successMsg)
+            closeMoveSessionModal()
+
+            // Update current active session to the target session and reload
+            suppressFetchOnSessionChange.value = true
+            selectedSessionType.value = targetSess
+            nextTick(async () => {
+                suppressFetchOnSessionChange.value = false
+                await fetchRaceResultsForSchedule()
+                await syncStandingsForSchedule(schedId)
+            })
+        } catch (err) {
+            console.error("Error moving/swapping race results session:", err)
+            showToast(err.message || "Gagal memindahkan sesi hasil balapan", "error")
+        } finally {
+            movingSession.value = false
+        }
+    }
+
+    const handleSessionTabClick = (newSession) => {
+        if (newSession === selectedSessionType.value) return
+        const hasUnsavedDraft = !hasExistingDbResults.value && resultsRows.value.some(r => isTeamEvent.value ? r.team_id : r.driver_id)
+        if (hasUnsavedDraft) {
+            const confirmChange = window.confirm(
+                `Anda memiliki data input yang belum disimpan untuk sesi "${getSessionLabel(selectedSessionType.value)}".\n\nJika ingin memindahkan data input ini ke sesi lain, gunakan tombol "Pindahkan Sesi".\n\nApakah Anda yakin ingin berganti sesi dan membuang input ini?`
+            )
+            if (!confirmChange) return
+        }
+        selectedSessionType.value = newSession
+    }
+
     // Championships that score the currently selected schedule + session, so
     // the admin can see whether saving will feed a standings table and which
     // points system will be applied.
@@ -3773,6 +4003,7 @@
     })
 
     watch(selectedSessionType, () => {
+        if (suppressFetchOnSessionChange.value) return
         resultsClassFilter.value = "ALL"
         selectedEntryClassId.value = "ALL"
         fetchRaceResultsForSchedule()
@@ -6333,7 +6564,7 @@
                                     v-for="opt in sessionTypeOptions"
                                     :key="opt.value"
                                     type="button"
-                                    @click="selectedSessionType = opt.value"
+                                    @click="handleSessionTabClick(opt.value)"
                                     class="flex-1 py-1 px-2 rounded-lg text-xs font-bold transition text-center cursor-pointer"
                                     :class="selectedSessionType === opt.value
                                         ? 'bg-red-900 text-white shadow-sm'
@@ -7636,6 +7867,16 @@
                         </div> -->
 
                         <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+                            <button
+                                v-if="hasExistingDbResults || resultsRows.some(r => isTeamEvent ? r.team_id : r.driver_id)"
+                                type="button"
+                                @click="openMoveSessionModal"
+                                class="px-4 py-2.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-300 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer border border-amber-300 dark:border-amber-800 flex items-center gap-1.5"
+                                title="Pindahkan atau tukar hasil balapan ke sesi lain"
+                            >
+                                <Icon name="material-symbols:swap-horiz" class="text-base" />
+                                <span>Pindahkan Sesi</span>
+                            </button>
                             <button
                                 v-if="hasExistingDbResults"
                                 type="button"
@@ -9398,6 +9639,192 @@
                         >
                             <Icon v-if="deleting" name="material-symbols:refresh" class="animate-spin" />
                             <span>{{ deleting ? 'Menghapus...' : 'Hapus Hasil' }}</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- RACE RESULTS MOVE / SWAP SESSION MODAL -->
+        <div
+            v-if="isMoveSessionModalOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
+        >
+            <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-slate-800 my-8">
+                <div class="flex items-center justify-between border-b border-gray-200 dark:border-slate-800 pb-4 mb-4">
+                    <h2 class="text-lg sm:text-xl font-bold text-black dark:text-white flex items-center gap-2">
+                        <Icon name="material-symbols:swap-horiz" class="text-amber-600 text-2xl" />
+                        <span>Pindahkan / Tukar Sesi Balapan</span>
+                    </h2>
+                    <button @click="closeMoveSessionModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer">
+                        <Icon name="material-symbols:close" class="text-2xl" />
+                    </button>
+                </div>
+
+                <form @submit.prevent="confirmMoveResultsSession" class="flex flex-col gap-4">
+                    <!-- Schedule summary -->
+                    <div class="p-3 rounded-xl bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 text-xs sm:text-sm">
+                        <p class="font-bold text-black dark:text-white">
+                            {{ selectedSchedule?.events?.name }} - Round {{ selectedSchedule?.round }}
+                        </p>
+                        <p class="text-gray-500 dark:text-gray-400 mt-0.5">
+                            {{ selectedSchedule?.circuit || 'Circuit' }}
+                        </p>
+                    </div>
+
+                    <!-- From & To Sessions -->
+                    <div class="grid grid-cols-2 gap-3 items-center">
+                        <div class="flex flex-col gap-1.5 p-3 rounded-xl bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800">
+                            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Dari Sesi</span>
+                            <span class="text-sm sm:text-base font-bold text-black dark:text-white flex items-center gap-1.5">
+                                <Icon name="material-symbols:flag" class="text-red-600 text-lg" />
+                                {{ getSessionLabel(selectedSessionType) }}
+                            </span>
+                        </div>
+                        <div class="flex flex-col gap-1.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800">
+                            <label class="text-[11px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">Ke Sesi Target</label>
+                            <select
+                                v-model="targetMoveSessionType"
+                                class="w-full text-xs sm:text-sm font-bold bg-white dark:bg-slate-900 border border-amber-400 dark:border-amber-700 rounded-lg p-1.5 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            >
+                                <option
+                                    v-for="opt in availableTargetSessions"
+                                    :key="opt.value"
+                                    :value="opt.value"
+                                >
+                                    {{ opt.label }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Context explanation based on DB or Draft -->
+                    <!-- DRAFT MODE -->
+                    <div v-if="!hasExistingDbResults" class="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 flex items-start gap-2.5 text-xs text-blue-800 dark:text-blue-300">
+                        <Icon name="material-symbols:info" class="text-lg shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+                        <div>
+                            <p class="font-bold">Mode Draft (Belum Tersimpan di DB)</p>
+                            <p class="mt-0.5 opacity-90">
+                                Data input saat ini akan dialihkan menjadi sesi <strong>{{ getSessionLabel(targetMoveSessionType) }}</strong> tanpa menghapus baris tabel yang sudah Anda isi.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- DATABASE SAVED MODE -->
+                    <template v-else>
+                        <!-- Loading target session check -->
+                        <div v-if="loadingTargetSessionCheck" class="p-3 rounded-xl bg-gray-50 dark:bg-slate-950 flex items-center justify-center gap-2 text-xs text-gray-500">
+                            <Icon name="material-symbols:refresh" class="animate-spin text-base" />
+                            <span>Memeriksa status sesi tujuan di database...</span>
+                        </div>
+
+                        <!-- Target is EMPTY -->
+                        <div v-else-if="!targetSessionHasResults" class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 flex items-start gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+                            <Icon name="material-symbols:check-circle" class="text-lg shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                            <div>
+                                <p class="font-bold">Sesi Tujuan Bersih / Kosong</p>
+                                <p class="mt-0.5 opacity-90">
+                                    Sesi <strong>{{ getSessionLabel(targetMoveSessionType) }}</strong> belum memiliki data hasil balapan di database. Data hasil sesi <strong>{{ getSessionLabel(selectedSessionType) }}</strong> akan dipindahkan sepenuhnya dan klasemen poin akan disinkronkan otomatis.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Target ALREADY HAS RESULTS -->
+                        <div v-else class="flex flex-col gap-3 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs">
+                            <div class="flex items-start gap-2 text-amber-900 dark:text-amber-200">
+                                <Icon name="material-symbols:warning" class="text-lg shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                                <div>
+                                    <p class="font-bold">
+                                        Sesi {{ getSessionLabel(targetMoveSessionType) }} sudah memiliki {{ targetSessionCount }} data di database!
+                                    </p>
+                                    <p class="mt-0.5 text-amber-800 dark:text-amber-300">
+                                        Pilih bagaimana Anda ingin menangani sesi tujuan:
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col gap-2 mt-1">
+                                <label class="flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition"
+                                    :class="moveConflictAction === 'swap' ? 'bg-white dark:bg-slate-900 border-amber-500 shadow-xs' : 'bg-transparent border-amber-200 dark:border-amber-900/60'">
+                                    <input type="radio" v-model="moveConflictAction" value="swap" class="mt-0.5 text-amber-600 focus:ring-amber-500" />
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-black dark:text-white">Tukar Sesi (Swap) — Direkomendasikan</span>
+                                        <span class="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
+                                            Tukar posisi kedua sesi: Hasil <strong>{{ getSessionLabel(selectedSessionType) }}</strong> ↔ <strong>{{ getSessionLabel(targetMoveSessionType) }}</strong>. Sangat tepat jika input terbalik.
+                                        </span>
+                                    </div>
+                                </label>
+
+                                <label class="flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition"
+                                    :class="moveConflictAction === 'overwrite' ? 'bg-white dark:bg-slate-900 border-red-500 shadow-xs' : 'bg-transparent border-amber-200 dark:border-amber-900/60'">
+                                    <input type="radio" v-model="moveConflictAction" value="overwrite" class="mt-0.5 text-red-600 focus:ring-red-500" />
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-red-600 dark:text-red-400">Timpa / Hapus Data Target (Overwrite)</span>
+                                        <span class="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
+                                            Hapus {{ targetSessionCount }} data yang ada di sesi {{ getSessionLabel(targetMoveSessionType) }} dan gantikan dengan data dari {{ getSessionLabel(selectedSessionType) }}.
+                                        </span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Password input for DB modification -->
+                        <div class="flex flex-col gap-1 mt-1">
+                            <label class="text-black dark:text-white text-xs sm:text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
+                            <div class="relative flex items-center">
+                                <input
+                                    v-model="moveSessionPassword"
+                                    :type="showMoveSessionPassword ? 'text' : 'password'"
+                                    required
+                                    placeholder="Masukkan password admin"
+                                    @input="moveSessionPasswordError = ''"
+                                    class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
+                                    :class="moveSessionPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
+                                />
+                                <button
+                                    type="button"
+                                    @click="showMoveSessionPassword = !showMoveSessionPassword"
+                                    class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
+                                    title="Tampilkan/Sembunyikan Password"
+                                >
+                                    <Icon :name="showMoveSessionPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
+                                </button>
+                            </div>
+                            <p v-if="moveSessionPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
+                                {{ moveSessionPasswordError }}
+                            </p>
+                        </div>
+                    </template>
+
+                    <!-- Footer Buttons -->
+                    <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
+                        <button
+                            type="button"
+                            @click="closeMoveSessionModal"
+                            class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-black dark:text-white rounded-lg font-bold transition cursor-pointer text-sm"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="movingSession || (hasExistingDbResults && loadingTargetSessionCheck)"
+                            class="px-5 py-2 rounded-lg font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50 text-sm shadow-md"
+                            :class="hasExistingDbResults && targetSessionHasResults && moveConflictAction === 'overwrite'
+                                ? 'bg-red-700 hover:bg-red-800 text-white'
+                                : 'bg-amber-600 hover:bg-amber-700 text-white'"
+                        >
+                            <Icon v-if="movingSession" name="material-symbols:refresh" class="animate-spin text-base" />
+                            <Icon v-else-if="hasExistingDbResults && targetSessionHasResults && moveConflictAction === 'swap'" name="material-symbols:swap-calls" class="text-base" />
+                            <Icon v-else name="material-symbols:arrow-forward" class="text-base" />
+                            <span>
+                                {{
+                                    movingSession
+                                        ? 'Memproses...'
+                                        : (!hasExistingDbResults
+                                            ? 'Pindahkan Sesi Target'
+                                            : (targetSessionHasResults && moveConflictAction === 'swap' ? 'Tukar Kedua Sesi' : 'Pindahkan Sesi'))
+                                }}
+                            </span>
                         </button>
                     </div>
                 </form>
