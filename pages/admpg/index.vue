@@ -1459,7 +1459,6 @@
 
             if (error) throw error
             allSchedulesList.value = data || []
-            scheduleHaystackMap.clear()
         } catch (err) {
             console.error("Error fetching all schedules list:", err)
         }
@@ -4769,210 +4768,59 @@
         return s
     }
 
-    const ID_DAYS = ["minggu", "senin", "selasa", "rabu", "kamis", "jumat", "sabtu"]
-    const EN_DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
-    const ID_MONTHS_LONG = ["januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"]
-    const ID_MONTHS_SHORT = ["jan", "feb", "mar", "apr", "mei", "jun", "jul", "agu", "agt", "sep", "okt", "nov", "des"]
-    const EN_MONTHS_LONG = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
-    const EN_MONTHS_SHORT = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
-
-    const scheduleHaystackMap = new Map()
-
-    const expandGroupVariations = (text, parts) => {
-        if (!text && text !== 0) return
-        const str = String(text).trim()
-        if (!str) return
-        const lower = str.toLowerCase()
-
-        // 1. Explicit group patterns: "group A", "grup A", "grp A", "group 1", etc.
-        const groupMatches = lower.match(/(?:group|grup|grp)\s*([a-z0-9]+)/gi)
-        if (groupMatches) {
-            for (const gm of groupMatches) {
-                const m = gm.match(/(?:group|grup|grp)\s*([a-z0-9]+)/i)
-                if (m && m[1]) {
-                    const g = m[1].toLowerCase()
-                    parts.push(
-                        `group ${g}`,
-                        `grup ${g}`,
-                        `grp ${g}`,
-                        `group${g}`,
-                        `grup${g}`,
-                        `group`,
-                        `grup`,
-                        `grp`
-                    )
-                }
-            }
-        }
-
-        // 2. Attached number-letter patterns like "1A", "1B", "R1A", "R1 B"
-        const numLetterMatches = lower.match(/\b(?:r|round\s*)?(\d+)\s*([a-z])\b/gi)
-        if (numLetterMatches) {
-            for (const nlm of numLetterMatches) {
-                const m = nlm.match(/\b(?:r|round\s*)?(\d+)\s*([a-z])\b/i)
-                if (m && m[2]) {
-                    const letter = m[2].toLowerCase()
-                    parts.push(
-                        `group ${letter}`,
-                        `grup ${letter}`,
-                        `grp ${letter}`,
-                        `group`,
-                        `grup`,
-                        `grp`
-                    )
-                }
-            }
-        }
-
-        // 3. Single letter or short code (e.g. "A", "B", "C")
-        if (/^[a-zA-Z]$/.test(str)) {
-            const letter = lower
-            parts.push(
-                `group ${letter}`,
-                `grup ${letter}`,
-                `grp ${letter}`,
-                `group${letter}`,
-                `grup${letter}`,
-                `group`,
-                `grup`,
-                `grp`
-            )
-        }
-    }
-
-    const buildScheduleBaseHaystack = (sched) => {
-        const parts = []
-
-        // Event & Game & Organizer
-        if (sched.events) {
-            if (sched.events.name) {
-                parts.push(sched.events.name)
-                expandGroupVariations(sched.events.name, parts)
-            }
-            if (sched.events.organizers) {
-                if (sched.events.organizers.name) parts.push(sched.events.organizers.name)
-                if (sched.events.organizers.abbreviation) parts.push(sched.events.organizers.abbreviation)
-            }
-            if (sched.events.games) {
-                if (sched.events.games.name) parts.push(sched.events.games.name)
-                if (sched.events.games.abbreviation) parts.push(sched.events.games.abbreviation)
-            }
-        }
-
-        // Circuit & Country
-        if (sched.circuit) parts.push(sched.circuit)
-        if (sched.country) parts.push(sched.country)
-        if (sched.country_2) parts.push(sched.country_2)
-
-        // Season
-        if (sched.season) {
-            const s = String(sched.season)
-            parts.push(s, `s${s}`, `season ${s}`, `musim ${s}`)
-        }
-
-        // Round & Group
-        const roundRaw = sched.round ? String(sched.round).trim() : ""
-        if (roundRaw) {
-            parts.push(roundRaw)
-            parts.push(`round ${roundRaw}`, `ronde ${roundRaw}`, `putaran ${roundRaw}`, `r${roundRaw}`, `r ${roundRaw}`)
-            expandGroupVariations(roundRaw, parts)
-        }
-        if (sched.group !== undefined && sched.group !== null && sched.group !== "") {
-            const g = String(sched.group).trim()
-            parts.push(g, `group ${g}`, `grup ${g}`, `grp ${g}`)
-            expandGroupVariations(g, parts)
-        }
-
-        // Fast Date Variations (Zero Intl / toLocaleDateString overhead)
-        const addDateVariations = (dateVal) => {
-            if (!dateVal) return
-            const d = new Date(dateVal)
-            if (isNaN(d.getTime())) {
-                parts.push(String(dateVal))
-                return
-            }
-            parts.push(String(dateVal))
-            const year = d.getFullYear()
-            const month = d.getMonth() + 1
-            const monthIdx = d.getMonth()
-            const day = d.getDate()
-            const dayIdx = d.getDay()
-            const pad = (n) => String(n).padStart(2, "0")
-            const mm = pad(month)
-            const dd = pad(day)
-
-            parts.push(`${year}-${mm}-${dd}`, `${year}/${mm}/${dd}`, `${dd}-${mm}-${year}`, `${dd}/${mm}/${year}`, `${day}/${month}/${year}`)
-            parts.push(`${dd}-${mm}`, `${dd}/${mm}`, `${day}/${month}`, `${day}-${month}`)
-            parts.push(String(year))
-
-            if (ID_DAYS[dayIdx]) parts.push(ID_DAYS[dayIdx])
-            if (EN_DAYS[dayIdx]) parts.push(EN_DAYS[dayIdx])
-            if (ID_MONTHS_LONG[monthIdx]) parts.push(ID_MONTHS_LONG[monthIdx], `${day} ${ID_MONTHS_LONG[monthIdx]} ${year}`, `${day} ${ID_MONTHS_LONG[monthIdx]}`)
-            if (ID_MONTHS_SHORT[monthIdx]) parts.push(ID_MONTHS_SHORT[monthIdx], `${day} ${ID_MONTHS_SHORT[monthIdx]} ${year}`)
-            if (EN_MONTHS_LONG[monthIdx]) parts.push(EN_MONTHS_LONG[monthIdx], `${EN_MONTHS_LONG[monthIdx]} ${day} ${year}`, `${EN_MONTHS_LONG[monthIdx]} ${day}`)
-            if (EN_MONTHS_SHORT[monthIdx]) parts.push(EN_MONTHS_SHORT[monthIdx], `${EN_MONTHS_SHORT[monthIdx]} ${day}`)
-        }
-
-        addDateVariations(sched.date)
-        if (sched.finish_date && sched.finish_date !== sched.date) {
-            addDateVariations(sched.finish_date)
-        }
-
-        return parts.join(" ").toLowerCase()
-    }
-
-    const sessionTypeSearchMap = {
-        race: "race balapan",
-        race_1: "race 1 race1 r1 balapan 1",
-        race_2: "race 2 race2 r2 balapan 2",
-        race_3: "race 3 race3 r3 balapan 3",
-        qualifying: "qualifying kualifikasi quali q"
-    }
-
-    const getSessionOptionSearchString = (opt) => {
-        const val = String(opt?.value || "").toLowerCase()
-        const label = String(opt?.label || "").toLowerCase()
-        const mapped = sessionTypeSearchMap[val] || ""
-        return `${label} ${val} ${val.replace(/_/g, " ")} ${val.replace(/_/g, "")} ${mapped}`
-    }
-
     const availableRoundsToAdd = computed(() => {
         const existing = new Set(championshipRounds.value.map(r => `${r.schedule_id}::${r.session_type}`))
         const list = allSchedulesList.value.length > 0 ? allSchedulesList.value : schedules.value
+        if (!addRoundsSearch.value.trim()) {
+            const out = []
+            for (const sched of list) {
+                for (const opt of sessionTypeOptions) {
+                    const key = `${sched.id}::${opt.value}`
+                    if (existing.has(key)) continue
+                    out.push({
+                        key,
+                        schedule_id: sched.id,
+                        session_type: opt.value,
+                        sessionLabel: opt.label,
+                        schedule: sched
+                    })
+                }
+            }
+            return out
+        }
+
         const q = addRoundsSearch.value.trim().toLowerCase()
-        const words = q ? q.split(/\s+/).filter(Boolean) : []
+        const words = q.split(/\s+/).filter(Boolean)
 
         const out = []
         for (const sched of list) {
-            let schedHay = scheduleHaystackMap.get(sched.id)
-            if (!schedHay) {
-                schedHay = buildScheduleBaseHaystack(sched)
-                scheduleHaystackMap.set(sched.id, schedHay)
-            }
+            const orgAbbr = sched.events?.organizers?.abbreviation || ""
+            const orgName = sched.events?.organizers?.name || ""
+            const evName = sched.events?.name || ""
+            const circuit = sched.circuit || ""
+            const round = String(sched.round || "")
+            const season = sched.season ? `s${sched.season} season ${sched.season}` : ""
+            const dateStr = sched.date ? formatDateOnly(sched.date) : ""
+            const groupStr = sched.group ? `group ${sched.group} grup ${sched.group}` : ""
+            const schedFullText = `${dateStr} ${orgAbbr} ${evName} ${orgName} ${season} round ${round} ${circuit} ${groupStr}`.toLowerCase()
 
             for (const opt of sessionTypeOptions) {
                 const key = `${sched.id}::${opt.value}`
                 if (existing.has(key)) continue
 
-                if (words.length > 0) {
-                    const optHay = getSessionOptionSearchString(opt)
-                    let match = true
-                    for (const w of words) {
-                        if (!schedHay.includes(w) && !optHay.includes(w)) {
-                            match = false
-                            break
-                        }
-                    }
-                    if (!match) continue
-                }
+                const sessionLabel = String(opt.label || "").toLowerCase()
+                const sessionVal = String(opt.value || "").toLowerCase()
+                const fullText = `${schedFullText} ${sessionLabel} ${sessionVal}`
 
-                out.push({
-                    key,
-                    schedule_id: sched.id,
-                    session_type: opt.value,
-                    sessionLabel: opt.label,
-                    schedule: sched
-                })
+                if (words.every(w => fullText.includes(w))) {
+                    out.push({
+                        key,
+                        schedule_id: sched.id,
+                        session_type: opt.value,
+                        sessionLabel: opt.label,
+                        schedule: sched
+                    })
+                }
             }
         }
         return out
@@ -9838,7 +9686,7 @@
                             <input
                                 v-model="addRoundsSearch"
                                 type="text"
-                                placeholder="Cari event / grup / sirkuit / tanggal / ronde / sesi..."
+                                placeholder="Cari jadwal / event..."
                                 class="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500"
                             />
                             <Icon name="material-symbols:search" class="absolute left-3 top-3 text-base text-gray-400" />
