@@ -52,7 +52,6 @@
 
     // Admin Access Gate state
     const ADM_PASS = config.public?.passAdm
-    const CRUD_PASS = config.public?.passCrud
     const isAuthenticated = ref(false)
     const loginPasswordInput = ref("")
     const loginPasswordError = ref("")
@@ -94,12 +93,6 @@
     const deletingScheduleItem = ref(null)
     const isScheduleDeleteModalOpen = ref(false)
 
-    const scheduleAdminPassword = ref("")
-    const scheduleAdminPasswordError = ref("")
-    const showScheduleAdminPassword = ref(false)
-    const scheduleDeletePassword = ref("")
-    const scheduleDeletePasswordError = ref("")
-    const showScheduleDeletePassword = ref(false)
 
     const scheduleFormData = reactive({
         event_id: "",
@@ -435,9 +428,6 @@
         scheduleFormData.country_2 = ""
         scheduleFormData.stream_link = ""
         scheduleFormData.is_postponed = false
-        scheduleAdminPassword.value = ""
-        scheduleAdminPasswordError.value = ""
-        showScheduleAdminPassword.value = false
         isScheduleModalOpen.value = true
     }
 
@@ -455,9 +445,6 @@
         scheduleFormData.country_2 = scheduleItem.country_2 || ""
         scheduleFormData.stream_link = scheduleItem.stream_link || ""
         scheduleFormData.is_postponed = Boolean(scheduleItem.is_postponed)
-        scheduleAdminPassword.value = ""
-        scheduleAdminPasswordError.value = ""
-        showScheduleAdminPassword.value = false
         isScheduleModalOpen.value = true
     }
 
@@ -479,23 +466,15 @@
 
     const closeScheduleModal = () => {
         isScheduleModalOpen.value = false
-        scheduleAdminPassword.value = ""
-        scheduleAdminPasswordError.value = ""
-        showScheduleAdminPassword.value = false
     }
 
     const saveSchedule = async () => {
-        scheduleAdminPasswordError.value = ""
         if (!scheduleFormData.event_id) {
             showToast("Pilih event terlebih dahulu", "error")
             return
         }
         if (!scheduleFormData.date) {
             showToast("Pilih tanggal balapan", "error")
-            return
-        }
-        if (scheduleAdminPassword.value !== CRUD_PASS) {
-            scheduleAdminPasswordError.value = "Password admin salah!"
             return
         }
 
@@ -541,27 +520,16 @@
 
     const openScheduleDeleteModal = (item) => {
         deletingScheduleItem.value = item || schedules.value.find(s => s.id === editingScheduleId.value)
-        scheduleDeletePassword.value = ""
-        scheduleDeletePasswordError.value = ""
-        showScheduleDeletePassword.value = false
         isScheduleDeleteModalOpen.value = true
     }
 
     const closeScheduleDeleteModal = () => {
         isScheduleDeleteModalOpen.value = false
         deletingScheduleItem.value = null
-        scheduleDeletePassword.value = ""
-        scheduleDeletePasswordError.value = ""
-        showScheduleDeletePassword.value = false
     }
 
     const confirmDeleteSchedule = async () => {
         if (!deletingScheduleItem.value) return
-        scheduleDeletePasswordError.value = ""
-        if (scheduleDeletePassword.value !== CRUD_PASS) {
-            scheduleDeletePasswordError.value = "Password admin salah!"
-            return
-        }
         deleting.value = true
         try {
             const { error } = await $supabase
@@ -597,13 +565,6 @@
     const editingDriverId = ref(null)
     const deletingDriverItem = ref(null)
     const isDriverDeleteModalOpen = ref(false)
-
-    const driverAdminPassword = ref("")
-    const driverAdminPasswordError = ref("")
-    const showDriverAdminPassword = ref(false)
-    const driverDeletePassword = ref("")
-    const driverDeletePasswordError = ref("")
-    const showDriverDeletePassword = ref(false)
 
     const ratingOptions = ["Platinum", "Gold", "Silver", "Bronze", "Copper", "Iron"]
     const ratingsOrder = {
@@ -782,18 +743,12 @@
     const driverImportLoading = ref(false)
     const driverImportData = ref([])
     const driverImportError = ref("")
-    const driverImportAdminPassword = ref("")
-    const driverImportAdminPasswordError = ref("")
-    const showDriverImportAdminPassword = ref(false)
     const driverFileInputRef = ref(null)
 
     const openDriverImportModal = () => {
         driverImportFile.value = null
         driverImportData.value = []
         driverImportError.value = ""
-        driverImportAdminPassword.value = ""
-        driverImportAdminPasswordError.value = ""
-        showDriverImportAdminPassword.value = false
         isDriverImportModalOpen.value = true
     }
 
@@ -802,9 +757,6 @@
         driverImportFile.value = null
         driverImportData.value = []
         driverImportError.value = ""
-        driverImportAdminPassword.value = ""
-        driverImportAdminPasswordError.value = ""
-        showDriverImportAdminPassword.value = false
     }
 
     const handleDriverFileSelect = async (e) => {
@@ -835,13 +787,8 @@
     }
 
     const confirmImportDrivers = async () => {
-        driverImportAdminPasswordError.value = ""
         if (driverImportData.value.length === 0) {
             showToast("Pilih file Excel yang memiliki data pembalap", "error")
-            return
-        }
-        if (driverImportAdminPassword.value !== CRUD_PASS) {
-            driverImportAdminPasswordError.value = "Password admin salah!"
             return
         }
 
@@ -947,9 +894,6 @@
         const crcOrg = organizersList.value.find(o => o.abbreviation === "CRC")
         driverFormData.organizer = crcOrg ? crcOrg.id : (organizersList.value[0]?.id || "")
         driverFormData.rating = ""
-        driverAdminPassword.value = ""
-        driverAdminPasswordError.value = ""
-        showDriverAdminPassword.value = false
         isDriverModalOpen.value = true
     }
 
@@ -962,27 +906,16 @@
         driverFormData.team = driverItem.team || driverItem.teams?.id || ""
         driverFormData.organizer = driverItem.organizer || driverItem.organizers?.id || ""
         driverFormData.rating = driverItem.rating || ""
-        driverAdminPassword.value = ""
-        driverAdminPasswordError.value = ""
-        showDriverAdminPassword.value = false
         isDriverModalOpen.value = true
     }
 
     const closeDriverModal = () => {
         isDriverModalOpen.value = false
-        driverAdminPassword.value = ""
-        driverAdminPasswordError.value = ""
-        showDriverAdminPassword.value = false
     }
 
     const saveDriver = async () => {
-        driverAdminPasswordError.value = ""
         if (!driverFormData.name.trim()) {
             showToast("Masukkan nama pembalap", "error")
-            return
-        }
-        if (driverAdminPassword.value !== CRUD_PASS) {
-            driverAdminPasswordError.value = "Password admin salah!"
             return
         }
 
@@ -1023,27 +956,16 @@
 
     const openDriverDeleteModal = (item) => {
         deletingDriverItem.value = item || drivers.value.find(d => d.id === editingDriverId.value)
-        driverDeletePassword.value = ""
-        driverDeletePasswordError.value = ""
-        showDriverDeletePassword.value = false
         isDriverDeleteModalOpen.value = true
     }
 
     const closeDriverDeleteModal = () => {
         isDriverDeleteModalOpen.value = false
         deletingDriverItem.value = null
-        driverDeletePassword.value = ""
-        driverDeletePasswordError.value = ""
-        showDriverDeletePassword.value = false
     }
 
     const confirmDeleteDriver = async () => {
         if (!deletingDriverItem.value) return
-        driverDeletePasswordError.value = ""
-        if (driverDeletePassword.value !== CRUD_PASS) {
-            driverDeletePasswordError.value = "Password admin salah!"
-            return
-        }
         deleting.value = true
         try {
             const { error } = await $supabase
@@ -1075,13 +997,6 @@
     const editingTeamId = ref(null)
     const deletingTeamItem = ref(null)
     const isTeamDeleteModalOpen = ref(false)
-
-    const teamAdminPassword = ref("")
-    const teamAdminPasswordError = ref("")
-    const showTeamAdminPassword = ref(false)
-    const teamDeletePassword = ref("")
-    const teamDeletePasswordError = ref("")
-    const showTeamDeletePassword = ref(false)
 
     const teamFormData = reactive({
         name: ""
@@ -1143,9 +1058,6 @@
         teamModalMode.value = "create"
         editingTeamId.value = null
         teamFormData.name = ""
-        teamAdminPassword.value = ""
-        teamAdminPasswordError.value = ""
-        showTeamAdminPassword.value = false
         isTeamModalOpen.value = true
     }
 
@@ -1154,27 +1066,16 @@
         editingTeamId.value = teamItem.id
         deletingTeamItem.value = teamItem
         teamFormData.name = teamItem.name || ""
-        teamAdminPassword.value = ""
-        teamAdminPasswordError.value = ""
-        showTeamAdminPassword.value = false
         isTeamModalOpen.value = true
     }
 
     const closeTeamModal = () => {
         isTeamModalOpen.value = false
-        teamAdminPassword.value = ""
-        teamAdminPasswordError.value = ""
-        showTeamAdminPassword.value = false
     }
 
     const saveTeam = async () => {
-        teamAdminPasswordError.value = ""
         if (!teamFormData.name.trim()) {
             showToast("Masukkan nama tim", "error")
-            return
-        }
-        if (teamAdminPassword.value !== CRUD_PASS) {
-            teamAdminPasswordError.value = "Password admin salah!"
             return
         }
 
@@ -1212,27 +1113,16 @@
 
     const openTeamDeleteModal = (item) => {
         deletingTeamItem.value = item || teams.value.find(t => t.id === editingTeamId.value)
-        teamDeletePassword.value = ""
-        teamDeletePasswordError.value = ""
-        showTeamDeletePassword.value = false
         isTeamDeleteModalOpen.value = true
     }
 
     const closeTeamDeleteModal = () => {
         isTeamDeleteModalOpen.value = false
         deletingTeamItem.value = null
-        teamDeletePassword.value = ""
-        teamDeletePasswordError.value = ""
-        showTeamDeletePassword.value = false
     }
 
     const confirmDeleteTeam = async () => {
         if (!deletingTeamItem.value) return
-        teamDeletePasswordError.value = ""
-        if (teamDeletePassword.value !== CRUD_PASS) {
-            teamDeletePasswordError.value = "Password admin salah!"
-            return
-        }
         deleting.value = true
         try {
             const { error } = await $supabase
@@ -1266,13 +1156,6 @@
     const editingRentalId = ref(null)
     const deletingRentalItem = ref(null)
     const isRentalDeleteModalOpen = ref(false)
-
-    const rentalAdminPassword = ref("")
-    const rentalAdminPasswordError = ref("")
-    const showRentalAdminPassword = ref(false)
-    const rentalDeletePassword = ref("")
-    const rentalDeletePasswordError = ref("")
-    const showRentalDeletePassword = ref(false)
 
     const rentalFormData = reactive({
         name: "",
@@ -1357,9 +1240,6 @@
         rentalFormData.province = ""
         rentalFormData.regency = ""
         rentalFormData.show = true
-        rentalAdminPassword.value = ""
-        rentalAdminPasswordError.value = ""
-        showRentalAdminPassword.value = false
         isRentalModalOpen.value = true
     }
 
@@ -1373,27 +1253,16 @@
         rentalFormData.province = rentalItem.province || ""
         rentalFormData.regency = rentalItem.regency || ""
         rentalFormData.show = rentalItem.show !== false
-        rentalAdminPassword.value = ""
-        rentalAdminPasswordError.value = ""
-        showRentalAdminPassword.value = false
         isRentalModalOpen.value = true
     }
 
     const closeRentalModal = () => {
         isRentalModalOpen.value = false
-        rentalAdminPassword.value = ""
-        rentalAdminPasswordError.value = ""
-        showRentalAdminPassword.value = false
     }
 
     const saveRental = async () => {
-        rentalAdminPasswordError.value = ""
         if (!rentalFormData.name.trim()) {
             showToast("Masukkan nama rental", "error")
-            return
-        }
-        if (rentalAdminPassword.value !== CRUD_PASS) {
-            rentalAdminPasswordError.value = "Password admin salah!"
             return
         }
 
@@ -1436,27 +1305,16 @@
 
     const openRentalDeleteModal = (item) => {
         deletingRentalItem.value = item || rentals.value.find(r => r.id === editingRentalId.value)
-        rentalDeletePassword.value = ""
-        rentalDeletePasswordError.value = ""
-        showRentalDeletePassword.value = false
         isRentalDeleteModalOpen.value = true
     }
 
     const closeRentalDeleteModal = () => {
         isRentalDeleteModalOpen.value = false
         deletingRentalItem.value = null
-        rentalDeletePassword.value = ""
-        rentalDeletePasswordError.value = ""
-        showRentalDeletePassword.value = false
     }
 
     const confirmDeleteRental = async () => {
         if (!deletingRentalItem.value) return
-        rentalDeletePasswordError.value = ""
-        if (rentalDeletePassword.value !== CRUD_PASS) {
-            rentalDeletePasswordError.value = "Password admin salah!"
-            return
-        }
         deleting.value = true
         try {
             const { error } = await $supabase
@@ -1492,14 +1350,7 @@
     const isTeamEvent = ref(false)
 
     const isResultsSaveModalOpen = ref(false)
-    const resultsAdminPassword = ref("")
-    const resultsAdminPasswordError = ref("")
-    const showResultsAdminPassword = ref(false)
-
     const isResultsDeleteModalOpen = ref(false)
-    const resultsDeletePassword = ref("")
-    const resultsDeletePasswordError = ref("")
-    const showResultsDeletePassword = ref(false)
 
     const resultStatusOptions = [
         { value: "finished", label: "Finished (FIN)", badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
@@ -1526,9 +1377,6 @@
     const targetSessionCount = ref(0)
     const loadingTargetSessionCheck = ref(false)
     const moveConflictAction = ref("swap") // 'swap' | 'overwrite'
-    const moveSessionPassword = ref("")
-    const moveSessionPasswordError = ref("")
-    const showMoveSessionPassword = ref(false)
     const movingSession = ref(false)
     const suppressFetchOnSessionChange = ref(false)
 
@@ -3453,25 +3301,14 @@
             showToast(isTeamEvent.value ? "Isi minimal satu data tim" : "Isi minimal satu data pembalap", "error")
             return
         }
-        resultsAdminPassword.value = ""
-        resultsAdminPasswordError.value = ""
-        showResultsAdminPassword.value = false
         isResultsSaveModalOpen.value = true
     }
 
     const closeSaveResultsModal = () => {
         isResultsSaveModalOpen.value = false
-        resultsAdminPassword.value = ""
-        resultsAdminPasswordError.value = ""
-        showResultsAdminPassword.value = false
     }
 
     const confirmSaveRaceResults = async () => {
-        resultsAdminPasswordError.value = ""
-        if (resultsAdminPassword.value !== CRUD_PASS) {
-            resultsAdminPasswordError.value = "Password admin salah!"
-            return
-        }
 
         if (selectedSessionType.value !== 'qualifying') {
             activeResultClasses.value.forEach(cls => {
@@ -3655,26 +3492,14 @@
 
     const openDeleteResultsModal = () => {
         if (!selectedScheduleId.value) return
-        resultsDeletePassword.value = ""
-        resultsDeletePasswordError.value = ""
-        showResultsDeletePassword.value = false
         isResultsDeleteModalOpen.value = true
     }
 
     const closeDeleteResultsModal = () => {
         isResultsDeleteModalOpen.value = false
-        resultsDeletePassword.value = ""
-        resultsDeletePasswordError.value = ""
-        showResultsDeletePassword.value = false
     }
 
     const confirmDeleteRaceResults = async () => {
-        resultsDeletePasswordError.value = ""
-        if (resultsDeletePassword.value !== CRUD_PASS) {
-            resultsDeletePasswordError.value = "Password admin salah!"
-            return
-        }
-
         deleting.value = true
         try {
             const schedId = selectedScheduleId.value
@@ -3751,9 +3576,6 @@
         const nextTarget = availableTargetSessions.value[0]?.value || "race_1"
         targetMoveSessionType.value = nextTarget
         moveConflictAction.value = "swap"
-        moveSessionPassword.value = ""
-        moveSessionPasswordError.value = ""
-        showMoveSessionPassword.value = false
         isMoveSessionModalOpen.value = true
 
         if (hasExistingDbResults.value) {
@@ -3766,9 +3588,6 @@
 
     const closeMoveSessionModal = () => {
         isMoveSessionModalOpen.value = false
-        moveSessionPassword.value = ""
-        moveSessionPasswordError.value = ""
-        showMoveSessionPassword.value = false
         movingSession.value = false
     }
 
@@ -3796,12 +3615,6 @@
         }
 
         // 2. DATABASE MODE (saved in DB)
-        moveSessionPasswordError.value = ""
-        if (moveSessionPassword.value !== CRUD_PASS) {
-            moveSessionPasswordError.value = "Password admin salah!"
-            return
-        }
-
         movingSession.value = true
         try {
             const schedId = selectedScheduleId.value
@@ -4030,15 +3843,9 @@
     const pointsSystemModalMode = ref("create") // 'create' | 'edit'
     const editingPointsSystemId = ref(null)
     const savingPointsSystem = ref(false)
-    const pointsSystemPassword = ref("")
-    const pointsSystemPasswordError = ref("")
-    const showPointsSystemPassword = ref(false)
 
     const isPointsSystemDeleteModalOpen = ref(false)
     const deletingPointsSystemItem = ref(null)
-    const pointsSystemDeletePassword = ref("")
-    const pointsSystemDeletePasswordError = ref("")
-    const showPointsSystemDeletePassword = ref(false)
 
     // rules: [{ position, points }], bonuses: [{ bonus_type, points, requires_classification }]
     const pointsSystemForm = reactive({
@@ -4152,9 +3959,6 @@
         pointsSystemForm.description = ""
         pointsSystemForm.rules = []
         pointsSystemForm.bonuses = []
-        pointsSystemPassword.value = ""
-        pointsSystemPasswordError.value = ""
-        showPointsSystemPassword.value = false
         isPointsSystemModalOpen.value = true
     }
 
@@ -4171,25 +3975,14 @@
             points: Number(b.points),
             requires_classification: Boolean(b.requires_classification)
         }))
-        pointsSystemPassword.value = ""
-        pointsSystemPasswordError.value = ""
-        showPointsSystemPassword.value = false
         isPointsSystemModalOpen.value = true
     }
 
     const closePointsSystemModal = () => {
         isPointsSystemModalOpen.value = false
-        pointsSystemPassword.value = ""
-        pointsSystemPasswordError.value = ""
-        showPointsSystemPassword.value = false
     }
 
     const savePointsSystem = async () => {
-        pointsSystemPasswordError.value = ""
-        if (pointsSystemPassword.value !== CRUD_PASS) {
-            pointsSystemPasswordError.value = "Password admin salah!"
-            return
-        }
         if (!pointsSystemForm.name.trim()) {
             showToast("Nama sistem poin wajib diisi", "error")
             return
@@ -4269,26 +4062,15 @@
 
     const openDeletePointsSystemModal = (sys) => {
         deletingPointsSystemItem.value = sys
-        pointsSystemDeletePassword.value = ""
-        pointsSystemDeletePasswordError.value = ""
-        showPointsSystemDeletePassword.value = false
         isPointsSystemDeleteModalOpen.value = true
     }
 
     const closeDeletePointsSystemModal = () => {
         isPointsSystemDeleteModalOpen.value = false
         deletingPointsSystemItem.value = null
-        pointsSystemDeletePassword.value = ""
-        pointsSystemDeletePasswordError.value = ""
-        showPointsSystemDeletePassword.value = false
     }
 
     const confirmDeletePointsSystem = async () => {
-        pointsSystemDeletePasswordError.value = ""
-        if (pointsSystemDeletePassword.value !== CRUD_PASS) {
-            pointsSystemDeletePasswordError.value = "Password admin salah!"
-            return
-        }
         if (!deletingPointsSystemItem.value) return
 
         deleting.value = true
@@ -4345,9 +4127,6 @@
     const seasonModalMode = ref("create")
     const editingSeasonId = ref(null)
     const savingSeason = ref(false)
-    const seasonPassword = ref("")
-    const seasonPasswordError = ref("")
-    const showSeasonPassword = ref(false)
     const seasonForm = reactive({
         event_id: "",
         season_number: 1
@@ -4358,9 +4137,6 @@
     const championshipModalMode = ref("create")
     const editingChampionshipId = ref(null)
     const savingChampionship = ref(false)
-    const championshipPassword = ref("")
-    const championshipPasswordError = ref("")
-    const showChampionshipPassword = ref(false)
     const championshipForm = reactive({
         season_id: "",
         class_id: "",
@@ -4384,9 +4160,6 @@
 
     const isChampionshipDeleteModalOpen = ref(false)
     const deletingChampionshipItem = ref(null)
-    const championshipDeletePassword = ref("")
-    const championshipDeletePasswordError = ref("")
-    const showChampionshipDeletePassword = ref(false)
 
     // Add-rounds modal
     const isAddRoundsModalOpen = ref(false)
@@ -4821,9 +4594,6 @@
         editingSeasonId.value = null
         seasonForm.event_id = ""
         seasonForm.season_number = 1
-        seasonPassword.value = ""
-        seasonPasswordError.value = ""
-        showSeasonPassword.value = false
         isSeasonModalOpen.value = true
     }
 
@@ -4832,25 +4602,14 @@
         editingSeasonId.value = season.id
         seasonForm.event_id = season.event_id || ""
         seasonForm.season_number = season.season_number || 1
-        seasonPassword.value = ""
-        seasonPasswordError.value = ""
-        showSeasonPassword.value = false
         isSeasonModalOpen.value = true
     }
 
     const closeSeasonModal = () => {
         isSeasonModalOpen.value = false
-        seasonPassword.value = ""
-        seasonPasswordError.value = ""
-        showSeasonPassword.value = false
     }
 
     const saveSeason = async () => {
-        seasonPasswordError.value = ""
-        if (seasonPassword.value !== CRUD_PASS) {
-            seasonPasswordError.value = "Password admin salah!"
-            return
-        }
         if (!seasonForm.event_id) {
             showToast("Pilih event terlebih dahulu", "error")
             return
@@ -4896,9 +4655,6 @@
         championshipForm.default_points_system_id = pointsSystems.value[0]?.id || ""
         showAddClassInput.value = false
         newClassName.value = ""
-        championshipPassword.value = ""
-        championshipPasswordError.value = ""
-        showChampionshipPassword.value = false
         isChampionshipModalOpen.value = true
     }
 
@@ -4911,9 +4667,6 @@
         championshipForm.default_points_system_id = ""
         showAddClassInput.value = false
         newClassName.value = ""
-        championshipPassword.value = ""
-        championshipPasswordError.value = ""
-        showChampionshipPassword.value = false
         isChampionshipModalOpen.value = true
     }
 
@@ -4921,17 +4674,9 @@
         isChampionshipModalOpen.value = false
         showAddClassInput.value = false
         newClassName.value = ""
-        championshipPassword.value = ""
-        championshipPasswordError.value = ""
-        showChampionshipPassword.value = false
     }
 
     const saveChampionship = async () => {
-        championshipPasswordError.value = ""
-        if (championshipPassword.value !== CRUD_PASS) {
-            championshipPasswordError.value = "Password admin salah!"
-            return
-        }
         if (!championshipForm.season_id) {
             showToast("Pilih season terlebih dahulu", "error")
             return
@@ -4979,26 +4724,15 @@
 
     const openDeleteChampionshipModal = (champ) => {
         deletingChampionshipItem.value = champ
-        championshipDeletePassword.value = ""
-        championshipDeletePasswordError.value = ""
-        showChampionshipDeletePassword.value = false
         isChampionshipDeleteModalOpen.value = true
     }
 
     const closeDeleteChampionshipModal = () => {
         isChampionshipDeleteModalOpen.value = false
         deletingChampionshipItem.value = null
-        championshipDeletePassword.value = ""
-        championshipDeletePasswordError.value = ""
-        showChampionshipDeletePassword.value = false
     }
 
     const confirmDeleteChampionship = async () => {
-        championshipDeletePasswordError.value = ""
-        if (championshipDeletePassword.value !== CRUD_PASS) {
-            championshipDeletePasswordError.value = "Password admin salah!"
-            return
-        }
         if (!deletingChampionshipItem.value) return
 
         deleting.value = true
@@ -8588,44 +8322,17 @@
                         />
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4 items-end">
-                        <div class="flex flex-col gap-2 py-1">
-                            <div class="flex items-center gap-2 sm:gap-3">
-                                <input
-                                    id="postponed-checkbox"
-                                    v-model="scheduleFormData.is_postponed"
-                                    type="checkbox"
-                                    class="w-4 h-4 sm:w-5 sm:h-5 accent-red-900 rounded cursor-pointer shrink-0"
-                                />
-                                <label for="postponed-checkbox" class="text-black dark:text-white text-xs sm:text-sm font-medium cursor-pointer select-none">
-                                    Ditunda
-                                </label>
-                            </div>
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                            <div class="relative flex items-center">
-                                <input
-                                    v-model="scheduleAdminPassword"
-                                    :type="showScheduleAdminPassword ? 'text' : 'password'"
-                                    required
-                                    placeholder="Password admin"
-                                    @input="scheduleAdminPasswordError = ''"
-                                    class="p-2.5 pr-9 sm:pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-xs sm:text-sm focus:outline-none w-full"
-                                    :class="scheduleAdminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                                />
-                                <button
-                                    type="button"
-                                    @click="showScheduleAdminPassword = !showScheduleAdminPassword"
-                                    class="absolute right-2.5 sm:right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                    title="Tampilkan/Sembunyikan Password"
-                                >
-                                    <Icon :name="showScheduleAdminPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-lg sm:text-xl" />
-                                </button>
-                            </div>
-                            <p v-if="scheduleAdminPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                                {{ scheduleAdminPasswordError }}
-                            </p>
+                    <div class="flex flex-col gap-2 py-1">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <input
+                                id="postponed-checkbox"
+                                v-model="scheduleFormData.is_postponed"
+                                type="checkbox"
+                                class="w-4 h-4 sm:w-5 sm:h-5 accent-red-900 rounded cursor-pointer shrink-0"
+                            />
+                            <label for="postponed-checkbox" class="text-black dark:text-white text-xs sm:text-sm font-medium cursor-pointer select-none">
+                                Ditunda
+                            </label>
                         </div>
                     </div>
 
@@ -8686,31 +8393,6 @@
                         </strong>?
                     </p>
 
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="scheduleDeletePassword"
-                                :type="showScheduleDeletePassword ? 'text' : 'password'"
-                                required
-                                placeholder="Masukkan password admin"
-                                @input="scheduleDeletePasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="scheduleDeletePasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showScheduleDeletePassword = !showScheduleDeletePassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showScheduleDeletePassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="scheduleDeletePasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ scheduleDeletePasswordError }}
-                        </p>
-                    </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
                         <button
@@ -8821,32 +8503,6 @@
                         </div>
                     </div>
 
-                    <!-- Admin Password -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="driverAdminPassword"
-                                :type="showDriverAdminPassword ? 'text' : 'password'"
-                                required
-                                placeholder="Password admin"
-                                @input="driverAdminPasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="driverAdminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showDriverAdminPassword = !showDriverAdminPassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showDriverAdminPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="driverAdminPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ driverAdminPasswordError }}
-                        </p>
-                    </div>
 
                     <!-- Actions -->
                     <div class="flex items-center justify-between border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
@@ -8907,31 +8563,6 @@
                         ({{ deletingDriverItem?.teams?.name || 'Tanpa Tim' }}{{ deletingDriverItem?.rating ? ' - ' + deletingDriverItem.rating : '' }})?
                     </p>
 
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="driverDeletePassword"
-                                :type="showDriverDeletePassword ? 'text' : 'password'"
-                                required
-                                placeholder="Masukkan password admin"
-                                @input="driverDeletePasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="driverDeletePasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showDriverDeletePassword = !showDriverDeletePassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showDriverDeletePassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="driverDeletePasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ driverDeletePasswordError }}
-                        </p>
-                    </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
                         <button
@@ -9059,34 +8690,8 @@
                     </div>
                 </div>
 
-                <!-- Admin Password Verification -->
+                <!-- Submit Action -->
                 <form @submit.prevent="confirmImportDrivers" class="flex flex-col gap-4 border-t border-gray-200 dark:border-slate-800 pt-3 mt-1">
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="driverImportAdminPassword"
-                                :type="showDriverImportAdminPassword ? 'text' : 'password'"
-                                required
-                                placeholder="Masukkan password admin"
-                                @input="driverImportAdminPasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="driverImportAdminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showDriverImportAdminPassword = !showDriverImportAdminPassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showDriverImportAdminPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="driverImportAdminPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ driverImportAdminPasswordError }}
-                        </p>
-                    </div>
-
                     <div class="flex items-center justify-end gap-3 pt-2">
                         <button
                             type="button"
@@ -9139,32 +8744,6 @@
                         />
                     </div>
 
-                    <!-- Admin Password -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="teamAdminPassword"
-                                :type="showTeamAdminPassword ? 'text' : 'password'"
-                                required
-                                placeholder="Password admin"
-                                @input="teamAdminPasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="teamAdminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showTeamAdminPassword = !showTeamAdminPassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showTeamAdminPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="teamAdminPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ teamAdminPasswordError }}
-                        </p>
-                    </div>
 
                     <!-- Actions -->
                     <div class="flex items-center justify-between border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
@@ -9224,31 +8803,6 @@
                         </strong>?
                     </p>
 
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="teamDeletePassword"
-                                :type="showTeamDeletePassword ? 'text' : 'password'"
-                                required
-                                placeholder="Masukkan password admin"
-                                @input="teamDeletePasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="teamDeletePasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showTeamDeletePassword = !showTeamDeletePassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showTeamDeletePassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="teamDeletePasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ teamDeletePasswordError }}
-                        </p>
-                    </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
                         <button
@@ -9352,32 +8906,6 @@
                         </div>
                     </div>
 
-                    <!-- Admin Password -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="rentalAdminPassword"
-                                :type="showRentalAdminPassword ? 'text' : 'password'"
-                                required
-                                placeholder="Password admin"
-                                @input="rentalAdminPasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="rentalAdminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showRentalAdminPassword = !showRentalAdminPassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showRentalAdminPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="rentalAdminPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ rentalAdminPasswordError }}
-                        </p>
-                    </div>
 
                     <!-- Actions -->
                     <div class="flex items-center justify-between border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
@@ -9438,31 +8966,6 @@
                         ({{ deletingRentalItem?.regency ? deletingRentalItem.regency + ', ' : '' }}{{ deletingRentalItem?.province }})?
                     </p>
 
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="rentalDeletePassword"
-                                :type="showRentalDeletePassword ? 'text' : 'password'"
-                                required
-                                placeholder="Masukkan password admin"
-                                @input="rentalDeletePasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="rentalDeletePasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showRentalDeletePassword = !showRentalDeletePassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showRentalDeletePassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="rentalDeletePasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ rentalDeletePasswordError }}
-                        </p>
-                    </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
                         <button
@@ -9528,32 +9031,6 @@
                         </p>
                     </div>
 
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="resultsAdminPassword"
-                                :type="showResultsAdminPassword ? 'text' : 'password'"
-                                required
-                                placeholder="Masukkan password admin"
-                                @input="resultsAdminPasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="resultsAdminPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showResultsAdminPassword = !showResultsAdminPassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showResultsAdminPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="resultsAdminPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ resultsAdminPasswordError }}
-                        </p>
-                    </div>
-
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
                         <button
                             type="button"
@@ -9598,31 +9075,6 @@
                         </strong>?
                     </p>
 
-                    <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                        <div class="relative flex items-center">
-                            <input
-                                v-model="resultsDeletePassword"
-                                :type="showResultsDeletePassword ? 'text' : 'password'"
-                                required
-                                placeholder="Masukkan password admin"
-                                @input="resultsDeletePasswordError = ''"
-                                class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                :class="resultsDeletePasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                            />
-                            <button
-                                type="button"
-                                @click="showResultsDeletePassword = !showResultsDeletePassword"
-                                class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                title="Tampilkan/Sembunyikan Password"
-                            >
-                                <Icon :name="showResultsDeletePassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                            </button>
-                        </div>
-                        <p v-if="resultsDeletePasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                            {{ resultsDeletePasswordError }}
-                        </p>
-                    </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
                         <button
@@ -9768,32 +9220,6 @@
                             </div>
                         </div>
 
-                        <!-- Password input for DB modification -->
-                        <div class="flex flex-col gap-1 mt-1">
-                            <label class="text-black dark:text-white text-xs sm:text-sm font-medium">Password Admin <span class="text-red-600">*</span></label>
-                            <div class="relative flex items-center">
-                                <input
-                                    v-model="moveSessionPassword"
-                                    :type="showMoveSessionPassword ? 'text' : 'password'"
-                                    required
-                                    placeholder="Masukkan password admin"
-                                    @input="moveSessionPasswordError = ''"
-                                    class="p-2.5 pr-10 rounded-lg border-2 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none w-full"
-                                    :class="moveSessionPasswordError ? 'border-red-600 dark:border-red-500' : 'border-red-900 dark:border-red-900'"
-                                />
-                                <button
-                                    type="button"
-                                    @click="showMoveSessionPassword = !showMoveSessionPassword"
-                                    class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer flex items-center"
-                                    title="Tampilkan/Sembunyikan Password"
-                                >
-                                    <Icon :name="showMoveSessionPassword ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'" class="text-xl" />
-                                </button>
-                            </div>
-                            <p v-if="moveSessionPasswordError" class="text-xs text-red-600 dark:text-red-400 font-semibold">
-                                {{ moveSessionPasswordError }}
-                            </p>
-                        </div>
                     </template>
 
                     <!-- Footer Buttons -->
@@ -10016,29 +9442,6 @@
                         </div>
                     </div>
 
-                    <!-- Password -->
-                    <div class="flex flex-col gap-1.5 pt-2 border-t border-gray-200 dark:border-slate-800">
-                        <label class="text-xs sm:text-sm font-bold text-black dark:text-white">
-                            Password Admin <span class="text-red-600">*</span>
-                        </label>
-                        <div class="relative">
-                            <input
-                                v-model="pointsSystemPassword"
-                                :type="showPointsSystemPassword ? 'text' : 'password'"
-                                required
-                                placeholder="Masukkan password admin"
-                                class="w-full p-2.5 pr-10 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
-                            />
-                            <button
-                                type="button"
-                                @click="showPointsSystemPassword = !showPointsSystemPassword"
-                                class="absolute right-3 top-3 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                            >
-                                <Icon :name="showPointsSystemPassword ? 'material-symbols:visibility-off' : 'material-symbols:visibility'" />
-                            </button>
-                        </div>
-                        <p v-if="pointsSystemPasswordError" class="text-xs text-red-600 font-semibold">{{ pointsSystemPasswordError }}</p>
-                    </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4">
                         <button
@@ -10083,27 +9486,6 @@
                         Aturan poin dan bonusnya juga akan dihapus.
                     </p>
 
-                    <div class="flex flex-col gap-1.5">
-                        <label class="text-xs sm:text-sm font-bold text-black dark:text-white">
-                            Password Admin <span class="text-red-600">*</span>
-                        </label>
-                        <div class="relative">
-                            <input
-                                v-model="pointsSystemDeletePassword"
-                                :type="showPointsSystemDeletePassword ? 'text' : 'password'"
-                                required
-                                class="w-full p-2.5 pr-10 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
-                            />
-                            <button
-                                type="button"
-                                @click="showPointsSystemDeletePassword = !showPointsSystemDeletePassword"
-                                class="absolute right-3 top-3 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                            >
-                                <Icon :name="showPointsSystemDeletePassword ? 'material-symbols:visibility-off' : 'material-symbols:visibility'" />
-                            </button>
-                        </div>
-                        <p v-if="pointsSystemDeletePasswordError" class="text-xs text-red-600 font-semibold">{{ pointsSystemDeletePasswordError }}</p>
-                    </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4">
                         <button
@@ -10182,27 +9564,7 @@
                         />
                     </div>
 
-                    <div class="flex flex-col gap-1.5 pt-2 border-t border-gray-200 dark:border-slate-800">
-                        <label class="text-xs sm:text-sm font-bold text-black dark:text-white">
-                            Password Admin <span class="text-red-600">*</span>
-                        </label>
-                        <div class="relative">
-                            <input
-                                v-model="seasonPassword"
-                                :type="showSeasonPassword ? 'text' : 'password'"
-                                required
-                                class="w-full p-2.5 pr-10 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
-                            />
-                            <button
-                                type="button"
-                                @click="showSeasonPassword = !showSeasonPassword"
-                                class="absolute right-3 top-3 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                            >
-                                <Icon :name="showSeasonPassword ? 'material-symbols:visibility-off' : 'material-symbols:visibility'" />
-                            </button>
-                        </div>
-                        <p v-if="seasonPasswordError" class="text-xs text-red-600 font-semibold">{{ seasonPasswordError }}</p>
-                    </div>
+
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4">
                         <button
@@ -10375,27 +9737,7 @@
                         </p>
                     </div>
 
-                    <div class="flex flex-col gap-1.5 pt-2 border-t border-gray-200 dark:border-slate-800">
-                        <label class="text-xs sm:text-sm font-bold text-black dark:text-white">
-                            Password Admin <span class="text-red-600">*</span>
-                        </label>
-                        <div class="relative">
-                            <input
-                                v-model="championshipPassword"
-                                :type="showChampionshipPassword ? 'text' : 'password'"
-                                required
-                                class="w-full p-2.5 pr-10 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
-                            />
-                            <button
-                                type="button"
-                                @click="showChampionshipPassword = !showChampionshipPassword"
-                                class="absolute right-3 top-3 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                            >
-                                <Icon :name="showChampionshipPassword ? 'material-symbols:visibility-off' : 'material-symbols:visibility'" />
-                            </button>
-                        </div>
-                        <p v-if="championshipPasswordError" class="text-xs text-red-600 font-semibold">{{ championshipPasswordError }}</p>
-                    </div>
+
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4">
                         <button
@@ -10440,27 +9782,7 @@
                         Semua konfigurasi ronde dan klasemennya akan dihapus. Hasil balapan tetap aman.
                     </p>
 
-                    <div class="flex flex-col gap-1.5">
-                        <label class="text-xs sm:text-sm font-bold text-black dark:text-white">
-                            Password Admin <span class="text-red-600">*</span>
-                        </label>
-                        <div class="relative">
-                            <input
-                                v-model="championshipDeletePassword"
-                                :type="showChampionshipDeletePassword ? 'text' : 'password'"
-                                required
-                                class="w-full p-2.5 pr-10 rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-black dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
-                            />
-                            <button
-                                type="button"
-                                @click="showChampionshipDeletePassword = !showChampionshipDeletePassword"
-                                class="absolute right-3 top-3 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                            >
-                                <Icon :name="showChampionshipDeletePassword ? 'material-symbols:visibility-off' : 'material-symbols:visibility'" />
-                            </button>
-                        </div>
-                        <p v-if="championshipDeletePasswordError" class="text-xs text-red-600 font-semibold">{{ championshipDeletePasswordError }}</p>
-                    </div>
+
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4">
                         <button
