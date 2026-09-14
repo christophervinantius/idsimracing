@@ -146,32 +146,37 @@ export const cleanDriverName = (rawName?: string | null): string[] => {
 }
 
 export const formatLapTime = (timeMs?: number | null): string => {
-    if (!timeMs || timeMs <= 0) return "-"
-    const totalSeconds = timeMs / 1000
+    if (timeMs === null || timeMs === undefined || isNaN(timeMs) || timeMs === 0) return "-"
+    const isNegative = timeMs < 0
+    const absMs = Math.abs(timeMs)
+    const totalSeconds = absMs / 1000
     const minutes = Math.floor(totalSeconds / 60)
     const seconds = (totalSeconds % 60).toFixed(3).padStart(6, "0")
-    return minutes > 0 ? `${minutes}:${seconds}` : `${seconds}`
+    const sign = isNegative ? "-" : ""
+    return minutes > 0 ? `${sign}${minutes}:${seconds}` : `${sign}${(totalSeconds % 60).toFixed(3)}`
 }
 
 export const breakdownTotalTime = (timeMs?: number | null): ParsedTimeBreakdown => {
-    if (!timeMs || timeMs <= 0) {
+    if (timeMs === null || timeMs === undefined || isNaN(timeMs) || timeMs === 0) {
         return { hours: 0, minutes: 0, seconds: 0, formatted: "-" }
     }
-    // Determine hours, minutes, and seconds by dividing TotalTime by 60000 first
-    const totalMinutes = timeMs / 60000
+    const isNegative = timeMs < 0
+    const absMs = Math.abs(timeMs)
+    const totalMinutes = absMs / 60000
     const hours = Math.floor(totalMinutes / 60)
     const minutes = Math.floor(totalMinutes % 60)
-    const seconds = (timeMs % 60000) / 1000
+    const seconds = (absMs % 60000) / 1000
 
     const secFormatted = seconds.toFixed(3).padStart(6, "0")
+    const sign = isNegative ? "-" : ""
     let formatted = ""
     if (hours > 0) {
         const minFormatted = String(minutes).padStart(2, "0")
-        formatted = `${hours}:${minFormatted}:${secFormatted}`
+        formatted = `${sign}${hours}:${minFormatted}:${secFormatted}`
     } else if (minutes > 0) {
-        formatted = `${minutes}:${secFormatted}`
+        formatted = `${sign}${minutes}:${secFormatted}`
     } else {
-        formatted = `${secFormatted}`
+        formatted = `${sign}${seconds.toFixed(3)}`
     }
 
     return { hours, minutes, seconds, formatted }
@@ -182,22 +187,25 @@ export const formatTotalTime = (timeMs?: number | null): string => {
 }
 
 export const formatGapTime = (gapMs: number): string => {
-    if (gapMs <= 0) return "-"
-    const totalMinutes = gapMs / 60000
+    if (gapMs === null || gapMs === undefined || isNaN(gapMs) || gapMs === 0) return "-"
+    const isNegative = gapMs < 0
+    const absMs = Math.abs(gapMs)
+    const totalMinutes = absMs / 60000
     const hours = Math.floor(totalMinutes / 60)
     const minutes = Math.floor(totalMinutes % 60)
-    const seconds = (gapMs % 60000) / 1000
+    const seconds = (absMs % 60000) / 1000
+    const sign = isNegative ? "-" : "+"
 
     if (hours > 0) {
         const minFormatted = String(minutes).padStart(2, "0")
         const secPad = seconds.toFixed(3).padStart(6, "0")
-        return `+${hours}:${minFormatted}:${secPad}`
+        return `${sign}${hours}:${minFormatted}:${secPad}`
     }
     if (minutes > 0) {
         const secPad = seconds.toFixed(3).padStart(6, "0")
-        return `+${minutes}:${secPad}`
+        return `${sign}${minutes}:${secPad}`
     }
-    return `+${seconds.toFixed(3)}`
+    return `${sign}${seconds.toFixed(3)}`
 }
 
 export const parseAcsmResult = (jsonData: any): AcsmResultRow[] => {
@@ -321,27 +329,27 @@ export const parseAcsmResult = (jsonData: any): AcsmResultRow[] => {
         let gap = "-"
         if (isClassWinner) {
             if (isQualifying) {
-                gap = bestLapMs > 0 ? formatLapTime(bestLapMs) : (totalTime > 0 ? formatLapTime(totalTime) : "-")
+                gap = bestLapMs > 0 ? formatLapTime(bestLapMs) : (totalTime !== 0 ? formatLapTime(totalTime) : "-")
             } else {
-                gap = totalTime > 0 ? formatTotalTime(totalTime) : (bestLapMs > 0 ? formatLapTime(bestLapMs) : "-")
+                gap = totalTime !== 0 ? formatTotalTime(totalTime) : (bestLapMs > 0 ? formatLapTime(bestLapMs) : "-")
             }
         } else if (classLeader) {
             if (isQualifying) {
-                if (bestLapMs > 0 && classLeader.bestLapMs > 0 && bestLapMs > classLeader.bestLapMs) {
+                if (bestLapMs > 0 && classLeader.bestLapMs > 0 && bestLapMs !== classLeader.bestLapMs) {
                     const gapMs = bestLapMs - classLeader.bestLapMs
                     gap = formatGapTime(gapMs)
-                } else if (totalTime > 0) {
+                } else if (totalTime !== 0) {
                     gap = formatGapTime(totalTime)
                 }
             } else if (classLeader.laps > numLaps && classLeader.laps > 0) {
                 const lapsDown = classLeader.laps - numLaps
                 gap = `+${lapsDown} ${lapsDown === 1 ? "Lap" : "Laps"}`
-            } else if (totalTime > 0 && classLeader.totalTime > 0 && totalTime > classLeader.totalTime && totalTime > 60000 && classLeader.totalTime > 60000) {
+            } else if (totalTime > 60000 && classLeader.totalTime > 60000) {
                 const gapMs = totalTime - classLeader.totalTime
                 gap = formatGapTime(gapMs)
-            } else if (totalTime > 0) {
+            } else if (totalTime !== 0 && !isNaN(totalTime)) {
                 gap = formatGapTime(totalTime)
-            } else if (bestLapMs > 0 && classLeader.bestLapMs > 0 && bestLapMs > classLeader.bestLapMs) {
+            } else if (bestLapMs > 0 && classLeader.bestLapMs > 0 && bestLapMs !== classLeader.bestLapMs) {
                 const gapMs = bestLapMs - classLeader.bestLapMs
                 gap = formatGapTime(gapMs)
             }

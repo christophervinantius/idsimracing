@@ -528,11 +528,13 @@
                 const targetClassId = selectedChampionship.value?.class_id ? String(selectedChampionship.value.class_id) : null
 
                 let effectiveScoringMode = "in_class"
-                if (isClassChampionship) {
-                    effectiveScoringMode = "in_class"
+                if (round.scoring_mode === "overall_strict") {
+                    effectiveScoringMode = "overall_strict"
                 } else if (round.scoring_mode === "overall") {
                     effectiveScoringMode = "overall"
                 } else if (round.scoring_mode === "in_class") {
+                    effectiveScoringMode = "in_class"
+                } else if (isClassChampionship) {
                     effectiveScoringMode = "in_class"
                 } else {
                     effectiveScoringMode = round.session_type === "qualifying" ? "in_class" : "overall"
@@ -543,7 +545,7 @@
                 )
 
                 let overallFastestResult = null
-                if (effectiveScoringMode === "overall" && session && session.results) {
+                if ((effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict") && session && session.results) {
                     const candidatesWithTime = session.results.filter(r => (r.best_lap_ms ?? 0) > 0)
                     if (candidatesWithTime.length > 0) {
                         overallFastestResult = candidatesWithTime.reduce((best, cur) =>
@@ -577,7 +579,9 @@
                 if (qualifyingSession && isFirstRaceSession && !hasGridPositionsInSession) {
                     for (const qr of qualifyingSession.results || []) {
                         if (targetClassId && qr.class_id && String(qr.class_id) !== targetClassId) continue
-                        const qpos = isClassChampionship ? (qr.scoring_position ?? qr.classified_position) : (qr.classified_position ?? qr.scoring_position)
+                        const qpos = effectiveScoringMode === "overall_strict"
+                            ? (qr.classified_position ?? qr.scoring_position)
+                            : (qr.scoring_position ?? qr.classified_position)
                         if (qpos === 1) {
                             if (qr.driver_ids && qr.driver_ids.length > 0) {
                                 qr.driver_ids.forEach(id => { if (id) poleKeys.add(String(id)) })
@@ -616,11 +620,30 @@
                             }
                         }
 
-                        const isFastestLap = (effectiveScoringMode === "overall" && !isClassChampionship)
-                            ? (overallFastestResult !== null && r === overallFastestResult)
-                            : Boolean(r.fastest_lap)
+                        const classFastestMap = new Map()
+                        const flCandidates = (session?.results || []).filter(r => r.fastest_lap)
+                        if (flCandidates.length > 0) {
+                            for (const fl of flCandidates) {
+                                const classKey = fl.class_id ? String(fl.class_id) : "__overall__"
+                                classFastestMap.set(classKey, fl)
+                            }
+                        } else {
+                            for (const sessR of session?.results || []) {
+                                if ((sessR.best_lap_ms ?? 0) <= 0) continue
+                                const classKey = sessR.class_id ? String(sessR.class_id) : "__overall__"
+                                const currentBest = classFastestMap.get(classKey)
+                                if (!currentBest || (sessR.best_lap_ms < currentBest.best_lap_ms)) {
+                                    classFastestMap.set(classKey, sessR)
+                                }
+                            }
+                        }
 
-                        const posForScoring = effectiveScoringMode === "overall"
+                        const classKey = r.class_id ? String(r.class_id) : "__overall__"
+                        const isFastestLap = effectiveScoringMode === "overall_strict"
+                            ? (overallFastestResult !== null && r === overallFastestResult)
+                            : (Boolean(r.fastest_lap) || (classFastestMap.get(classKey) === r))
+
+                        const posForScoring = (effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict")
                             ? (r.classified_position ?? r.scoring_position)
                             : (r.scoring_position ?? r.classified_position)
                         const canScorePosition = isScoringStatus(r.status) && isClassified(r) && !r.no_points
@@ -748,20 +771,30 @@
         }
 
         const isClassChampionship = Boolean(selectedChampionship.value?.class_id)
+        const isClassFiltered = Boolean(selectedClassKey.value && selectedClassKey.value !== 'overall')
+        const isClassContext = isClassChampionship || isClassFiltered
+
         let effectiveScoringMode = "in_class"
-        if (isClassChampionship) {
-            effectiveScoringMode = "in_class"
+        if (rnd?.scoring_mode === "overall_strict") {
+            effectiveScoringMode = "overall_strict"
         } else if (rnd?.scoring_mode === "overall") {
             effectiveScoringMode = "overall"
         } else if (rnd?.scoring_mode === "in_class") {
+            effectiveScoringMode = "in_class"
+        } else if (isClassChampionship) {
             effectiveScoringMode = "in_class"
         } else {
             effectiveScoringMode = rnd?.session_type === "qualifying" ? "in_class" : "overall"
         }
 
-        const pos = effectiveScoringMode === "overall"
-            ? (entry.classified_position ?? entry.scoring_position)
-            : (entry.scoring_position ?? entry.classified_position)
+        // For events using overall or overall_strict points system, in per-class standings,
+        // finish positions in the round cells start in order from 1 (in-class position: scoring_position),
+        // exactly matching how public results page displays per-class positions (1, 2, 3...) while retaining overall points.
+        const pos = isClassContext
+            ? (entry.scoring_position ?? entry.classified_position)
+            : (effectiveScoringMode === "overall_strict" || effectiveScoringMode === "overall"
+                ? (entry.classified_position ?? entry.scoring_position)
+                : (entry.scoring_position ?? entry.classified_position))
 
         if (pos === null || pos === undefined) {
             return { text: "-", bgClass: "bg-transparent text-gray-400" }
@@ -777,13 +810,20 @@
             bgClass = "bg-slate-300 dark:bg-slate-400 text-slate-950 dark:text-black font-medium"
         } else if (pos === 3) {
             bgClass = "bg-amber-200 dark:bg-amber-500/80 text-amber-950 dark:text-black font-medium"
-        } else if ((entry.position_points ?? 0) > 0) {
+        } else if ((entry.points ?? entry.position_points ?? 0) > 0) {
             bgClass = "bg-emerald-100 dark:bg-emerald-800/60 text-emerald-950 dark:text-emerald-100 font-medium"
         }
+
+        const overallText = (entry.classified_position && entry.classified_position !== pos)
+            ? ` (P${entry.classified_position} Overall)`
+            : ''
+        const ptsText = entry.points !== undefined ? ` • ${formatPoints(entry.points)} pts` : ''
+        const title = entry.no_points ? 'Tanpa Poin (No points)' : `P${pos}${overallText}${ptsText}`
 
         return {
             text: String(pos),
             pos,
+            title,
             isPole: Boolean(entry.isPole),
             fastestLap: Boolean(entry.fastest_lap),
             noPoints: Boolean(entry.no_points),
@@ -1277,7 +1317,7 @@
                                 <div
                                     class="w-full h-full min-h-[36px] flex items-center justify-center font-medium px-1 select-none"
                                     :class="getMatrixCellData(row, rnd).bgClass"
-                                    :title="getMatrixCellData(row, rnd).noPoints ? 'Tanpa Poin (No points)' : ''"
+                                    :title="getMatrixCellData(row, rnd).title || ''"
                                 >
                                     <span v-if="!getMatrixCellData(row, rnd).isBlank" class="relative inline-flex items-center">
                                         <span>{{ getMatrixCellData(row, rnd).text }}</span>

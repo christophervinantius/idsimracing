@@ -735,8 +735,13 @@
             const { classId, raceClass } = resolveEntryClass(entry)
             const classKey = classId || raceClass || '__overall__'
             const classFastestMs = fastestLapByClass.get(classKey) || fastestLapInRace
-            const isFastest = Boolean(result.fastest_lap) || (bestLapMs > 0 && (bestLapMs === classFastestMs || bestLapMs === fastestLapInRace))
-            const isPole = Number(result.grid_position) === 1
+            const isStrictOverall = currentChampEvent.value?.scoring_mode === 'overall_strict'
+            const isFastest = isStrictOverall
+                ? (bestLapMs > 0 && bestLapMs === fastestLapInRace)
+                : (Boolean(result.fastest_lap) || (bestLapMs > 0 && (bestLapMs === classFastestMs || bestLapMs === fastestLapInRace)))
+            const isPole = isStrictOverall
+                ? (Number(result.grid_position) === 1 && (Number(result.classified_position ?? result.scoring_position) === 1 || index === 0))
+                : Number(result.grid_position) === 1
 
             const classPos = (classPositionsMap.get(classKey) || 0) + 1
             classPositionsMap.set(classKey, classPos)
@@ -762,45 +767,45 @@
                 if (isClassWinner) {
                     if (bestLapMs > 0) {
                         gap = formatLapTime(bestLapMs)
-                    } else if (totalTime > 0) {
-                        gap = totalTime < 600000 ? formatLapTime(totalTime) : formatTotalTime(totalTime)
+                    } else if (totalTime !== 0) {
+                        gap = Math.abs(totalTime) < 600000 ? formatLapTime(totalTime) : formatTotalTime(totalTime)
                     } else {
-                        gap = "-"
+                        gap = ""
                     }
                 } else if (classLeader) {
-                    if (bestLapMs > 0 && classLeader.bestLapMs > 0 && bestLapMs > classLeader.bestLapMs) {
+                    if (bestLapMs > 0 && classLeader.bestLapMs > 0 && bestLapMs !== classLeader.bestLapMs) {
                         const gapMs = bestLapMs - classLeader.bestLapMs
                         gap = formatGapTime(gapMs)
-                    } else if (totalTime > 0 && totalTime < 60000) {
+                    } else if (totalTime !== 0) {
                         gap = formatGapTime(totalTime)
                     } else if (bestLapMs > 0) {
                         gap = formatLapTime(bestLapMs)
                     } else {
-                        gap = "-"
+                        gap = ""
                     }
                 }
             } else if (isClassWinner) {
-                if (totalTime > 0) {
+                if (totalTime !== 0) {
                     gap = formatTotalTime(totalTime)
                 } else if (bestLapMs > 0) {
                     gap = formatLapTime(bestLapMs)
                 } else {
-                    gap = "-"
+                    gap = ""
                 }
             } else if (classLeader) {
                 if (classLeader.laps > 0 && numLaps !== null && classLeader.laps > numLaps) {
                     const lapsDown = classLeader.laps - numLaps
                     gap = `+${lapsDown} ${lapsDown === 1 ? "Lap" : "Laps"}`
-                } else if (totalTime > 0 && classLeader.totalTime > 0 && totalTime > classLeader.totalTime && totalTime > 60000 && classLeader.totalTime > 60000) {
+                } else if (totalTime > 60000 && classLeader.totalTime > 60000) {
                     const gapMs = totalTime - classLeader.totalTime
                     gap = formatGapTime(gapMs)
-                } else if (totalTime > 0) {
+                } else if (totalTime !== 0 && !isNaN(totalTime)) {
                     gap = formatGapTime(totalTime)
-                } else if (bestLapMs > 0 && classLeader.bestLapMs > 0 && bestLapMs > classLeader.bestLapMs) {
+                } else if (bestLapMs > 0 && classLeader.bestLapMs > 0 && bestLapMs !== classLeader.bestLapMs) {
                     const gapMs = bestLapMs - classLeader.bestLapMs
                     gap = formatGapTime(gapMs)
                 } else {
-                    gap = "-"
+                    gap = ""
                 }
             }
 
@@ -818,13 +823,33 @@
                 }, {
                     isPole,
                     multiplier,
-                    scoringMode: currentChampEvent.value?.scoring_mode === 'overall' ? 'overall' : 'in_class'
+                    scoringMode: currentChampEvent.value?.scoring_mode === 'overall_strict' ? 'overall_strict' : (currentChampEvent.value?.scoring_mode === 'overall' ? 'overall' : 'in_class')
                 })
                 : 0
 
+            const potentialPoints = (Boolean(result.no_points) && currentPointsSys)
+                ? calculateResultPoints(currentPointsSys, {
+                    driver_id: entry.driver_id,
+                    team_id: entry.team_id,
+                    car_number: entry.car_number,
+                    scoring_position: result.scoring_position,
+                    classified_position: result.classified_position,
+                    status,
+                    fastest_lap: isFastest,
+                    grid_position: Number(result.grid_position) || null,
+                    no_points: false
+                }, {
+                    isPole,
+                    multiplier,
+                    scoringMode: currentChampEvent.value?.scoring_mode === 'overall_strict' ? 'overall_strict' : (currentChampEvent.value?.scoring_mode === 'overall' ? 'overall' : 'in_class')
+                })
+                : pts
+
+            const inPointsZone = potentialPoints > 0
+
             const isTeamEntry = entry.entry_type === 'team' || (!entry.driver_id && entry.team_id)
             const primaryDriver = entry.drivers || null
-            const rawTeamName = entry.teams?.name || "-"
+            const rawTeamName = entry.teams?.name || ""
             const teamParsed = parseTeamInfo(rawTeamName)
             const teamName = cleanTeamName(rawTeamName)
             const driverName = isTeamEntry
@@ -866,7 +891,7 @@
                 driversList: allDriversList,
                 driverCountry: driverNationCode || null,
                 driverRating: isTeamEntry ? null : primaryDriver?.rating,
-                carModel: entry.car_model || "-",
+                carModel: entry.car_model || "",
                 carId: 0,
                 team: teamName,
                 teamClass: raceClass,
@@ -874,9 +899,9 @@
                 teamName,
                 hasFormattedTeam: false,
                 nation: driverNationCode,
-                numLaps: numLaps !== null ? numLaps : "-",
+                numLaps: numLaps !== null ? numLaps : "",
                 bestLapMs,
-                bestLap: bestLapMs > 0 ? formatLapTime(bestLapMs) : "-",
+                bestLap: bestLapMs > 0 ? formatLapTime(bestLapMs) : "",
                 isFastestLap: isFastest,
                 isPole: Number(result.grid_position) === 1,
                 qualifyingLapTime,
@@ -885,6 +910,8 @@
                 raceClass,
                 status,
                 points: pts,
+                potentialPoints,
+                inPointsZone,
                 noPoints: Boolean(result.no_points),
                 disqualified: status === "dsq",
                 hasPenalty: Boolean(result.has_penalty),
@@ -923,7 +950,7 @@
             return rows.map(r => ({
                 ...r,
                 isTeamEntry: true,
-                teamName: cleanTeamName(r.teamName || r.team || "-")
+                teamName: cleanTeamName(r.teamName || r.team || "")
             }))
         }
         return rows
@@ -1017,6 +1044,32 @@
             }
             return false
         })
+    })
+
+    // Laps column: for a race, hidden if all rows have null/empty laps
+    const hasLapsColumn = computed(() => {
+        if (isQualifyingSession.value) return false
+        const rows = filteredRows.value.length > 0 ? filteredRows.value : parsedRows.value
+        return rows.some(r => r.numLaps !== '-' && r.numLaps !== '' && r.numLaps !== null && r.numLaps !== undefined && Number(r.numLaps) > 0)
+    })
+
+    // Time / Gap column: for a race, hidden if all rows have null/empty time and gap
+    const hasTimeGapColumn = computed(() => {
+        const rows = filteredRows.value.length > 0 ? filteredRows.value : parsedRows.value
+        if (isQualifyingSession.value) {
+            return rows.some(r => (r.bestLap && r.bestLap !== '-' && String(r.bestLap).trim() !== '') || (r.gap && r.gap !== '-' && String(r.gap).trim() !== ''))
+        }
+        return rows.some(r => {
+            if (r.status === 'dnf' || r.status === 'dns' || r.status === 'dsq' || r.disqualified) return false
+            return Boolean(r.gap && r.gap !== '-' && r.gap.trim() !== '')
+        })
+    })
+
+    // Penalty column: for a race, hidden if no rows have a penalty recorded
+    const hasPenaltyColumn = computed(() => {
+        if (isQualifyingSession.value) return false
+        const rows = filteredRows.value.length > 0 ? filteredRows.value : parsedRows.value
+        return rows.some(r => Boolean(r.hasPenalty && r.penaltyTime && r.penaltyTime > 0))
     })
 
     const sessionPolePosition = computed(() => {
@@ -1460,9 +1513,9 @@
                                 <th class="py-2.5 px-2 lg:px-3 text-center w-14 min-w-[52px] max-w-[52px]">{{ $t('carNumber') || 'No.' }}</th>
                                 <th class="py-2.5 px-3 lg:px-4 min-w-[160px]">{{ $t('team') || 'Tim' }}</th>
                                 <th v-if="showProgressionColumn && !isQualifyingSession" class="py-2.5 px-2 text-center min-w-[50px]" :title="$t('progressionTooltip') || 'Perubahan Posisi (Start vs Finish)'">{{ $t('progression') }}</th>
-                                <th v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('laps') }}</th>
-                                <th class="py-2.5 px-3 lg:px-4 text-center min-w-[90px]" :class="isQualifyingSession ? 'whitespace-nowrap' : ''">{{ isQualifyingSession ? $t('fastestLapGap') : $t('timeGap') }}</th>
-                                <th v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('penalty') }}</th>
+                                <th v-if="hasLapsColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('laps') }}</th>
+                                <th v-if="hasTimeGapColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[90px]" :class="isQualifyingSession ? 'whitespace-nowrap' : ''">{{ isQualifyingSession ? $t('fastestLapGap') : $t('timeGap') }}</th>
+                                <th v-if="hasPenaltyColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('penalty') }}</th>
                                 <th v-if="hasPointsColumn && !isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('points') }}</th>
                             </tr>
                             <!-- Individual Event Header -->
@@ -1470,9 +1523,9 @@
                                 <th class="py-2.5 px-2 lg:px-4 text-center w-11 min-w-[44px] max-w-[44px]">{{ $t('position') }}</th>
                                 <th class="py-2.5 px-3 lg:px-4 text-left min-w-[150px] lg:min-w-[180px]">{{ $t('driver') }}</th>
                                 <th v-if="showProgressionColumn && !isQualifyingSession" class="py-2.5 px-2 text-center min-w-[50px]" :title="$t('progressionTooltip') || 'Perubahan Posisi (Start vs Finish)'">{{ $t('progression') }}</th>
-                                <th v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('laps') }}</th>
-                                <th class="py-2.5 px-3 lg:px-4 text-center min-w-[90px]" :class="isQualifyingSession ? 'whitespace-nowrap' : ''">{{ isQualifyingSession ? $t('fastestLapGap') : $t('timeGap') }}</th>
-                                <th v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('penalty') }}</th>
+                                <th v-if="hasLapsColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('laps') }}</th>
+                                <th v-if="hasTimeGapColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[90px]" :class="isQualifyingSession ? 'whitespace-nowrap' : ''">{{ isQualifyingSession ? $t('fastestLapGap') : $t('timeGap') }}</th>
+                                <th v-if="hasPenaltyColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('penalty') }}</th>
                                 <th v-if="hasPointsColumn && !isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('points') }}</th>
                             </tr>
                         </thead>
@@ -1487,12 +1540,17 @@
                                 >
                                      <!-- Pos -->
                                      <td class="py-2.5 px-2 lg:px-4 text-center text-sm lg:text-base font-bold">
-                                         {{ hasMulticlass ? (item.classPosition || (rowIdx + 1)) : (item.classPosition || item.position || (rowIdx + 1)) }}
+                                         <span v-if="item.disqualified || item.status === 'dsq'" class="text-red-500">DSQ</span>
+                                         <span v-else-if="item.status === 'dnf'" class="text-red-500">DNF</span>
+                                         <span v-else-if="item.status === 'dns'" class="text-red-500">DNS</span>
+                                         <template v-else>
+                                             {{ hasMulticlass ? (item.classPosition || (rowIdx + 1)) : (item.classPosition || item.position || (rowIdx + 1)) }}
+                                         </template>
                                      </td>
 
                                      <!-- Num -->
                                      <td class="py-2.5 px-2 lg:px-3 text-center text-sm lg:text-base font-bold whitespace-nowrap">
-                                         {{ item.carNumber || '-' }}
+                                         {{ item.carNumber || '' }}
                                      </td>
 
                                      <!-- Team (name only, without icon and number) -->
@@ -1500,7 +1558,7 @@
                                          class="py-2.5 px-3 lg:px-4 text-sm lg:text-base font-bold whitespace-nowrap"
                                          :class="getTeamPodiumColor(item)"
                                      >
-                                         {{ cleanTeamName(item.teamName || item.team || '-') }}
+                                         {{ cleanTeamName(item.teamName || item.team || '') }}
                                      </td>
 
                                      <!-- Progression (+/-) -->
@@ -1531,27 +1589,25 @@
                                                  <Icon name="material-symbols:remove" class="text-sm lg:text-base" />
                                              </span>
                                          </div>
-                                         <span v-else class="text-gray-400 inline-block text-center text-sm lg:text-base">-</span>
+                                         <span v-else class="text-gray-400 inline-block text-center text-sm lg:text-base"></span>
                                      </td>
 
                                      <!-- Laps -->
-                                     <td v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base">
+                                     <td v-if="hasLapsColumn" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base">
                                          {{ item.numLaps }}
                                      </td>
 
                                      <!-- Gap / Fastest Lap / Gap -->
-                                     <td class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base whitespace-nowrap">
-                                         <span v-if="item.disqualified" class="font-bold text-red-500">DSQ</span>
-                                         <span v-else-if="item.status === 'dnf'" class="font-bold text-red-500">DNF</span>
-                                         <span v-else-if="item.status === 'dns'" class="font-bold text-red-500">DNS</span>
+                                     <td v-if="hasTimeGapColumn" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base whitespace-nowrap">
+                                         <span v-if="item.disqualified || item.status === 'dsq' || item.status === 'dnf' || item.status === 'dns'"></span>
                                          <span v-else-if="isQualifyingSession">
-                                             <span class="font-medium">{{ item.gap || item.bestLap || '-' }}</span>
+                                             <span class="font-medium">{{ item.gap || item.bestLap || '' }}</span>
                                          </span>
                                          <span v-else>{{ item.gap }}</span>
                                      </td>
 
                                      <!-- Penalty -->
-                                     <td v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base">
+                                     <td v-if="hasPenaltyColumn" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base">
                                          <span
                                              v-if="item.hasPenalty"
                                              class="inline-flex items-center justify-center text-sm lg:text-base font-bold text-red-500"
@@ -1566,7 +1622,8 @@
                                      <td v-if="hasPointsColumn && !isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center font-bold text-sm lg:text-base">
                                          <span v-if="item.points > 0">{{ formatPoints(item.points) }}</span>
                                          <span v-else-if="item.disqualified || item.status === 'dns' || item.status === 'dnf'"></span>
-                                         <span v-else-if="item.noPoints" class="text-xs text-gray-400 font-normal" title="Tanpa Poin (Excluded from points)">0</span>
+                                         <span v-else-if="item.noPoints && item.inPointsZone" title="Tanpa Poin (Finis di zona poin)">0*</span>
+                                         <span v-else-if="item.noPoints" title="Tanpa Poin">0</span>
                                          <span v-else>{{ formatPoints(item.points) }}</span>
                                      </td>
                                 </tr>
@@ -1582,7 +1639,12 @@
                                 >
                                      <!-- Position -->
                                      <td class="py-2.5 px-2 lg:px-4 text-center text-sm lg:text-base font-bold">
-                                         {{ hasMulticlass ? (item.classPosition || (rowIdx + 1)) : item.position }}
+                                         <span v-if="item.disqualified || item.status === 'dsq'" class="text-red-500">DSQ</span>
+                                         <span v-else-if="item.status === 'dnf'" class="text-red-500">DNF</span>
+                                         <span v-else-if="item.status === 'dns'" class="text-red-500">DNS</span>
+                                         <template v-else>
+                                             {{ hasMulticlass ? (item.classPosition || (rowIdx + 1)) : item.position }}
+                                         </template>
                                      </td>
 
                                      <!-- Driver -->
@@ -1634,27 +1696,25 @@
                                                  <Icon name="material-symbols:remove" class="text-sm lg:text-base" />
                                              </span>
                                          </div>
-                                         <span v-else class="text-gray-400 inline-block text-center text-sm lg:text-base">-</span>
+                                         <span v-else class="text-gray-400 inline-block text-center text-sm lg:text-base"></span>
                                      </td>
 
                                      <!-- Laps -->
-                                     <td v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base">
+                                     <td v-if="hasLapsColumn" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base">
                                          {{ item.numLaps }}
                                      </td>
 
                                      <!-- Gap / Fastest Lap / Gap -->
-                                     <td class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base whitespace-nowrap">
-                                         <span v-if="item.disqualified" class="font-bold text-red-500">DSQ</span>
-                                         <span v-else-if="item.status === 'dnf'" class="font-bold text-red-500">DNF</span>
-                                         <span v-else-if="item.status === 'dns'" class="font-bold text-red-500">DNS</span>
+                                     <td v-if="hasTimeGapColumn" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base whitespace-nowrap">
+                                         <span v-if="item.disqualified || item.status === 'dsq' || item.status === 'dnf' || item.status === 'dns'"></span>
                                          <span v-else-if="isQualifyingSession">
-                                             <span class="font-medium">{{ item.gap || item.bestLap || '-' }}</span>
+                                             <span class="font-medium">{{ item.gap || item.bestLap || '' }}</span>
                                          </span>
                                          <span v-else>{{ item.gap }}</span>
                                      </td>
 
                                      <!-- Penalty -->
-                                     <td v-if="!isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base">
+                                     <td v-if="hasPenaltyColumn" class="py-2.5 px-3 lg:px-4 text-center text-sm lg:text-base">
                                          <span
                                              v-if="item.hasPenalty"
                                              class="inline-flex items-center justify-center text-sm lg:text-base font-bold text-red-500"
@@ -1669,7 +1729,8 @@
                                      <td v-if="hasPointsColumn && !isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center font-bold text-sm lg:text-base">
                                          <span v-if="item.points > 0">{{ formatPoints(item.points) }}</span>
                                          <span v-else-if="item.disqualified || item.status === 'dns' || item.status === 'dnf'"></span>
-                                         <span v-else-if="item.noPoints" class="text-xs text-gray-400 font-normal" title="Tanpa Poin (Excluded from points)">0</span>
+                                         <span v-else-if="item.noPoints && item.inPointsZone" title="Tanpa Poin (Finis di zona poin)">0*</span>
+                                         <span v-else-if="item.noPoints" title="Tanpa Poin">0</span>
                                          <span v-else>{{ formatPoints(item.points) }}</span>
                                      </td>
                                 </tr>

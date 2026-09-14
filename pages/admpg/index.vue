@@ -2697,24 +2697,41 @@
     }
 
     const parseTimeToMs = (timeStr) => {
-        if (!timeStr || typeof timeStr !== 'string') return null
-        const cleaned = timeStr.trim().replace(/^(\+)/, "").replace(/s$/, "")
-        if (!cleaned || cleaned === "-") return null
+        if (!timeStr) return null
+        let str = String(timeStr).trim().replace(/s$/i, '').trim()
+        if (!str || str === "-" || str === "--") return null
 
-        const parts = cleaned.split(":")
+        let isNegative = false
+        // Handle parentheses format: (-1.234) or (1.234) as negative
+        if (str.startsWith("(") && str.endsWith(")")) {
+            isNegative = true
+            str = str.slice(1, -1).trim()
+        }
+        if (str.startsWith("-")) {
+            isNegative = true
+            str = str.slice(1).trim()
+        } else if (str.startsWith("+")) {
+            str = str.slice(1).trim()
+        }
+        if (!str || str === "-" || str === "--") return null
+
+        let ms = null
+        const parts = str.split(":")
         if (parts.length === 3) {
             const hours = parseFloat(parts[0]) || 0
             const minutes = parseFloat(parts[1]) || 0
             const seconds = parseFloat(parts[2]) || 0
-            return Math.round((hours * 3600 + minutes * 60 + seconds) * 1000)
+            ms = Math.round((hours * 3600 + minutes * 60 + seconds) * 1000)
         } else if (parts.length === 2) {
             const minutes = parseFloat(parts[0]) || 0
             const seconds = parseFloat(parts[1]) || 0
-            return Math.round((minutes * 60 + seconds) * 1000)
+            ms = Math.round((minutes * 60 + seconds) * 1000)
         } else {
             const seconds = parseFloat(parts[0])
-            return !isNaN(seconds) ? Math.round(seconds * 1000) : null
+            ms = !isNaN(seconds) ? Math.round(seconds * 1000) : null
         }
+        if (ms === null || isNaN(ms)) return null
+        return isNegative ? -Math.abs(ms) : ms
     }
 
     const parsePenaltyToSec = (val) => {
@@ -2883,7 +2900,7 @@
                         is_pole: Number(res.grid_position) === 1,
                         num_laps: res.num_laps,
                         best_lap: res.best_lap_ms ? formatLapTime(res.best_lap_ms) : "",
-                        total_time: res.total_time_ms
+                        total_time: (res.total_time_ms !== null && res.total_time_ms !== undefined && res.total_time_ms !== "")
                             ? (selectedSessionType.value === 'qualifying' ? formatLapTime(res.total_time_ms) : formatTotalTime(res.total_time_ms))
                             : (res.best_lap_ms ? formatLapTime(res.best_lap_ms) : ""),
                         total_time_ms: res.total_time_ms,
@@ -3186,8 +3203,36 @@
         let matchedDriversCount = 0
         let totalDriversWithNames = 0
 
-        const rows = parsedRowsData.map((item, idx) => {
+        const rows = []
+        parsedRowsData.forEach((item, idx) => {
             const cleanName = item.rawName.toLowerCase().replace(/\s+/g, " ").trim()
+
+            const carNum = item.rawNo ? parseInt(item.rawNo, 10) : null
+            const posNum = item.rawPos ? parseInt(item.rawPos, 10) : (idx + 1)
+            const numLaps = item.rawLaps ? parseInt(item.rawLaps, 10) : null
+
+            // Status determination
+            let status = "finished"
+            const posLower = (item.rawPos || "").toLowerCase().trim()
+            if (item.rawStatus) {
+                const s = item.rawStatus.toLowerCase().trim()
+                if (s === "dsq" || s.includes("disq")) status = "dsq"
+                else if (s === "dns" || s.includes("did not start") || s === "didnotstart") status = "dns"
+                else if (s === "dnf" || s.includes("ret")) status = "dnf"
+                else status = "finished"
+            } else if (posLower === "dns" || posLower.includes("did not start") || posLower === "didnotstart") {
+                status = "dns"
+            } else {
+                if (numLaps === 0 && (!item.bestLapMs || item.bestLapMs === 0) && (!item.totalTimeMs || item.totalTimeMs === 0)) {
+                    status = "dns"
+                }
+            }
+
+            // Exclude DNS entries from CSV import as requested
+            if (status === "dns") {
+                return
+            }
+
             if (cleanName) totalDriversWithNames++
 
             let leadDriverId = ""
@@ -3237,34 +3282,17 @@
                 }
             }
 
-            const carNum = item.rawNo ? parseInt(item.rawNo, 10) : null
-            const posNum = item.rawPos ? parseInt(item.rawPos, 10) : (idx + 1)
-            const numLaps = item.rawLaps ? parseInt(item.rawLaps, 10) : null
-
-            // Status determination
-            let status = "finished"
-            if (item.rawStatus) {
-                const s = item.rawStatus.toLowerCase().trim()
-                if (s === "dsq" || s.includes("disq")) status = "dsq"
-                else if (s === "dns") status = "dns"
-                else if (s === "dnf" || s.includes("ret")) status = "dnf"
-                else status = "finished"
-            } else {
-                if (numLaps === 0 && (!item.bestLapMs || item.bestLapMs === 0) && (!item.totalTimeMs || item.totalTimeMs === 0)) {
-                    status = "dns"
-                }
-            }
-
+            const currentPos = rows.length + 1
             const isQualifying = selectedSessionType.value === 'qualifying'
-            const isPole = (isQualifying && posNum === 1) || (idx === 0 && isQualifying)
+            const isPole = (isQualifying && (posNum === 1 || currentPos === 1)) || (rows.length === 0 && isQualifying)
             const isFastestLap = item.bestLapMs && item.bestLapMs > 0 && item.bestLapMs === fastestLapInRace
 
-            return {
+            rows.push({
                 _rowId: 'row_' + Math.random().toString(36).substring(2, 9),
                 id: null,
                 event_entry_id: null,
-                position: posNum || (idx + 1),
-                scoring_position: posNum || (idx + 1),
+                position: currentPos,
+                scoring_position: currentPos,
                 class_id: matchedClassId,
                 driver_id: leadDriverId,
                 team_id: matchedTeamId || "",
@@ -3282,7 +3310,7 @@
                 penalty_time_sec: "",
                 fastest_lap: Boolean(isFastestLap),
                 no_points: false
-            }
+            })
         })
 
         if (selectedEntryClassId.value !== "ALL") {
@@ -3471,8 +3499,8 @@
 
                 const parsedTotalMs = row.total_time ? parseTimeToMs(row.total_time) : null
                 const parsedBestMs = row.best_lap ? parseTimeToMs(row.best_lap) : null
-                const totalMs = parsedTotalMs || row.total_time_ms
-                const bestMs = parsedBestMs || row.best_lap_ms || (sessType === 'qualifying' ? totalMs : null)
+                const totalMs = parsedTotalMs !== null ? parsedTotalMs : (row.total_time_ms ?? null)
+                const bestMs = parsedBestMs !== null ? parsedBestMs : (row.best_lap_ms ?? (sessType === 'qualifying' ? totalMs : null))
                 const penNum = parsePenaltyToSec(row.penalty_time_sec)
                 const penNs = (penNum !== null && !isNaN(penNum) && penNum > 0) ? Math.round(penNum * 1000000000) : null
                 const isPolePosition = (sessType === 'qualifying' && (Number(row.scoring_position) === 1 || i === 0)) || row.is_pole || Number(row.grid_position) === 1
@@ -3486,7 +3514,7 @@
                     grid_position: isPolePosition ? 1 : (row.grid_position ? Number(row.grid_position) : null),
                     num_laps: (sessType !== 'qualifying' && row.num_laps !== null && row.num_laps !== '' && !isNaN(Number(row.num_laps))) ? Number(row.num_laps) : null,
                     best_lap_ms: bestMs || null,
-                    total_time_ms: totalMs || null,
+                    total_time_ms: (totalMs !== null && totalMs !== undefined && !isNaN(totalMs)) ? totalMs : null,
                     has_penalty: sessType === 'qualifying' ? false : Boolean((penNs && penNs > 0) || row.has_penalty),
                     penalty_time_ns: sessType === 'qualifying' ? null : penNs,
                     fastest_lap: sessType === 'qualifying' ? false : Boolean(row.fastest_lap),
@@ -3903,7 +3931,7 @@
                 resultsPointsSystemId.value = link.points_system_id
             }
             if (link.scoring_mode) {
-                resultsScoringMode.value = link.scoring_mode === "overall" ? "overall" : "in_class"
+                resultsScoringMode.value = (link.scoring_mode === "overall_strict" || link.scoring_mode === "overall") ? link.scoring_mode : "in_class"
             }
             if (link.points_multiplier !== undefined && link.points_multiplier !== null) {
                 resultsPointsMultiplier.value = Number(link.points_multiplier) || 1
@@ -4063,9 +4091,10 @@
             return null
         }
 
-        // Fastest lap check
+        // Fastest lap check:
+        // In "overall_strict", only the single fastest car across all classes earns FL bonus
         let isFastestLap = Boolean(row.fastest_lap)
-        if (resultsScoringMode.value === "overall" && isFastestLap) {
+        if (resultsScoringMode.value === "overall_strict" && isFastestLap) {
             const flRows = (resultsRows.value || []).filter(r => r.fastest_lap && (isTeam ? r.team_id : r.driver_id))
             if (flRows.length > 1) {
                 const best = flRows.reduce((prev, curr) => {
@@ -4078,9 +4107,10 @@
             }
         }
 
-        // Pole position check
+        // Pole position check:
+        // In "overall_strict", only the single overall pole position holder earns Pole bonus
         let isPole = Boolean(row.is_pole || Number(row.grid_position) === 1)
-        if (resultsScoringMode.value === "overall" && isPole) {
+        if (resultsScoringMode.value === "overall_strict" && isPole) {
             const poleRows = (resultsRows.value || []).filter(r => (r.is_pole || Number(r.grid_position) === 1) && (isTeam ? r.team_id : r.driver_id))
             if (poleRows.length > 1) {
                 isPole = (poleRows[0] === row)
@@ -6454,7 +6484,7 @@
                         <!-- Points System, Scoring Mode & Multiplier Controls -->
                         <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                             <!-- Points System Dropdown -->
-                            <div class="md:col-span-5 flex flex-col gap-1">
+                            <div class="md:col-span-4 flex flex-col gap-1">
                                 <label class="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-between">
                                     <span>Sistem Poin:</span>
                                     <button
@@ -6480,8 +6510,8 @@
                                 </div>
                             </div>
 
-                            <!-- Scoring Mode (Overall vs In-Class for Multiclass) -->
-                            <div class="md:col-span-5 flex flex-col gap-1">
+                            <!-- Scoring Mode (In-Class vs Overall with Class Bonus vs Strict Overall) -->
+                            <div class="md:col-span-6 flex flex-col gap-1">
                                 <label class="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1">
                                     <span>Mode Penilaian Poin (Multiclass):</span>
                                 </label>
@@ -6489,26 +6519,38 @@
                                     <button
                                         type="button"
                                         @click="resultsScoringMode = 'in_class'"
-                                        class="flex-1 py-1 px-2.5 rounded-lg text-xs font-bold transition text-center cursor-pointer flex items-center justify-center gap-1.5"
+                                        class="flex-1 py-1 px-1.5 rounded-lg text-xs font-bold transition text-center cursor-pointer flex items-center justify-center gap-1"
                                         :class="resultsScoringMode === 'in_class'
                                             ? 'bg-red-900 text-white shadow-xs'
                                             : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'"
-                                        title="Poin dihitung terpisah untuk setiap kelas berdasarkan Pos Kelas (P1 GT3 dapat poin P1, P1 GT4 juga dapat poin P1)"
+                                        title="Poin posisi dan bonus dihitung terpisah untuk setiap kelas"
                                     >
                                         <Icon name="material-symbols:category" class="text-sm" />
-                                        <span>Per Kelas (In-Class)</span>
+                                        <span>Per Kelas</span>
                                     </button>
                                     <button
                                         type="button"
                                         @click="resultsScoringMode = 'overall'"
-                                        class="flex-1 py-1 px-2.5 rounded-lg text-xs font-bold transition text-center cursor-pointer flex items-center justify-center gap-1.5"
+                                        class="flex-1 py-1 px-1.5 rounded-lg text-xs font-bold transition text-center cursor-pointer flex items-center justify-center gap-1"
                                         :class="resultsScoringMode === 'overall'
                                             ? 'bg-red-900 text-white shadow-xs'
                                             : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'"
-                                        title="Poin dihitung berdasarkan posisi finish keseluruhan (Overall Grid) tanpa membedakan kelas"
+                                        title="Poin posisi dihitung dari overall grid, sedangkan bonus FL & Pole diberikan untuk masing-masing kelas"
                                     >
                                         <Icon name="material-symbols:grid-view" class="text-sm" />
-                                        <span>Overall Grid</span>
+                                        <span>Overall (Bonus Kelas)</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="resultsScoringMode = 'overall_strict'"
+                                        class="flex-1 py-1 px-1.5 rounded-lg text-xs font-bold transition text-center cursor-pointer flex items-center justify-center gap-1"
+                                        :class="resultsScoringMode === 'overall_strict'
+                                            ? 'bg-red-900 text-white shadow-xs'
+                                            : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'"
+                                        title="Poin posisi dihitung dari overall grid, dan bonus FL & Pole HANYA 1 untuk tercepat/pole di seluruh grid"
+                                    >
+                                        <Icon name="material-symbols:trophy" class="text-sm" />
+                                        <span>Overall Murni</span>
                                     </button>
                                 </div>
                             </div>
@@ -8258,8 +8300,9 @@
                                                     class="w-full p-1.5 pr-7 appearance-none rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
                                                 >
                                                     <option value="auto">Auto (Per Kelas)</option>
-                                                    <option value="overall">Overall</option>
                                                     <option value="in_class">Per Kelas</option>
+                                                    <option value="overall">Overall (Bonus Kelas)</option>
+                                                    <option value="overall_strict">Overall Murni</option>
                                                 </select>
                                                 <Icon name="material-symbols:keyboard-arrow-down-rounded" class="absolute right-1.5 top-2 text-sm text-gray-400 pointer-events-none" />
                                             </div>
@@ -9197,7 +9240,6 @@
             <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 dark:border-slate-800 my-8">
                 <div class="flex items-center justify-between border-b border-gray-200 dark:border-slate-800 pb-4 mb-4">
                     <h2 class="text-xl font-bold text-black dark:text-white flex items-center gap-2">
-                        <Icon name="material-symbols:trophy" class="text-red-700" />
                         <span>Konfirmasi Simpan Hasil</span>
                     </h2>
                     <button @click="closeSaveResultsModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer">
@@ -9209,6 +9251,23 @@
                     <div class="p-3.5 rounded-xl bg-red-50 dark:bg-slate-950 border border-red-200 dark:border-slate-800 text-xs text-gray-700 dark:text-gray-300 flex flex-col gap-1.5">
                         <p class="font-bold text-black dark:text-white">Detail Penyimpanan:</p>
                         <p>Event: <strong>{{ selectedSchedule?.events?.name }} (Round {{ selectedSchedule?.round }})</strong></p>
+                        <p v-if="selectedSchedule?.season || currentScheduleSeason?.season_number">
+                            Season: <strong>Season {{ selectedSchedule?.season || currentScheduleSeason?.season_number }}</strong>
+                        </p>
+                        <p v-if="selectedSchedule?.circuit" class="flex items-center gap-1.5 flex-wrap">
+                            <span>Sirkuit:</span>
+                            <span class="inline-flex items-center gap-1 font-bold">
+                                <Icon
+                                    v-if="selectedSchedule?.country"
+                                    :name="`flag-${selectedSchedule.country.toLowerCase()}-4x3`"
+                                    class="rounded-xs shadow-xs shrink-0"
+                                />
+                                <span>{{ selectedSchedule.circuit }}</span>
+                            </span>
+                        </p>
+                        <p v-if="selectedSchedule?.date">
+                            Tanggal: <strong>{{ formatDateOnly(selectedSchedule.date) }}</strong>
+                        </p>
                         <p>Sesi: <strong class="capitalize">{{ selectedSessionType }}</strong></p>
                         <p>
                             Status Hasil:

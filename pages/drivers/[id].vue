@@ -664,7 +664,8 @@
                         no_points: Boolean(res.no_points)
                     }, {
                         isPole,
-                        multiplier
+                        multiplier,
+                        scoringMode: ce?.scoring_mode === 'overall_strict' ? 'overall_strict' : (ce?.scoring_mode === 'overall' ? 'overall' : 'in_class')
                     })
                     : 0
 

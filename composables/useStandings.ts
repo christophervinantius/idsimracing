@@ -34,7 +34,7 @@ export interface ChampionshipEventConfig {
     session_type: string
     points_system_id: string
     points_multiplier: number
-    scoring_mode?: "overall" | "in_class" | "auto" | null
+    scoring_mode?: "overall" | "overall_strict" | "in_class" | "auto" | null
 }
 
 // One driver/team result within a single session, as needed for scoring
@@ -121,7 +121,7 @@ export const getBonusPoints = (
 export const calculateResultPoints = (
     system: PointsSystem | null | undefined,
     result: ScoringResult,
-    options: { isPole?: boolean; isFastestLap?: boolean; multiplier?: number; scoringMode?: "overall" | "in_class" } = {}
+    options: { isPole?: boolean; isFastestLap?: boolean; multiplier?: number; scoringMode?: "overall" | "overall_strict" | "in_class" } = {}
 ): number => {
     if (result.no_points) return 0
 
@@ -131,7 +131,8 @@ export const calculateResultPoints = (
 
     // Position finish points require finishing and classification. DNF/DNS/DSQ earn 0 position points.
     const canScorePosition = isScoringStatus(result.status) && isClassified(result) && !result.no_points
-    const scoringPos = options.scoringMode === "overall"
+    const isOverall = options.scoringMode === "overall" || options.scoringMode === "overall_strict"
+    const scoringPos = isOverall
         ? (result.classified_position ?? result.scoring_position)
         : (result.scoring_position ?? result.classified_position)
     const base = canScorePosition ? getPositionPoints(system, scoringPos) : 0
@@ -234,9 +235,41 @@ export const calculateStandings = (
 
         // Determine pole keys: check session grid positions first; if not present, check qualifying session
         const hasGridInSession = session.results.some(r => Number(r.grid_position) === 1)
-        let poleKeys: Set<string>
-        if (hasGridInSession) {
-            poleKeys = new Set()
+
+        // Determine effective scoring mode:
+        // - If event explicitly specifies "overall_strict", "overall", or "in_class", use that.
+        // - Otherwise ("auto" or unset): in class-specific championships default to "in_class", in overall championships qualifying scores in-class, race scores overall.
+        const isClassChampionship = Boolean(options.allowedClassId)
+        let effectiveScoringMode: "overall" | "overall_strict" | "in_class" = "in_class"
+        if (champEvent.scoring_mode === "overall_strict") {
+            effectiveScoringMode = "overall_strict"
+        } else if (champEvent.scoring_mode === "overall") {
+            effectiveScoringMode = "overall"
+        } else if (champEvent.scoring_mode === "in_class") {
+            effectiveScoringMode = "in_class"
+        } else if (isClassChampionship) {
+            effectiveScoringMode = "in_class"
+        } else {
+            effectiveScoringMode = champEvent.session_type === "qualifying" ? "in_class" : "overall"
+        }
+
+        let poleKeys: Set<string> = new Set()
+        if (effectiveScoringMode === "overall_strict") {
+            // Overall Murni: only the single overall pole position holder across the entire grid
+            const overallPole = session.results.find(r => Number(r.grid_position) === 1 && (Number(r.classified_position) === 1 || Number(r.scoring_position) === 1))
+                || session.results.find(r => Number(r.grid_position) === 1)
+            if (overallPole) {
+                const dIds = overallPole.driver_ids && overallPole.driver_ids.length > 0 ? overallPole.driver_ids : (overallPole.driver_id ? [overallPole.driver_id] : [])
+                if (entityType === "driver") {
+                    dIds.forEach(id => { if (id) poleKeys.add(String(id)) })
+                } else if (overallPole.team_id !== null && overallPole.team_id !== undefined) {
+                    const teamKey = (overallPole.car_number !== null && overallPole.car_number !== undefined)
+                        ? `${overallPole.team_id}::${overallPole.car_number}`
+                        : String(overallPole.team_id)
+                    poleKeys.add(teamKey)
+                }
+            }
+        } else if (hasGridInSession) {
             for (const r of session.results) {
                 if (Number(r.grid_position) === 1) {
                     if (entityType === "driver") {
@@ -257,25 +290,11 @@ export const calculateStandings = (
             poleKeys = qualifyingSession ? findPoleEntityKeys(qualifyingSession.results, entityType) : new Set()
         }
 
-        // Determine effective scoring mode:
-        // - In class-specific championships, always score in-class.
-        // - If event explicitly specifies "overall" or "in_class", use that.
-        // - In overall championships with "auto" (or unset): qualifying scores in-class, race scores overall.
-        const isClassChampionship = Boolean(options.allowedClassId)
-        let effectiveScoringMode: "overall" | "in_class" = "in_class"
-        if (isClassChampionship) {
-            effectiveScoringMode = "in_class"
-        } else if (champEvent.scoring_mode === "overall") {
-            effectiveScoringMode = "overall"
-        } else if (champEvent.scoring_mode === "in_class") {
-            effectiveScoringMode = "in_class"
-        } else {
-            effectiveScoringMode = champEvent.session_type === "qualifying" ? "in_class" : "overall"
-        }
-
-        // In overall scoring mode, only the single fastest car across all classes receives fastest lap points.
+        // Fastest lap bonus:
+        // - In "overall_strict", only the single overall fastest car across all classes receives the bonus.
+        // - In "overall" or "in_class", each class's fastest lap holder receives the bonus.
         let overallFastestResult: ScoringResult | null = null
-        if (effectiveScoringMode === "overall") {
+        if (effectiveScoringMode === "overall_strict") {
             const candidatesWithTime = session.results.filter(r => (r.best_lap_ms ?? 0) > 0)
             if (candidatesWithTime.length > 0) {
                 overallFastestResult = candidatesWithTime.reduce((best, cur) =>
@@ -289,6 +308,24 @@ export const calculateStandings = (
                         const posCur = cur.classified_position ?? 9999
                         return posCur < posBest ? cur : best
                     })
+                }
+            }
+        }
+
+        const classFastestMap = new Map<string, ScoringResult>()
+        const flCandidates = session.results.filter(r => r.fastest_lap)
+        if (flCandidates.length > 0) {
+            for (const r of flCandidates) {
+                const classKey = r.class_id ? String(r.class_id) : "__overall__"
+                classFastestMap.set(classKey, r)
+            }
+        } else {
+            for (const r of session.results) {
+                if ((r.best_lap_ms ?? 0) <= 0) continue
+                const classKey = r.class_id ? String(r.class_id) : "__overall__"
+                const currentBest = classFastestMap.get(classKey)
+                if (!currentBest || (r.best_lap_ms! < currentBest.best_lap_ms!)) {
+                    classFastestMap.set(classKey, r)
                 }
             }
         }
@@ -341,9 +378,10 @@ export const calculateStandings = (
                 }
             }
 
-            const isFastestLap = effectiveScoringMode === "overall"
+            const classKey = result.class_id ? String(result.class_id) : "__overall__"
+            const isFastestLap = effectiveScoringMode === "overall_strict"
                 ? (overallFastestResult !== null && result === overallFastestResult)
-                : Boolean(result.fastest_lap)
+                : (Boolean(result.fastest_lap) || (classFastestMap.get(classKey) === result))
 
             for (const key of entityKeys) {
                 const points = calculateResultPoints(system, result, {
@@ -358,9 +396,13 @@ export const calculateStandings = (
 
                 // Only a classified, scoring finish counts toward wins/podiums and countback.
                 if (isScoringStatus(result.status) && isClassified(result)) {
-                    const pos = effectiveScoringMode === "overall"
-                        ? (result.classified_position ?? result.scoring_position)
-                        : (result.scoring_position ?? result.classified_position)
+                    // For a class championship, wins, podiums, and countback within the class standings
+                    // are based on in-class position (scoring_position: 1, 2, 3...) while retaining overall points.
+                    const pos = isClassChampionship
+                        ? (result.scoring_position ?? result.classified_position)
+                        : ((effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict")
+                            ? (result.classified_position ?? result.scoring_position)
+                            : (result.scoring_position ?? result.classified_position))
                     if (pos !== null && pos !== undefined) {
                         if (cur.bestPos === null || Number(pos) < cur.bestPos) cur.bestPos = Number(pos)
                     }
