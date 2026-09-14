@@ -1342,6 +1342,7 @@
     const selectedScheduleId = ref("")
     const selectedSessionType = ref("race") // 'race' | 'race_1' | 'race_2' | 'qualifying'
     const resultsRows = ref([])
+    const deletedResultRowIds = ref([])
     const resultsScheduleSearch = ref("")
     const loadingResults = ref(false)
     const savingResults = ref(false)
@@ -1630,23 +1631,56 @@
     const removeDisplayedRow = (row) => {
         const idx = resultsRows.value.indexOf(row)
         if (idx !== -1) {
+            const hadSavedId = Boolean(row.id)
+            if (hadSavedId) {
+                deletedResultRowIds.value.push(row.id)
+            }
             resultsRows.value.splice(idx, 1)
             recalculateScoringPositions()
+            syncTopDriversFromRows()
+            if (hadSavedId) {
+                showToast("Baris posisi dihapus. Klik 'Simpan Hasil Balapan' untuk menyimpan perubahan ke database.")
+            }
         }
     }
 
     const removeResultRow = (index) => {
+        const row = resultsRows.value[index]
+        const hadSavedId = Boolean(row?.id)
+        if (hadSavedId) {
+            deletedResultRowIds.value.push(row.id)
+        }
         resultsRows.value.splice(index, 1)
         reindexPositions()
+        syncTopDriversFromRows()
+        if (hadSavedId) {
+            showToast("Baris posisi dihapus. Klik 'Simpan Hasil Balapan' untuk menyimpan perubahan ke database.")
+        }
     }
 
     const clearAllResultsRows = () => {
+        const rowsToRemove = selectedEntryClassId.value !== "ALL"
+            ? resultsRows.value.filter(r => r.class_id === selectedEntryClassId.value)
+            : resultsRows.value
+
+        let removedSavedCount = 0
+        rowsToRemove.forEach(r => {
+            if (r.id) {
+                deletedResultRowIds.value.push(r.id)
+                removedSavedCount++
+            }
+        })
+
         if (selectedEntryClassId.value !== "ALL") {
             resultsRows.value = resultsRows.value.filter(r => r.class_id !== selectedEntryClassId.value)
         } else {
             resultsRows.value = []
         }
         recalculateScoringPositions()
+        syncTopDriversFromRows()
+        if (removedSavedCount > 0) {
+            showToast(`${removedSavedCount} baris posisi dihapus. Klik 'Simpan Hasil Balapan' untuk menyimpan perubahan ke database.`)
+        }
     }
 
     const recalculateScoringPositions = () => {
@@ -2778,11 +2812,13 @@
     const fetchRaceResultsForSchedule = async () => {
         if (!selectedScheduleId.value) {
             resultsRows.value = []
+            deletedResultRowIds.value = []
             hasExistingDbResults.value = false
             isResultsProvisional.value = false
             return
         }
 
+        deletedResultRowIds.value = []
         loadingResults.value = true
         errorMsg.value = ""
         try {
@@ -3408,7 +3444,7 @@
 
             const { data: existingEntries } = await $supabase
                 .from("event_entries")
-                .select("id, driver_id, team_id, car_number, schedule_id")
+                .select("id, driver_id, team_id, car_number, schedule_id, class_id, results(id, session_type)")
                 .eq("schedule_id", schedId)
 
             const entryMap = new Map()
@@ -3425,6 +3461,8 @@
                     }
                 })
             }
+
+            const savedResultIds = new Set()
 
             for (let i = 0; i < validRows.length; i++) {
                 const row = validRows[i]
@@ -3529,19 +3567,102 @@
                     .eq("session_type", sessType)
                     .maybeSingle()
 
-                let { error: resErr } = existingResult
-                    ? await $supabase.from("results").update(resultPayload).eq("id", existingResult.id)
-                    : await $supabase.from("results").insert(resultPayload)
+                let savedId = existingResult ? existingResult.id : null
 
-                if (resErr && (resErr.message?.includes("no_points") || resErr.code === "PGRST204" || resErr.code === "42703")) {
-                    const fallbackPayload = { ...resultPayload }
-                    delete fallbackPayload.no_points
-                    const retry = existingResult
-                        ? await $supabase.from("results").update(fallbackPayload).eq("id", existingResult.id)
-                        : await $supabase.from("results").insert(fallbackPayload)
-                    resErr = retry.error
+                if (existingResult) {
+                    let { error: resErr } = await $supabase.from("results").update(resultPayload).eq("id", existingResult.id)
+                    if (resErr && (resErr.message?.includes("no_points") || resErr.code === "PGRST204" || resErr.code === "42703")) {
+                        const fallbackPayload = { ...resultPayload }
+                        delete fallbackPayload.no_points
+                        const retry = await $supabase.from("results").update(fallbackPayload).eq("id", existingResult.id)
+                        resErr = retry.error
+                    }
+                    if (resErr) throw resErr
+                } else {
+                    let { data: newRes, error: resErr } = await $supabase.from("results").insert(resultPayload).select("id").maybeSingle()
+                    if (resErr && (resErr.message?.includes("no_points") || resErr.code === "PGRST204" || resErr.code === "42703")) {
+                        const fallbackPayload = { ...resultPayload }
+                        delete fallbackPayload.no_points
+                        const retry = await $supabase.from("results").insert(fallbackPayload).select("id").maybeSingle()
+                        newRes = retry.data
+                        resErr = retry.error
+                    }
+                    if (resErr) throw resErr
+                    savedId = newRes?.id || null
                 }
-                if (resErr) throw resErr
+
+                if (!savedId) {
+                    const { data: fetchInserted } = await $supabase
+                        .from("results")
+                        .select("id")
+                        .eq("event_entry_id", entryId)
+                        .eq("session_type", sessType)
+                        .maybeSingle()
+                    savedId = fetchInserted?.id || null
+                }
+
+                if (savedId) {
+                    savedResultIds.add(savedId)
+                    row.id = savedId
+                }
+            }
+
+            // Clean up removed or orphaned results from database for this session
+            const resultIdsToDelete = new Set()
+            deletedResultRowIds.value.forEach(id => {
+                if (id && !savedResultIds.has(id)) {
+                    resultIdsToDelete.add(id)
+                }
+            })
+
+            if (existingEntries) {
+                existingEntries.forEach(e => {
+                    const sessionResults = (e.results || []).filter(r =>
+                        r.session_type === sessType || (!r.session_type && sessType === 'race')
+                    )
+                    sessionResults.forEach(r => {
+                        if (r.id && !savedResultIds.has(r.id)) {
+                            // If overall / all classes, delete any result not in savedResultIds
+                            if (selectedEntryClassId.value === 'ALL') {
+                                resultIdsToDelete.add(r.id)
+                            } else if (e.class_id === selectedEntryClassId.value || deletedResultRowIds.value.includes(r.id)) {
+                                // If class-specific, only delete results belonging to this class or explicitly removed
+                                resultIdsToDelete.add(r.id)
+                            }
+                        }
+                    })
+                })
+            }
+
+            if (resultIdsToDelete.size > 0) {
+                const idsArray = Array.from(resultIdsToDelete)
+                const { error: delErr } = await $supabase
+                    .from("results")
+                    .delete()
+                    .in("id", idsArray)
+                if (delErr) {
+                    console.error("Error deleting removed results:", delErr)
+                    throw delErr
+                }
+            }
+            deletedResultRowIds.value = []
+
+            // Clean up event_entries for this schedule that have no results left in any session
+            if (existingEntries && existingEntries.length > 0) {
+                const allEntryIds = existingEntries.map(e => e.id)
+                const { data: remainingResults } = await $supabase
+                    .from("results")
+                    .select("event_entry_id")
+                    .in("event_entry_id", allEntryIds)
+
+                const usedEntryIds = new Set((remainingResults || []).map(r => r.event_entry_id))
+                const unusedEntryIds = allEntryIds.filter(id => !usedEntryIds.has(id))
+                if (unusedEntryIds.length > 0) {
+                    await $supabase
+                        .from("event_entries")
+                        .delete()
+                        .in("id", unusedEntryIds)
+                }
             }
 
             // Sync points system, scoring mode, and multiplier to linked championship rounds
@@ -3613,6 +3734,7 @@
             }
 
             showToast("Hasil balapan sesi ini berhasil dihapus!")
+            deletedResultRowIds.value = []
             closeDeleteResultsModal()
             await fetchRaceResultsForSchedule()
             await syncStandingsForSchedule(schedId)
@@ -7291,7 +7413,7 @@
 
                                 <tr
                                     v-for="(row, idx) in displayedResultsRows"
-                                    :key="row.id || idx"
+                                    :key="row._rowId || row.id || idx"
                                     v-show="selectedEntryClassId !== 'ALL' || resultsClassFilter === 'ALL' || row.class_id === resultsClassFilter"
                                     class="transition-colors hover:bg-gray-50 dark:hover:bg-slate-900/60"
                                     :class="{
@@ -9283,6 +9405,10 @@
                         </p>
                         <p v-if="isTeamEvent">
                             Tipe Event: <strong class="text-blue-600 dark:text-blue-400">Team Event (Balapan Tim)</strong>
+                        </p>
+                        <p v-if="deletedResultRowIds.length > 0" class="text-xs text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
+                            <Icon name="material-symbols:delete-outline" class="text-sm shrink-0" />
+                            <span>{{ deletedResultRowIds.length }} baris posisi yang dihapus akan dibersihkan dari database.</span>
                         </p>
                         <p v-if="selectedEntryClassId !== 'ALL'" class="text-[11px] text-blue-600 dark:text-blue-400">
                             *Hasil kelas lain pada sesi ini tidak akan terhapus dan tetap terjaga di database.
