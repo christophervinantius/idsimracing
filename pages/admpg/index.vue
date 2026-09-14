@@ -1349,6 +1349,11 @@
     const isResultsProvisional = ref(false)
     const isTeamEvent = ref(false)
 
+    // Points system, scoring mode (in_class vs overall), and multiplier for current results session
+    const resultsPointsSystemId = ref("")
+    const resultsScoringMode = ref("in_class") // 'in_class' | 'overall'
+    const resultsPointsMultiplier = ref(1)
+
     const isResultsSaveModalOpen = ref(false)
     const isResultsDeleteModalOpen = ref(false)
 
@@ -1359,12 +1364,40 @@
         { value: "dsq", label: "DSQ (Disqualified)", badge: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300" }
     ]
 
+    const hasMultipleRaces = ref(false)
+
     const sessionTypeOptions = [
+        { value: "qualifying", label: "Qualifying" },
         { value: "race", label: "Race" },
         { value: "race_1", label: "Race 1" },
-        { value: "race_2", label: "Race 2" },
-        { value: "qualifying", label: "Qualifying" }
+        { value: "race_2", label: "Race 2" }
     ]
+
+    const filteredSessionTypeOptions = computed(() => {
+        if (hasMultipleRaces.value) {
+            return [
+                { value: "qualifying", label: "Qualifying" },
+                { value: "race_1", label: "Race 1" },
+                { value: "race_2", label: "Race 2" }
+            ]
+        }
+        return [
+            { value: "qualifying", label: "Qualifying" },
+            { value: "race", label: "Race" }
+        ]
+    })
+
+    watch(hasMultipleRaces, (val) => {
+        if (val) {
+            if (selectedSessionType.value === "race") {
+                selectedSessionType.value = "race_1"
+            }
+        } else {
+            if (selectedSessionType.value === "race_1" || selectedSessionType.value === "race_2") {
+                selectedSessionType.value = "race"
+            }
+        }
+    })
 
     const getSessionLabel = (sessionType) => {
         const opt = sessionTypeOptions.find(o => o.value === sessionType)
@@ -2729,6 +2762,7 @@
         if (!selectedScheduleId.value) {
             resultsRows.value = []
             hasExistingDbResults.value = false
+            isResultsProvisional.value = false
             return
         }
 
@@ -2806,6 +2840,14 @@
                 console.warn("Error fetching event_entries:", entriesError)
             }
 
+            // Auto-detect if schedule has results in race_1 or race_2
+            const hasMultiRaceResults = (entries || []).some(e =>
+                (e.results || []).some(r => r.session_type === 'race_1' || r.session_type === 'race_2')
+            )
+            if (hasMultiRaceResults) {
+                hasMultipleRaces.value = true
+            }
+
             const validEntries = (entries || []).filter(e => 
                 e.results && e.results.some(r => r.session_type === selectedSessionType.value || (!r.session_type && selectedSessionType.value === 'race'))
             )
@@ -2857,6 +2899,7 @@
                 syncTopDriversFromRows()
             } else {
                 hasExistingDbResults.value = false
+                isResultsProvisional.value = false
                 isTeamEvent.value = false
                 resultsRows.value = Array.from({ length: 10 }, (_, i) => createEmptyResultRow(i + 1))
             }
@@ -3473,6 +3516,29 @@
                 if (resErr) throw resErr
             }
 
+            // Sync points system, scoring mode, and multiplier to linked championship rounds
+            if (activeSessionChampionshipLinks.value.length > 0) {
+                const champEventIds = activeSessionChampionshipLinks.value.map(l => l.id)
+                const champUpdatePayload = {
+                    points_system_id: resultsPointsSystemId.value || null,
+                    scoring_mode: resultsScoringMode.value || "in_class",
+                    points_multiplier: Number(resultsPointsMultiplier.value) || 1
+                }
+                let { error: ceErr } = await $supabase
+                    .from("championship_events")
+                    .update(champUpdatePayload)
+                    .in("id", champEventIds)
+
+                if (ceErr && (ceErr.message?.includes("scoring_mode") || ceErr.code === "PGRST204" || ceErr.code === "42703")) {
+                    delete champUpdatePayload.scoring_mode
+                    await $supabase
+                        .from("championship_events")
+                        .update(champUpdatePayload)
+                        .in("id", champEventIds)
+                }
+                await fetchScheduleChampionshipLinks()
+            }
+
             showToast(`Hasil balapan (${validRows.length} posisi) berhasil disimpan!`)
             closeSaveResultsModal()
             await fetchSchedules()
@@ -3744,13 +3810,14 @@
         }
         loadingScheduleChampionships.value = true
         try {
-            const { data, error } = await $supabase
+            let { data, error } = await $supabase
                 .from("championship_events")
                 .select(`
                     id,
                     session_type,
                     points_multiplier,
                     points_system_id,
+                    scoring_mode,
                     championships (
                         id,
                         standings_type,
@@ -3775,8 +3842,47 @@
                 `)
                 .eq("schedule_id", selectedScheduleId.value)
 
+            if (error && (error.message?.includes("scoring_mode") || error.code === "PGRST204" || error.code === "42703")) {
+                const retry = await $supabase
+                    .from("championship_events")
+                    .select(`
+                        id,
+                        session_type,
+                        points_multiplier,
+                        points_system_id,
+                        championships (
+                            id,
+                            standings_type,
+                            class_id,
+                            classes (
+                                id,
+                                name
+                            ),
+                            seasons (
+                                id,
+                                season_number,
+                                events (
+                                    id,
+                                    name
+                                )
+                            )
+                        ),
+                        points_systems (
+                            id,
+                            name
+                        )
+                    `)
+                    .eq("schedule_id", selectedScheduleId.value)
+                data = retry.data
+                error = retry.error
+            }
+
             if (error) throw error
             scheduleChampionshipLinks.value = data || []
+            if ((data || []).some(l => l.session_type === 'race_1' || l.session_type === 'race_2')) {
+                hasMultipleRaces.value = true
+            }
+            syncPointsConfigFromChampionship()
         } catch (err) {
             console.warn("Error fetching championship links:", err)
             scheduleChampionshipLinks.value = []
@@ -3789,6 +3895,25 @@
     const activeSessionChampionshipLinks = computed(() => {
         return scheduleChampionshipLinks.value.filter(l => l.session_type === selectedSessionType.value)
     })
+
+    const syncPointsConfigFromChampionship = () => {
+        const link = activeSessionChampionshipLinks.value[0]
+        if (link) {
+            if (link.points_system_id) {
+                resultsPointsSystemId.value = link.points_system_id
+            }
+            if (link.scoring_mode) {
+                resultsScoringMode.value = link.scoring_mode === "overall" ? "overall" : "in_class"
+            }
+            if (link.points_multiplier !== undefined && link.points_multiplier !== null) {
+                resultsPointsMultiplier.value = Number(link.points_multiplier) || 1
+            }
+        } else if (!resultsPointsSystemId.value) {
+            resultsPointsSystemId.value = championshipDefaultSystemId.value || (pointsSystems.value[0]?.id || "")
+            resultsScoringMode.value = "in_class"
+            resultsPointsMultiplier.value = 1
+        }
+    }
 
     // Recalculates every championship scoring this schedule.
     const syncStandingsForSchedule = async (scheduleId) => {
@@ -3808,6 +3933,7 @@
     }
 
     watch(selectedScheduleId, () => {
+        hasMultipleRaces.value = false
         resultsClassFilter.value = "ALL"
         selectedEntryClassId.value = "ALL"
         fetchRaceResultsForSchedule()
@@ -3819,6 +3945,7 @@
         resultsClassFilter.value = "ALL"
         selectedEntryClassId.value = "ALL"
         fetchRaceResultsForSchedule()
+        syncPointsConfigFromChampionship()
     })
 
     watch(isTeamEvent, () => {
@@ -3826,8 +3953,9 @@
     })
 
     watch(activeTab, (newTab) => {
-        if (newTab === "results" && allSchedulesList.value.length === 0) {
-            fetchAllSchedulesList()
+        if (newTab === "results") {
+            if (allSchedulesList.value.length === 0) fetchAllSchedulesList()
+            if (pointsSystems.value.length === 0) fetchPointsSystems()
         }
     })
 
@@ -3914,6 +4042,89 @@
         if (rules.length === 0) return "Belum ada aturan poin"
         const top = rules.slice(0, 5).map(r => formatPoints(r.points)).join("-")
         return `${top}${rules.length > 5 ? "..." : ""} (${rules.length} posisi)`
+    }
+
+    const activeResultsPointsSystem = computed(() => {
+        if (!resultsPointsSystemId.value) return null
+        return pointsSystemsMapLocal.value.get(resultsPointsSystemId.value) || null
+    })
+
+    const getRowCalculatedPoints = (row) => {
+        const sys = activeResultsPointsSystem.value
+        if (!sys || !row) return null
+
+        if (row.no_points) {
+            return { points: 0, isZero: true, isNoPoints: true, bonusText: "" }
+        }
+
+        const isTeam = Boolean(isTeamEvent.value)
+        const hasEntity = isTeam ? Boolean(row.team_id) : Boolean(row.driver_id)
+        if (!hasEntity) {
+            return null
+        }
+
+        // Fastest lap check
+        let isFastestLap = Boolean(row.fastest_lap)
+        if (resultsScoringMode.value === "overall" && isFastestLap) {
+            const flRows = (resultsRows.value || []).filter(r => r.fastest_lap && (isTeam ? r.team_id : r.driver_id))
+            if (flRows.length > 1) {
+                const best = flRows.reduce((prev, curr) => {
+                    const prevMs = curr.best_lap ? parseTimeToMs(curr.best_lap) : (curr.best_lap_ms || 999999999)
+                    const currMs = curr.best_lap ? parseTimeToMs(curr.best_lap) : (curr.best_lap_ms || 999999999)
+                    if (currMs < prevMs) return curr
+                    return prev
+                }, flRows[0])
+                isFastestLap = (best === row)
+            }
+        }
+
+        // Pole position check
+        let isPole = Boolean(row.is_pole || Number(row.grid_position) === 1)
+        if (resultsScoringMode.value === "overall" && isPole) {
+            const poleRows = (resultsRows.value || []).filter(r => (r.is_pole || Number(r.grid_position) === 1) && (isTeam ? r.team_id : r.driver_id))
+            if (poleRows.length > 1) {
+                isPole = (poleRows[0] === row)
+            }
+        }
+
+        const scoringPos = row.scoring_position ? Number(row.scoring_position) : null
+        const classifiedPos = row.position ? Number(row.position) : null
+
+        const scoringResult = {
+            driver_id: row.driver_id || null,
+            team_id: row.team_id ? Number(row.team_id) : null,
+            car_number: row.car_number ?? null,
+            class_id: row.class_id || null,
+            scoring_position: scoringPos,
+            classified_position: classifiedPos,
+            status: row.status || "finished",
+            fastest_lap: isFastestLap,
+            grid_position: Number(row.grid_position) || (isPole ? 1 : null),
+            no_points: Boolean(row.no_points)
+        }
+
+        const pts = calculateResultPoints(sys, scoringResult, {
+            isPole,
+            isFastestLap,
+            multiplier: resultsPointsMultiplier.value ?? 1,
+            scoringMode: resultsScoringMode.value || "in_class"
+        })
+
+        const bonuses = []
+        const sysBonuses = sys.points_bonuses || []
+        if (isFastestLap && sysBonuses.some(b => b.bonus_type === "fastest_lap" && Number(b.points) > 0)) {
+            bonuses.push("FL")
+        }
+        if (isPole && sysBonuses.some(b => b.bonus_type === "pole" && Number(b.points) > 0)) {
+            bonuses.push("P")
+        }
+
+        return {
+            points: pts,
+            isZero: pts === 0,
+            isNoPoints: Boolean(row.no_points),
+            bonusText: bonuses.length > 0 ? `+${bonuses.join("+")}` : ""
+        }
     }
 
     const addPointsRule = () => {
@@ -6140,10 +6351,23 @@
 
                         <!-- Session Type Selector -->
                         <div class="lg:col-span-3 flex flex-col gap-1.5">
-                            <label class="text-xs sm:text-sm font-bold text-black dark:text-white">Sesi Balapan</label>
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs sm:text-sm font-bold text-black dark:text-white">Sesi Balapan</label>
+                                <label
+                                    class="text-[11px] font-semibold text-gray-600 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400 flex items-center gap-1.5 cursor-pointer select-none"
+                                    title="Centang jika event memiliki lebih dari 1 race (menampilkan Race 1 & Race 2, selain Qualifying)"
+                                >
+                                    <input
+                                        v-model="hasMultipleRaces"
+                                        type="checkbox"
+                                        class="w-3.5 h-3.5 rounded text-red-600 focus:ring-red-500 cursor-pointer"
+                                    />
+                                    <span>Multiple Races</span>
+                                </label>
+                            </div>
                             <div class="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border-2 border-red-900 dark:border-red-900">
                                 <button
-                                    v-for="opt in sessionTypeOptions"
+                                    v-for="opt in filteredSessionTypeOptions"
                                     :key="opt.value"
                                     type="button"
                                     @click="handleSessionTabClick(opt.value)"
@@ -6176,61 +6400,157 @@
                         </div>
                     </div>
 
-                    <!-- Championship Points Integration Banner -->
+                    <!-- Championship Points Integration Banner & Config Card -->
                     <div
                         v-if="selectedScheduleId"
-                        class="p-3.5 rounded-xl border flex flex-col gap-2"
+                        class="p-4 rounded-2xl border flex flex-col gap-3.5 transition-all"
                         :class="activeSessionChampionshipLinks.length > 0
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800'
-                            : 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'"
+                            ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800'"
                     >
-                        <div class="flex items-start gap-2">
-                            <Icon
-                                :name="activeSessionChampionshipLinks.length > 0 ? 'material-symbols:emoji-events' : 'material-symbols:info'"
-                                class="text-lg shrink-0 mt-0.5"
-                                :class="activeSessionChampionshipLinks.length > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'"
-                            />
-                            <div class="flex flex-col gap-1.5 min-w-0">
-                                <p
-                                    class="text-xs sm:text-sm font-bold"
-                                    :class="activeSessionChampionshipLinks.length > 0 ? 'text-emerald-800 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-300'"
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b"
+                            :class="activeSessionChampionshipLinks.length > 0
+                                ? 'border-emerald-200/80 dark:border-emerald-900/50'
+                                : 'border-gray-200/80 dark:border-slate-800'"
+                        >
+                            <div class="flex items-center gap-2">
+                                <div class="p-1.5 rounded-lg shrink-0"
+                                    :class="activeSessionChampionshipLinks.length > 0
+                                        ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300'
+                                        : 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-400'"
                                 >
-                                    <template v-if="activeSessionChampionshipLinks.length > 0">
-                                        Sesi ini menghitung poin untuk {{ activeSessionChampionshipLinks.length }} championship
-                                    </template>
-                                    <template v-else>
-                                        Sesi ini belum terhubung ke championship mana pun
-                                    </template>
-                                </p>
-
-                                <div v-if="activeSessionChampionshipLinks.length > 0" class="flex flex-wrap gap-1.5">
-                                    <span
-                                        v-for="link in activeSessionChampionshipLinks"
-                                        :key="link.id"
-                                        class="px-2 py-1 rounded-md text-[11px] font-bold bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1"
-                                    >
-                                        <span>{{ getChampionshipName(link.championships) }}</span>
-                                        <span class="opacity-60">|</span>
-                                        <span class="font-normal">{{ link.points_systems?.name || 'Tanpa sistem poin' }}</span>
-                                        <span v-if="Number(link.points_multiplier) !== 1" class="px-1 rounded bg-red-900 text-white">
-                                            {{ formatPoints(link.points_multiplier) }}x
-                                        </span>
-                                    </span>
+                                    <Icon :name="activeSessionChampionshipLinks.length > 0 ? 'material-symbols:emoji-events' : 'material-symbols:functions'" class="text-xl" />
                                 </div>
-                                <p
-                                    v-else
-                                    class="text-[11px] text-amber-700 dark:text-amber-400"
-                                >
-                                    Hasil tetap tersimpan, tapi tidak menghasilkan poin klasemen. Tambahkan jadwal ini sebagai ronde di tab
-                                    <button @click="activeTab = 'standings'" class="font-bold underline cursor-pointer">Klasemen</button>.
-                                </p>
-                                <p
-                                    v-if="activeSessionChampionshipLinks.length > 0"
-                                    class="text-[11px] text-emerald-700 dark:text-emerald-400"
-                                >
-                                    Klasemen akan otomatis dihitung ulang setelah hasil disimpan.
-                                </p>
+                                <div class="flex flex-col">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h4 class="text-xs sm:text-sm font-bold text-black dark:text-white">
+                                            Pengaturan Sistem & Mode Poin
+                                        </h4>
+                                        <span
+                                            v-if="activeSessionChampionshipLinks.length > 0"
+                                            class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/80 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700"
+                                        >
+                                            Tersinkron ke {{ activeSessionChampionshipLinks.length }} Championship
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                                        >
+                                            Mode Standalone
+                                        </span>
+                                    </div>
+                                    <p class="text-[11px] text-gray-500 dark:text-gray-400">
+                                        Poin dihitung secara live pada kolom <span class="font-bold text-black dark:text-white">Poin</span> di tabel hasil balapan di bawah.
+                                    </p>
+                                </div>
                             </div>
+
+                            <div v-if="activeResultsPointsSystem" class="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1.5 self-start sm:self-auto bg-white/80 dark:bg-slate-950/80 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-slate-800">
+                                <Icon name="material-symbols:info-outline" class="text-sm text-red-700 dark:text-red-400" />
+                                <span>{{ summarizePointsSystem(activeResultsPointsSystem) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Points System, Scoring Mode & Multiplier Controls -->
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            <!-- Points System Dropdown -->
+                            <div class="md:col-span-5 flex flex-col gap-1">
+                                <label class="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                                    <span>Sistem Poin:</span>
+                                    <button
+                                        v-if="pointsSystems.length === 0"
+                                        type="button"
+                                        @click="fetchPointsSystems"
+                                        class="text-[10px] text-red-600 hover:underline cursor-pointer"
+                                    >
+                                        Muat Ulang
+                                    </button>
+                                </label>
+                                <div class="relative">
+                                    <select
+                                        v-model="resultsPointsSystemId"
+                                        class="w-full p-2 pr-8 appearance-none rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs sm:text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                                    >
+                                        <option value="">-- Tanpa Sistem Poin (0 pts) --</option>
+                                        <option v-for="sys in pointsSystems" :key="sys.id" :value="sys.id">
+                                            {{ sys.name }} ({{ (sys.points_system_rules || []).length }} posisi)
+                                        </option>
+                                    </select>
+                                    <Icon name="material-symbols:keyboard-arrow-down-rounded" class="absolute right-2.5 top-2.5 text-base text-gray-400 pointer-events-none" />
+                                </div>
+                            </div>
+
+                            <!-- Scoring Mode (Overall vs In-Class for Multiclass) -->
+                            <div class="md:col-span-5 flex flex-col gap-1">
+                                <label class="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                                    <span>Mode Penilaian Poin (Multiclass):</span>
+                                </label>
+                                <div class="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-gray-300 dark:border-slate-700">
+                                    <button
+                                        type="button"
+                                        @click="resultsScoringMode = 'in_class'"
+                                        class="flex-1 py-1 px-2.5 rounded-lg text-xs font-bold transition text-center cursor-pointer flex items-center justify-center gap-1.5"
+                                        :class="resultsScoringMode === 'in_class'
+                                            ? 'bg-red-900 text-white shadow-xs'
+                                            : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'"
+                                        title="Poin dihitung terpisah untuk setiap kelas berdasarkan Pos Kelas (P1 GT3 dapat poin P1, P1 GT4 juga dapat poin P1)"
+                                    >
+                                        <Icon name="material-symbols:category" class="text-sm" />
+                                        <span>Per Kelas (In-Class)</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="resultsScoringMode = 'overall'"
+                                        class="flex-1 py-1 px-2.5 rounded-lg text-xs font-bold transition text-center cursor-pointer flex items-center justify-center gap-1.5"
+                                        :class="resultsScoringMode === 'overall'
+                                            ? 'bg-red-900 text-white shadow-xs'
+                                            : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'"
+                                        title="Poin dihitung berdasarkan posisi finish keseluruhan (Overall Grid) tanpa membedakan kelas"
+                                    >
+                                        <Icon name="material-symbols:grid-view" class="text-sm" />
+                                        <span>Overall Grid</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Multiplier -->
+                            <div class="md:col-span-2 flex flex-col gap-1">
+                                <label class="text-xs font-bold text-gray-800 dark:text-gray-200">
+                                    Pengali:
+                                </label>
+                                <div class="flex items-center gap-1.5">
+                                    <input
+                                        v-model.number="resultsPointsMultiplier"
+                                        type="number"
+                                        step="0.5"
+                                        min="0"
+                                        placeholder="1"
+                                        class="w-full p-2 text-center text-xs sm:text-sm font-bold rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500 font-mono"
+                                        title="Pengali poin balapan (contoh: 1x, 1.5x, 2x untuk ronde final double points)"
+                                    />
+                                    <span class="text-xs font-bold text-gray-500">x</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Championship Context Details & Badges -->
+                        <div v-if="activeSessionChampionshipLinks.length > 0" class="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            <span class="font-semibold">Championship terhubung:</span>
+                            <span
+                                v-for="link in activeSessionChampionshipLinks"
+                                :key="link.id"
+                                class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-slate-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1"
+                            >
+                                <Icon name="material-symbols:trophy" class="text-xs text-amber-500" />
+                                <span>{{ getChampionshipName(link.championships) }}</span>
+                            </span>
+                            <span class="ml-1 text-emerald-700 dark:text-emerald-400 font-medium">
+                                (Pengaturan poin ini akan otomatis memperbarui ronde championship saat disimpan)
+                            </span>
+                        </div>
+                        <div v-else class="text-[11px] text-amber-700 dark:text-amber-400 pt-1">
+                            Sesi ini belum terhubung ke championship. Poin tetap terhitung pada tabel di bawah, namun belum menghasilkan klasemen. Anda dapat menambahkan sesi ini di tab
+                            <button @click="activeTab = 'standings'" class="font-bold underline cursor-pointer">Klasemen</button>.
                         </div>
                     </div>
 
@@ -6883,33 +7203,35 @@
                                     <tr v-if="!isTeamEvent">
                                         <th class="px-2 py-3 text-center w-[4%]">Pos</th>
                                         <th class="px-2 py-3 text-center w-[5%]">No.</th>
-                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[52%]' : 'w-[31%]'">Pembalap (Driver) <span class="text-red-300">*</span></th>
-                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[16%]' : 'w-[10%]'">Kelas (Class)</th>
+                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[45%]' : 'w-[25%]'">Pembalap (Driver) <span class="text-red-300">*</span></th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[15%]' : 'w-[10%]'">Kelas (Class)</th>
                                         <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[8%]' : 'w-[7%]'">Pos Kelas</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Status</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Laps</th>
-                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[11%]' : 'w-[10%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[11%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
+                                        <th class="px-2 py-3 text-center w-[7%]" title="Poin yang diperoleh berdasarkan sistem poin dan mode penilaian">Poin</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[8%]">Status</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[7%]">Laps</th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[13%]' : 'w-[10%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
                                         <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
                                     </tr>
                                     <tr v-else>
                                         <th class="px-2 py-3 text-center w-[4%]">Pos</th>
-                                        <th class="px-2 py-3 text-center w-[6%]">No.</th>
-                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[46%]' : 'w-[25%]'">Tim (Team Name) <span class="text-red-300">*</span></th>
-                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[20%]' : 'w-[13%]'">Kelas (Class)</th>
-                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[10%]' : 'w-[8%]'">Pos Kelas</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Status</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]">Laps</th>
-                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[14%]' : 'w-[11%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[11%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
+                                        <th class="px-2 py-3 text-center w-[5%]">No.</th>
+                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[40%]' : 'w-[21%]'">Tim (Team Name) <span class="text-red-300">*</span></th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[18%]' : 'w-[12%]'">Kelas (Class)</th>
+                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[9%]' : 'w-[7%]'">Pos Kelas</th>
+                                        <th class="px-2 py-3 text-center w-[7%]" title="Poin yang diperoleh berdasarkan sistem poin dan mode penilaian">Poin</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[8%]">Status</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[7%]">Laps</th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[13%]' : 'w-[11%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
                                         <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
                                     </tr>
                                 </thead>
                             <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-xs">
                                 <tr v-if="loadingResults" class="text-center py-8">
-                                    <td :colspan="selectedSessionType === 'qualifying' ? 7 : 11" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                    <td :colspan="selectedSessionType === 'qualifying' ? 8 : 12" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                                         <div class="flex items-center justify-center gap-2">
                                             <Icon name="material-symbols:refresh" class="animate-spin text-xl text-red-700" />
                                             <span>Memuat data hasil balapan...</span>
@@ -6918,7 +7240,7 @@
                                 </tr>
 
                                 <tr v-else-if="displayedResultsRows.length === 0" class="text-center py-8">
-                                    <td :colspan="selectedSessionType === 'qualifying' ? 7 : 11" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                    <td :colspan="selectedSessionType === 'qualifying' ? 8 : 12" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                                         <div class="flex flex-col items-center justify-center gap-2">
                                             <span>Belum ada baris posisi{{ selectedEntryClassId !== 'ALL' ? ' untuk kelas ini' : '' }}. Klik tombol "+1 Baris" untuk menambahkan posisi.</span>
                                         </div>
@@ -7301,7 +7623,36 @@
                                         </div>
                                     </td>
 
-
+                                    <!-- Points Column -->
+                                    <td class="px-2 py-2.5 text-center">
+                                        <div class="flex items-center justify-center">
+                                            <div
+                                                v-if="getRowCalculatedPoints(row)"
+                                                class="flex items-center justify-center gap-1"
+                                                :title="`Poin: ${getRowCalculatedPoints(row).points} pts (${resultsScoringMode === 'overall' ? 'Mode Overall' : 'Mode Per Kelas'}${getRowCalculatedPoints(row).bonusText ? ', Bonus ' + getRowCalculatedPoints(row).bonusText : ''})`"
+                                            >
+                                                <span
+                                                    class="px-2 py-0.5 rounded-md font-bold text-xs shrink-0 flex items-center gap-1 border"
+                                                    :class="getRowCalculatedPoints(row).isNoPoints
+                                                        ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-slate-700 line-through'
+                                                        : (getRowCalculatedPoints(row).points > 0
+                                                            ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-800 shadow-xs'
+                                                            : 'bg-gray-50 text-gray-400 dark:bg-slate-900 dark:text-gray-500 border-gray-200 dark:border-slate-800')"
+                                                >
+                                                    <span>{{ formatPoints(getRowCalculatedPoints(row).points) }}</span>
+                                                    <span class="text-[9px] font-normal opacity-75">pts</span>
+                                                </span>
+                                                <span
+                                                    v-if="getRowCalculatedPoints(row).bonusText"
+                                                    class="text-[9px] px-1 py-0.5 rounded font-extrabold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shrink-0"
+                                                    :title="`Bonus Poin: ${getRowCalculatedPoints(row).bonusText}`"
+                                                >
+                                                    {{ getRowCalculatedPoints(row).bonusText }}
+                                                </span>
+                                            </div>
+                                            <span v-else class="text-xs text-gray-400 dark:text-gray-600">-</span>
+                                        </div>
+                                    </td>
 
                                     <!-- Status Column -->
                                     <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">

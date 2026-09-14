@@ -354,12 +354,42 @@
         return Boolean(dbEntries.value && dbEntries.value.some(e => e.results && e.results.length > 0))
     })
 
-    // Provisional status of current session
+    const dbHasExplicitRace1 = computed(() => {
+        return (dbEntries.value || []).some(e =>
+            (e.results || []).some(r => r.session_type === 'race_1' || r.session_type === 'race1')
+        )
+    })
+
+    // Match a result record to an active session tab
+    const matchSessionResult = (r, tab) => {
+        if (!r) return false
+        const sType = String(r.session_type || 'race').toLowerCase().trim()
+        const t = String(tab || 'race').toLowerCase().trim()
+
+        if (t === 'qualifying' || t === 'q') {
+            return sType === 'qualifying' || sType === 'quali' || sType === 'q'
+        }
+        if (t === 'race_2' || t === 'r2' || t === 'race2') {
+            return sType === 'race_2' || sType === 'race2' || sType === 'r2'
+        }
+        if (t === 'race_1' || t === 'r1' || t === 'race1') {
+            if (dbHasExplicitRace1.value) {
+                return sType === 'race_1' || sType === 'race1' || sType === 'r1'
+            }
+            return sType === 'race_1' || sType === 'race1' || sType === 'r1' || sType === 'race'
+        }
+        if (t === 'race') {
+            return sType === 'race' || (!r.session_type)
+        }
+        return sType === t
+    }
+
+    // Provisional status of current active session
     const isSessionProvisional = computed(() => {
         if (!hasDbResults.value) return false
-        const targetSessionType = activeSessionTab.value === 'q' ? 'qualifying' : (activeSessionTab.value === 'r2' ? 'race_2' : (activeSessionTab.value === 'r1' && availableSessions.value.some(s => s.id === 'r2') ? 'race_1' : 'race'))
+        const currentTab = activeSessionTab.value
         for (const entry of dbEntries.value || []) {
-            const res = (entry.results || []).find(r => r.session_type === targetSessionType || (!r.session_type && (targetSessionType === 'race' || targetSessionType === 'race_1')))
+            const res = (entry.results || []).find(r => matchSessionResult(r, currentTab))
             if (res && res.is_provisional) {
                 return true
             }
@@ -367,7 +397,7 @@
         return false
     })
 
-    // 4. Available session tabs
+    // 4. Available session tabs with per-session provisional state
     const availableSessions = computed(() => {
         const list = []
         if (hasDbResults.value) {
@@ -375,29 +405,34 @@
             const sessionTypes = new Set(allResults.map(r => r.session_type || 'race'))
 
             if (sessionTypes.has('qualifying')) {
-                list.push({ id: 'qualifying', label: t('qualifying') })
+                const isProv = allResults.some(r => (r.session_type === 'qualifying' || r.session_type === 'quali' || r.session_type === 'q') && r.is_provisional)
+                list.push({ id: 'qualifying', label: t('qualifying'), isProvisional: isProv })
             }
             if (sessionTypes.has('race_1')) {
-                list.push({ id: 'race_1', label: sessionTypes.has('race_2') ? t('race1') : t('race') })
+                const isProv = allResults.some(r => (r.session_type === 'race_1' || r.session_type === 'race1') && r.is_provisional)
+                list.push({ id: 'race_1', label: sessionTypes.has('race_2') ? t('race1') : t('race'), isProvisional: isProv })
             }
             if (sessionTypes.has('race_2')) {
-                list.push({ id: 'race_2', label: t('race2') })
+                const isProv = allResults.some(r => (r.session_type === 'race_2' || r.session_type === 'race2') && r.is_provisional)
+                list.push({ id: 'race_2', label: t('race2'), isProvisional: isProv })
             }
             if (sessionTypes.has('race') && !sessionTypes.has('race_1')) {
-                list.push({ id: 'race', label: t('race') })
+                const isProv = allResults.some(r => (r.session_type === 'race' || !r.session_type) && r.is_provisional)
+                list.push({ id: 'race', label: t('race'), isProvisional: isProv })
             }
         } else {
             if (rawResultDataQ.value) {
-                list.push({ id: 'q', label: t('qualifying') })
+                list.push({ id: 'q', label: t('qualifying'), isProvisional: false })
             }
             if (rawResultData1.value) {
                 list.push({
                     id: 'r1',
-                    label: rawResultData2.value ? t('race1') : (rawResultDataQ.value ? t('race') : t('race1'))
+                    label: rawResultData2.value ? t('race1') : (rawResultDataQ.value ? t('race') : t('race1')),
+                    isProvisional: false
                 })
             }
             if (rawResultData2.value) {
-                list.push({ id: 'r2', label: t('race2') })
+                list.push({ id: 'r2', label: t('race2'), isProvisional: false })
             }
         }
         return list
@@ -515,19 +550,7 @@
         const validEntries = []
         dbEntries.value.forEach(entry => {
             if (!entry.results || !Array.isArray(entry.results)) return
-            const res = entry.results.find(r => {
-                const sType = r.session_type || 'race'
-                if (currentTab === 'race' || currentTab === 'r1' || currentTab === 'race_1') {
-                    return sType === 'race' || sType === 'race_1'
-                }
-                if (currentTab === 'race_2' || currentTab === 'r2') {
-                    return sType === 'race_2'
-                }
-                if (currentTab === 'qualifying' || currentTab === 'q') {
-                    return sType === 'qualifying'
-                }
-                return sType === currentTab
-            })
+            const res = entry.results.find(r => matchSessionResult(r, currentTab))
             if (res) {
                 validEntries.push({
                     entry,
@@ -794,7 +817,8 @@
                     no_points: Boolean(result.no_points)
                 }, {
                     isPole,
-                    multiplier
+                    multiplier,
+                    scoringMode: currentChampEvent.value?.scoring_mode === 'overall' ? 'overall' : 'in_class'
                 })
                 : 0
 
