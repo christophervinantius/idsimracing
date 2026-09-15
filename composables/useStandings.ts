@@ -51,6 +51,7 @@ export interface ScoringResult {
     best_lap_ms?: number | null
     grid_position: number | null
     no_points?: boolean
+    is_wildcard?: boolean
 }
 
 export interface StandingsRow {
@@ -94,7 +95,7 @@ export const getBonusPoints = (
     result: ScoringResult,
     isPoleOrOptions: boolean | { isPole?: boolean; isFastestLap?: boolean } = false
 ): number => {
-    if (!system) return 0
+    if (!system || result.is_wildcard) return 0
     const bonuses = system.points_bonuses || []
     if (bonuses.length === 0) return 0
 
@@ -115,26 +116,101 @@ export const getBonusPoints = (
     return total
 }
 
+// Builds a mapping from each result in a session to its effective points position.
+// Wildcard drivers receive 0 position points and do not consume a points ladder spot,
+// allowing regular drivers behind them to shift up.
+// Regular drivers with no_points consume a points position (points burned, not shifted).
+export const buildSessionEffectivePointsPositions = (
+    results: ScoringResult[],
+    scoringMode?: "overall" | "overall_strict" | "in_class" | null
+): Map<ScoringResult, number | null> => {
+    const map = new Map<ScoringResult, number | null>()
+    if (!results || results.length === 0) return map
+
+    const isOverall = scoringMode === "overall" || scoringMode === "overall_strict"
+
+    if (isOverall) {
+        const sorted = [...results].sort((a, b) => {
+            const posA = a.classified_position ?? a.scoring_position ?? 9999
+            const posB = b.classified_position ?? b.scoring_position ?? 9999
+            return posA - posB
+        })
+
+        let nextPointsPos = 1
+        for (const r of sorted) {
+            if (r.is_wildcard) {
+                map.set(r, null)
+                continue
+            }
+            if (isScoringStatus(r.status) && isClassified(r)) {
+                map.set(r, nextPointsPos)
+                nextPointsPos++
+            } else {
+                map.set(r, null)
+            }
+        }
+    } else {
+        const groups = new Map<string, ScoringResult[]>()
+        for (const r of results) {
+            const classKey = r.class_id ? String(r.class_id) : "__overall__"
+            if (!groups.has(classKey)) groups.set(classKey, [])
+            groups.get(classKey)!.push(r)
+        }
+
+        for (const [, classResults] of groups) {
+            const sorted = [...classResults].sort((a, b) => {
+                const posA = a.scoring_position ?? a.classified_position ?? 9999
+                const posB = b.scoring_position ?? b.classified_position ?? 9999
+                return posA - posB
+            })
+
+            let nextPointsPos = 1
+            for (const r of sorted) {
+                if (r.is_wildcard) {
+                    map.set(r, null)
+                    continue
+                }
+                if (isScoringStatus(r.status) && isClassified(r)) {
+                    map.set(r, nextPointsPos)
+                    nextPointsPos++
+                } else {
+                    map.set(r, null)
+                }
+            }
+        }
+    }
+
+    return map
+}
+
 // Total points a single result earns in one session, multiplier applied.
 // The multiplier scales position and bonus points together, which is how
 // double-points finales are normally run.
 export const calculateResultPoints = (
     system: PointsSystem | null | undefined,
     result: ScoringResult,
-    options: { isPole?: boolean; isFastestLap?: boolean; multiplier?: number; scoringMode?: "overall" | "overall_strict" | "in_class" } = {}
+    options: {
+        isPole?: boolean
+        isFastestLap?: boolean
+        multiplier?: number
+        scoringMode?: "overall" | "overall_strict" | "in_class"
+        effectivePointsPosition?: number | null
+    } = {}
 ): number => {
-    if (result.no_points) return 0
+    if (result.no_points || result.is_wildcard) return 0
 
     const multiplier = options.multiplier === undefined || options.multiplier === null
         ? 1
         : Number(options.multiplier) || 0
 
     // Position finish points require finishing and classification. DNF/DNS/DSQ earn 0 position points.
-    const canScorePosition = isScoringStatus(result.status) && isClassified(result) && !result.no_points
+    const canScorePosition = isScoringStatus(result.status) && isClassified(result) && !result.no_points && !result.is_wildcard
     const isOverall = options.scoringMode === "overall" || options.scoringMode === "overall_strict"
-    const scoringPos = isOverall
-        ? (result.classified_position ?? result.scoring_position)
-        : (result.scoring_position ?? result.classified_position)
+    const scoringPos = options.effectivePointsPosition !== undefined
+        ? options.effectivePointsPosition
+        : (isOverall
+            ? (result.classified_position ?? result.scoring_position)
+            : (result.scoring_position ?? result.classified_position))
     const base = canScorePosition ? getPositionPoints(system, scoringPos) : 0
 
     // Bonus points (pole position and fastest lap) are awarded even if a driver DNFs or gets DSQ
@@ -168,6 +244,7 @@ export const matchSessionType = (roundType?: string | null, sessType?: string | 
 export const findPoleEntityKeys = (results: ScoringResult[], entityType: StandingsEntityType): Set<string> => {
     const keys = new Set<string>()
     for (const r of results) {
+        if (r.is_wildcard) continue
         if (Number(r.grid_position) === 1 || Number(r.scoring_position) === 1 || Number(r.classified_position) === 1) {
             if (entityType === "driver") {
                 const dIds = r.driver_ids && r.driver_ids.length > 0 ? r.driver_ids : (r.driver_id ? [r.driver_id] : [])
@@ -234,7 +311,7 @@ export const calculateStandings = (
         const multiplier = champEvent.points_multiplier
 
         // Determine pole keys: check session grid positions first; if not present, check qualifying session
-        const hasGridInSession = session.results.some(r => Number(r.grid_position) === 1)
+        const hasGridInSession = session.results.some(r => !r.is_wildcard && Number(r.grid_position) === 1)
 
         // Determine effective scoring mode:
         // - If event explicitly specifies "overall_strict", "overall", or "in_class", use that.
@@ -256,8 +333,9 @@ export const calculateStandings = (
         let poleKeys: Set<string> = new Set()
         if (effectiveScoringMode === "overall_strict") {
             // Overall Murni: only the single overall pole position holder across the entire grid
-            const overallPole = session.results.find(r => Number(r.grid_position) === 1 && (Number(r.classified_position) === 1 || Number(r.scoring_position) === 1))
-                || session.results.find(r => Number(r.grid_position) === 1)
+            const eligiblePoleResults = session.results.filter(r => !r.is_wildcard)
+            const overallPole = eligiblePoleResults.find(r => Number(r.grid_position) === 1 && (Number(r.classified_position) === 1 || Number(r.scoring_position) === 1))
+                || eligiblePoleResults.find(r => Number(r.grid_position) === 1)
             if (overallPole) {
                 const dIds = overallPole.driver_ids && overallPole.driver_ids.length > 0 ? overallPole.driver_ids : (overallPole.driver_id ? [overallPole.driver_id] : [])
                 if (entityType === "driver") {
@@ -271,6 +349,7 @@ export const calculateStandings = (
             }
         } else if (hasGridInSession) {
             for (const r of session.results) {
+                if (r.is_wildcard) continue
                 if (Number(r.grid_position) === 1) {
                     if (entityType === "driver") {
                         const dIds = r.driver_ids && r.driver_ids.length > 0 ? r.driver_ids : (r.driver_id ? [r.driver_id] : [])
@@ -293,15 +372,16 @@ export const calculateStandings = (
         // Fastest lap bonus:
         // - In "overall_strict", only the single overall fastest car across all classes receives the bonus.
         // - In "overall" or "in_class", each class's fastest lap holder receives the bonus.
+        // Wildcard drivers cannot score bonus points.
         let overallFastestResult: ScoringResult | null = null
         if (effectiveScoringMode === "overall_strict") {
-            const candidatesWithTime = session.results.filter(r => (r.best_lap_ms ?? 0) > 0)
+            const candidatesWithTime = session.results.filter(r => !r.is_wildcard && (r.best_lap_ms ?? 0) > 0)
             if (candidatesWithTime.length > 0) {
                 overallFastestResult = candidatesWithTime.reduce((best, cur) =>
                     (cur.best_lap_ms! < best.best_lap_ms!) ? cur : best
                 )
             } else {
-                const flCandidates = session.results.filter(r => r.fastest_lap)
+                const flCandidates = session.results.filter(r => !r.is_wildcard && r.fastest_lap)
                 if (flCandidates.length > 0) {
                     overallFastestResult = flCandidates.reduce((best, cur) => {
                         const posBest = best.classified_position ?? 9999
@@ -313,7 +393,7 @@ export const calculateStandings = (
         }
 
         const classFastestMap = new Map<string, ScoringResult>()
-        const flCandidates = session.results.filter(r => r.fastest_lap)
+        const flCandidates = session.results.filter(r => !r.is_wildcard && r.fastest_lap)
         if (flCandidates.length > 0) {
             for (const r of flCandidates) {
                 const classKey = r.class_id ? String(r.class_id) : "__overall__"
@@ -321,7 +401,7 @@ export const calculateStandings = (
             }
         } else {
             for (const r of session.results) {
-                if ((r.best_lap_ms ?? 0) <= 0) continue
+                if (r.is_wildcard || (r.best_lap_ms ?? 0) <= 0) continue
                 const classKey = r.class_id ? String(r.class_id) : "__overall__"
                 const currentBest = classFastestMap.get(classKey)
                 if (!currentBest || (r.best_lap_ms! < currentBest.best_lap_ms!)) {
@@ -330,10 +410,16 @@ export const calculateStandings = (
             }
         }
 
+        // Precompute effective points position for regular drivers (wildcards shift points to regular drivers)
+        const effectivePosMap = buildSessionEffectivePointsPositions(session.results, effectiveScoringMode)
+
         // Aggregate points and best finish position for each entity in this session
         const sessionAgg = new Map<string, { points: number; bestPos: number | null }>()
 
         for (const result of session.results) {
+            // Wildcard drivers are completely excluded from championship standings rankings
+            if (result.is_wildcard) continue
+
             const entityKeys: string[] = []
 
             if (entityType === "driver") {
@@ -383,12 +469,15 @@ export const calculateStandings = (
                 ? (overallFastestResult !== null && result === overallFastestResult)
                 : (Boolean(result.fastest_lap) || (classFastestMap.get(classKey) === result))
 
+            const effectivePos = effectivePosMap.get(result)
+
             for (const key of entityKeys) {
                 const points = calculateResultPoints(system, result, {
                     isPole: poleKeys.has(key),
                     isFastestLap,
                     multiplier,
-                    scoringMode: effectiveScoringMode
+                    scoringMode: effectiveScoringMode,
+                    effectivePointsPosition: effectivePos
                 })
 
                 const cur = sessionAgg.get(key) || { points: 0, bestPos: null }
@@ -396,13 +485,15 @@ export const calculateStandings = (
 
                 // Only a classified, scoring finish counts toward wins/podiums and countback.
                 if (isScoringStatus(result.status) && isClassified(result)) {
-                    // For a class championship, wins, podiums, and countback within the class standings
-                    // are based on in-class position (scoring_position: 1, 2, 3...) while retaining overall points.
-                    const pos = isClassChampionship
-                        ? (result.scoring_position ?? result.classified_position)
-                        : ((effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict")
-                            ? (result.classified_position ?? result.scoring_position)
-                            : (result.scoring_position ?? result.classified_position))
+                    // For a championship, wins, podiums, and countback within the championship standings
+                    // are based on the effective championship position (excluding wildcards).
+                    const pos = effectivePos !== null && effectivePos !== undefined
+                        ? effectivePos
+                        : (isClassChampionship
+                            ? (result.scoring_position ?? result.classified_position)
+                            : ((effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict")
+                                ? (result.classified_position ?? result.scoring_position)
+                                : (result.scoring_position ?? result.classified_position)))
                     if (pos !== null && pos !== undefined) {
                         if (cur.bestPos === null || Number(pos) < cur.bestPos) cur.bestPos = Number(pos)
                     }

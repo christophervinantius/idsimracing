@@ -344,7 +344,7 @@ export const parseAcsmResult = (jsonData: any): AcsmResultRow[] => {
             } else if (classLeader.laps > numLaps && classLeader.laps > 0) {
                 const lapsDown = classLeader.laps - numLaps
                 gap = `+${lapsDown} ${lapsDown === 1 ? "Lap" : "Laps"}`
-            } else if (totalTime > 60000 && classLeader.totalTime > 60000) {
+            } else if (totalTime > 0 && classLeader.totalTime > 0 && totalTime > classLeader.totalTime) {
                 const gapMs = totalTime - classLeader.totalTime
                 gap = formatGapTime(gapMs)
             } else if (totalTime !== 0 && !isNaN(totalTime)) {

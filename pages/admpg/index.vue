@@ -1543,6 +1543,20 @@
         return classesList.value.filter(c => c.event_id === selectedSchedule.value.event_id)
     })
 
+    const isMulticlassEvent = computed(() => {
+        if ((availableClassesForSchedule.value?.length || 0) > 1) return true
+        const distinctClassIds = new Set((resultsRows.value || []).map(r => r.class_id).filter(Boolean))
+        return distinctClassIds.size > 1
+    })
+
+    const totalResultsColumns = computed(() => {
+        let count = 5 // Pos, Driver/Team, Poin, Gap/Waktu, Aksi
+        if (isTeamEvent.value) count += 1 // No.
+        if (isMulticlassEvent.value) count += 2 // Class, Pos Kelas
+        if (selectedSessionType.value !== 'qualifying') count += 4 // Status, Penalti, WC, No Pts (Laps omitted)
+        return count
+    })
+
     const getClassNameById = (classId) => {
         const cls = classesList.value.find(c => c.id === classId)
         return cls ? cls.name : "Overall"
@@ -1608,7 +1622,8 @@
             has_penalty: false,
             penalty_time_sec: "",
             fastest_lap: false,
-            no_points: false
+            no_points: false,
+            is_wildcard: false
         }
     }
 
@@ -1617,6 +1632,22 @@
         const newRow = createEmptyResultRow(nextPos)
         resultsRows.value.push(newRow)
         recalculateScoringPositions()
+        syncTopDriversFromRows()
+    }
+
+    const insertResultRowBelow = (targetRow) => {
+        const idx = resultsRows.value.indexOf(targetRow)
+        const newRow = createEmptyResultRow()
+        if (targetRow?.class_id) {
+            newRow.class_id = targetRow.class_id
+        }
+        if (idx !== -1) {
+            resultsRows.value.splice(idx + 1, 0, newRow)
+        } else {
+            resultsRows.value.push(newRow)
+        }
+        recalculateScoringPositions()
+        syncTopDriversFromRows()
     }
 
     const addMultipleResultRows = (count = 5) => {
@@ -1626,6 +1657,7 @@
             resultsRows.value.push(newRow)
         }
         recalculateScoringPositions()
+        syncTopDriversFromRows()
     }
 
     const removeDisplayedRow = (row) => {
@@ -1709,6 +1741,7 @@
             resultsRows.value[idx1] = prev
             resultsRows.value[idx2] = curr
             recalculateScoringPositions()
+            syncTopDriversFromRows()
         }
     }
 
@@ -1723,7 +1756,95 @@
             resultsRows.value[idx1] = next
             resultsRows.value[idx2] = curr
             recalculateScoringPositions()
+            syncTopDriversFromRows()
         }
+    }
+
+    // Drag-and-drop state for results rows reordering
+    const draggedRowIndex = ref(null)
+    const dragOverRowIndex = ref(null)
+    const dragInsertPosition = ref('before') // 'before' or 'after'
+
+    const onRowDragStart = (displayedIdx, event) => {
+        // Prevent initiating row drag when the user is interacting with inputs, buttons, selects, or dropdowns
+        const target = event?.target
+        if (target && target.closest && target.closest('input, select, textarea, button, [role="button"], [data-team-dropdown], [data-top-driver-search]')) {
+            if (event.preventDefault) {
+                event.preventDefault()
+            }
+            return
+        }
+        draggedRowIndex.value = displayedIdx
+        if (event?.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', String(displayedIdx))
+        }
+    }
+
+    const onRowDragOver = (displayedIdx, event) => {
+        if (draggedRowIndex.value === null) return
+        if (event) {
+            event.preventDefault()
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'move'
+            }
+            const target = event.currentTarget
+            if (target && target.getBoundingClientRect) {
+                const rect = target.getBoundingClientRect()
+                const offset = event.clientY - rect.top
+                dragInsertPosition.value = offset > rect.height / 2 ? 'after' : 'before'
+            }
+        }
+        dragOverRowIndex.value = displayedIdx
+    }
+
+    const onRowDragLeave = (displayedIdx, event) => {
+        if (event?.currentTarget && event.relatedTarget && event.currentTarget.contains(event.relatedTarget)) {
+            return
+        }
+        if (dragOverRowIndex.value === displayedIdx) {
+            dragOverRowIndex.value = null
+        }
+    }
+
+    const onRowDrop = (targetDisplayedIdx, event) => {
+        if (event) event.preventDefault()
+        const fromDisplayedIdx = draggedRowIndex.value
+        if (fromDisplayedIdx === null || fromDisplayedIdx === undefined) return
+
+        const list = displayedResultsRows.value
+        if (!list[fromDisplayedIdx] || !list[targetDisplayedIdx]) {
+            draggedRowIndex.value = null
+            dragOverRowIndex.value = null
+            return
+        }
+
+        if (fromDisplayedIdx !== targetDisplayedIdx) {
+            const movedItem = list[fromDisplayedIdx]
+            const targetItem = list[targetDisplayedIdx]
+
+            const fromIdx = resultsRows.value.indexOf(movedItem)
+            if (fromIdx !== -1) {
+                resultsRows.value.splice(fromIdx, 1)
+                const newTargetIdx = resultsRows.value.indexOf(targetItem)
+                if (newTargetIdx !== -1) {
+                    const insertIdx = dragInsertPosition.value === 'after' ? newTargetIdx + 1 : newTargetIdx
+                    resultsRows.value.splice(insertIdx, 0, movedItem)
+                } else {
+                    resultsRows.value.push(movedItem)
+                }
+                recalculateScoringPositions()
+                syncTopDriversFromRows()
+            }
+        }
+
+        draggedRowIndex.value = null
+        dragOverRowIndex.value = null
+    }
+
+    const onRowDragEnd = () => {
+        draggedRowIndex.value = null
+        dragOverRowIndex.value = null
     }
 
     const moveRowUp = (index) => {
@@ -1904,6 +2025,25 @@
         return selectedSessionType.value === 'qualifying' ? 4 : 8
     }
 
+    const getAvailableGridCols = () => {
+        const cols = []
+        if (isTeamEvent.value) cols.push(0) // Car Number
+        cols.push(1) // Driver/Team
+        if (isMulticlassEvent.value) {
+            cols.push(2) // Class
+            cols.push(3) // Pos Kelas
+        }
+        if (selectedSessionType.value === 'qualifying') {
+            cols.push(4) // Gap / Time
+        } else {
+            cols.push(4) // Status
+            cols.push(6) // Gap / Time
+            cols.push(7) // Penalti
+            cols.push(8) // No Pts
+        }
+        return cols
+    }
+
     const getVisibleRowIndices = () => {
         const indices = []
         const rows = displayedResultsRows.value
@@ -1947,7 +2087,8 @@
     }
 
     const handleResultsGridKeydown = (rowIdx, colIdx, event) => {
-        const maxCol = getMaxGridCol()
+        const availableCols = getAvailableGridCols()
+        const colPos = availableCols.indexOf(colIdx)
         const target = event.target
         const isTextInput = target && (target.tagName === 'INPUT') && (target.type === 'text' || target.type === 'number')
 
@@ -1981,12 +2122,12 @@
             }
             if (canMoveLeft) {
                 event.preventDefault()
-                if (colIdx > 0) {
-                    focusCell(rowIdx, colIdx - 1, true)
+                if (colPos > 0) {
+                    focusCell(rowIdx, availableCols[colPos - 1], true)
                 } else {
                     const prevRow = getPrevVisibleRowIndex(rowIdx)
                     if (prevRow !== rowIdx) {
-                        focusCell(prevRow, maxCol, true)
+                        focusCell(prevRow, availableCols[availableCols.length - 1], true)
                     }
                 }
             }
@@ -2003,12 +2144,12 @@
             }
             if (canMoveRight) {
                 event.preventDefault()
-                if (colIdx < maxCol) {
-                    focusCell(rowIdx, colIdx + 1, true)
+                if (colPos !== -1 && colPos < availableCols.length - 1) {
+                    focusCell(rowIdx, availableCols[colPos + 1], true)
                 } else {
                     const nextRow = getNextVisibleRowIndex(rowIdx)
                     if (nextRow !== rowIdx) {
-                        focusCell(nextRow, 0, true)
+                        focusCell(nextRow, availableCols[0], true)
                     }
                 }
             }
@@ -2033,12 +2174,20 @@
         }
         if (event.key === 'ArrowLeft') {
             event.preventDefault()
-            focusCell(idx, 0, true)
+            const availableCols = getAvailableGridCols()
+            const cPos = availableCols.indexOf(1)
+            if (cPos > 0) {
+                focusCell(idx, availableCols[cPos - 1], true)
+            }
             return
         }
         if (event.key === 'ArrowRight') {
             event.preventDefault()
-            focusCell(idx, 2, false)
+            const availableCols = getAvailableGridCols()
+            const cPos = availableCols.indexOf(1)
+            if (cPos !== -1 && cPos < availableCols.length - 1) {
+                focusCell(idx, availableCols[cPos + 1], false)
+            }
             return
         }
         if (event.key === 'Enter' || event.key === ' ' || event.key === 'F2') {
@@ -2101,7 +2250,12 @@
                 selectDriverForRow(row, selected.isClear ? null : selected)
             }
             closeDriverDropdown()
-            focusCell(idx, event.shiftKey ? 0 : 2, true)
+            const availableCols = getAvailableGridCols()
+            const cPos = availableCols.indexOf(1)
+            const targetCol = event.shiftKey
+                ? (cPos > 0 ? availableCols[cPos - 1] : 1)
+                : (cPos !== -1 && cPos < availableCols.length - 1 ? availableCols[cPos + 1] : 1)
+            focusCell(idx, targetCol, true)
             return
         }
     }
@@ -2123,12 +2277,20 @@
         }
         if (event.key === 'ArrowLeft') {
             event.preventDefault()
-            focusCell(idx, 0, true)
+            const availableCols = getAvailableGridCols()
+            const cPos = availableCols.indexOf(1)
+            if (cPos > 0) {
+                focusCell(idx, availableCols[cPos - 1], true)
+            }
             return
         }
         if (event.key === 'ArrowRight') {
             event.preventDefault()
-            focusCell(idx, 2, false)
+            const availableCols = getAvailableGridCols()
+            const cPos = availableCols.indexOf(1)
+            if (cPos !== -1 && cPos < availableCols.length - 1) {
+                focusCell(idx, availableCols[cPos + 1], false)
+            }
             return
         }
         if (event.key === 'Enter' || event.key === ' ' || event.key === 'F2') {
@@ -2191,7 +2353,12 @@
                 selectTeamForRow(row, selected.isClear ? null : selected)
             }
             closeTeamDropdown()
-            focusCell(idx, event.shiftKey ? 0 : 2, true)
+            const availableCols = getAvailableGridCols()
+            const cPos = availableCols.indexOf(1)
+            const targetCol = event.shiftKey
+                ? (cPos > 0 ? availableCols[cPos - 1] : 1)
+                : (cPos !== -1 && cPos < availableCols.length - 1 ? availableCols[cPos + 1] : 1)
+            focusCell(idx, targetCol, true)
             return
         }
     }
@@ -2730,6 +2897,16 @@
         syncTopDriversFromRows()
     }
 
+    const parseLapString = (val) => {
+        if (!val) return null
+        const str = String(val).trim()
+        const match = str.match(/^\+?\s*(\d+)\s*(?:laps?|l|putaran)$/i)
+        if (match) {
+            return parseInt(match[1], 10)
+        }
+        return null
+    }
+
     const parseTimeToMs = (timeStr) => {
         if (!timeStr) return null
         let str = String(timeStr).trim().replace(/s$/i, '').trim()
@@ -2850,12 +3027,13 @@
                         penalty_time_ns,
                         fastest_lap,
                         is_provisional,
-                        no_points
+                        no_points,
+                        is_wildcard
                     )
                 `)
                 .eq("schedule_id", selectedScheduleId.value)
 
-            if (entriesError && (entriesError.message?.includes("no_points") || entriesError.code === "PGRST204" || entriesError.code === "42703")) {
+            if (entriesError && (entriesError.message?.includes("no_points") || entriesError.message?.includes("is_wildcard") || entriesError.code === "PGRST204" || entriesError.code === "42703")) {
                 const retry = await $supabase
                     .from("event_entries")
                     .select(`
@@ -2913,6 +3091,18 @@
                 const isExistingTeam = validEntries.some(e => e.entry_type === 'team' || (!e.driver_id && e.team_id))
                 isTeamEvent.value = isExistingTeam
 
+                const maxLapsByClass = new Map()
+                let maxOverallLaps = 0
+                validEntries.forEach(e => {
+                    const r = (e.results || []).find(res => res.session_type === selectedSessionType.value || (!res.session_type && selectedSessionType.value === 'race'))
+                    const n = Number(r?.num_laps) || 0
+                    if (n > maxOverallLaps) maxOverallLaps = n
+                    const cKey = e.class_id || '__overall__'
+                    if (n > (maxLapsByClass.get(cKey) || 0)) {
+                        maxLapsByClass.set(cKey, n)
+                    }
+                })
+
                 const mapped = validEntries.map(e => {
                     const res = e.results.find(r => r.session_type === selectedSessionType.value || (!r.session_type && selectedSessionType.value === 'race')) || {}
                     const penSec = (res.penalty_time_ns && Number(res.penalty_time_ns) > 0)
@@ -2920,6 +3110,21 @@
                         : (res.has_penalty ? "0.000" : "")
                     const leadDriverId = isTeamEvent.value ? "" : (e.driver_id || "")
                     const driverClassId = e.class_id || (leadDriverId && seasonDriverClassesMap.value.get(leadDriverId)) || (availableClassesForSchedule.value.length === 1 ? availableClassesForSchedule.value[0].id : "")
+                    const cKey = driverClassId || '__overall__'
+                    const classMaxLaps = (maxLapsByClass.get(cKey) && maxLapsByClass.get(cKey) > 0)
+                        ? maxLapsByClass.get(cKey)
+                        : maxOverallLaps
+
+                    let displayTotalTime = ""
+                    if (res.total_time_ms !== null && res.total_time_ms !== undefined && res.total_time_ms !== "") {
+                        displayTotalTime = selectedSessionType.value === 'qualifying' ? formatLapTime(res.total_time_ms) : formatTotalTime(res.total_time_ms)
+                    } else if (selectedSessionType.value !== 'qualifying' && classMaxLaps > 0 && res.num_laps && classMaxLaps > Number(res.num_laps)) {
+                        const diff = classMaxLaps - Number(res.num_laps)
+                        displayTotalTime = `+${diff} ${diff === 1 ? 'Lap' : 'Laps'}`
+                    } else if (res.best_lap_ms) {
+                        displayTotalTime = formatLapTime(res.best_lap_ms)
+                    }
+
                     return {
                         _rowId: 'row_' + Math.random().toString(36).substring(2, 9),
                         id: res.id || null,
@@ -2936,14 +3141,13 @@
                         is_pole: Number(res.grid_position) === 1,
                         num_laps: res.num_laps,
                         best_lap: res.best_lap_ms ? formatLapTime(res.best_lap_ms) : "",
-                        total_time: (res.total_time_ms !== null && res.total_time_ms !== undefined && res.total_time_ms !== "")
-                            ? (selectedSessionType.value === 'qualifying' ? formatLapTime(res.total_time_ms) : formatTotalTime(res.total_time_ms))
-                            : (res.best_lap_ms ? formatLapTime(res.best_lap_ms) : ""),
+                        total_time: displayTotalTime,
                         total_time_ms: res.total_time_ms,
                         has_penalty: Boolean(res.has_penalty || (res.penalty_time_ns && Number(res.penalty_time_ns) > 0)),
                         penalty_time_sec: penSec,
                         fastest_lap: Boolean(res.fastest_lap),
-                        no_points: Boolean(res.no_points)
+                        no_points: Boolean(res.no_points),
+                        is_wildcard: Boolean(res.is_wildcard)
                     }
                 })
                 mapped.sort((a, b) => (a.position || 999) - (b.position || 999))
@@ -3038,7 +3242,8 @@
                 has_penalty: Boolean(item.hasPenalty || (item.penaltyTime && Number(item.penaltyTime) > 0)),
                 penalty_time_sec: (item.penaltyTime && Number(item.penaltyTime) > 0) ? Number(item.penaltyTime).toFixed(3) : (item.hasPenalty ? "0.000" : ""),
                 fastest_lap: Boolean(item.isFastestLap),
-                no_points: false
+                no_points: false,
+                is_wildcard: false
             }
         })
 
@@ -3345,7 +3550,8 @@
                 has_penalty: false,
                 penalty_time_sec: "",
                 fastest_lap: Boolean(isFastestLap),
-                no_points: false
+                no_points: false,
+                is_wildcard: false
             })
         })
 
@@ -3462,6 +3668,19 @@
                 })
             }
 
+            // Calculate base laps for lap difference calculations
+            const baseLapsByClass = new Map()
+            let maxOverallLaps = 0
+            validRows.forEach(r => {
+                const n = Number(r.num_laps) || 0
+                if (n > maxOverallLaps) maxOverallLaps = n
+                const cKey = r.class_id || '__overall__'
+                if (n > (baseLapsByClass.get(cKey) || 0)) {
+                    baseLapsByClass.set(cKey, n)
+                }
+            })
+            const defaultBaseLaps = maxOverallLaps > 0 ? maxOverallLaps : 100
+
             const savedResultIds = new Set()
 
             for (let i = 0; i < validRows.length; i++) {
@@ -3535,9 +3754,31 @@
                     seasonDriverClassesMap.value.set(dId, row.class_id)
                 }
 
-                const parsedTotalMs = row.total_time ? parseTimeToMs(row.total_time) : null
+                const cKey = row.class_id || '__overall__'
+                const classBaseLaps = (baseLapsByClass.get(cKey) && baseLapsByClass.get(cKey) > 0)
+                    ? baseLapsByClass.get(cKey)
+                    : defaultBaseLaps
+
+                const lapDown = parseLapString(row.total_time)
+                let rowNumLaps = null
+                let totalMs = null
+
+                if (sessType !== 'qualifying' && lapDown !== null) {
+                    rowNumLaps = Math.max(0, classBaseLaps - lapDown)
+                    totalMs = null
+                } else {
+                    const parsedTotalMs = row.total_time ? parseTimeToMs(row.total_time) : null
+                    totalMs = parsedTotalMs !== null ? parsedTotalMs : (row.total_time_ms ?? null)
+                    if (sessType !== 'qualifying') {
+                        if (row.num_laps !== null && row.num_laps !== '' && !isNaN(Number(row.num_laps))) {
+                            rowNumLaps = Number(row.num_laps)
+                        } else if (classBaseLaps > 0 && row.status === 'finished') {
+                            rowNumLaps = classBaseLaps
+                        }
+                    }
+                }
+
                 const parsedBestMs = row.best_lap ? parseTimeToMs(row.best_lap) : null
-                const totalMs = parsedTotalMs !== null ? parsedTotalMs : (row.total_time_ms ?? null)
                 const bestMs = parsedBestMs !== null ? parsedBestMs : (row.best_lap_ms ?? (sessType === 'qualifying' ? totalMs : null))
                 const penNum = parsePenaltyToSec(row.penalty_time_sec)
                 const penNs = (penNum !== null && !isNaN(penNum) && penNum > 0) ? Math.round(penNum * 1000000000) : null
@@ -3550,14 +3791,15 @@
                     scoring_position: row.scoring_position ? Number(row.scoring_position) : (i + 1),
                     status: row.status || "finished",
                     grid_position: isPolePosition ? 1 : (row.grid_position ? Number(row.grid_position) : null),
-                    num_laps: (sessType !== 'qualifying' && row.num_laps !== null && row.num_laps !== '' && !isNaN(Number(row.num_laps))) ? Number(row.num_laps) : null,
+                    num_laps: rowNumLaps,
                     best_lap_ms: bestMs || null,
                     total_time_ms: (totalMs !== null && totalMs !== undefined && !isNaN(totalMs)) ? totalMs : null,
                     has_penalty: sessType === 'qualifying' ? false : Boolean((penNs && penNs > 0) || row.has_penalty),
                     penalty_time_ns: sessType === 'qualifying' ? null : penNs,
                     fastest_lap: sessType === 'qualifying' ? false : Boolean(row.fastest_lap),
                     is_provisional: Boolean(isResultsProvisional.value),
-                    no_points: sessType === 'qualifying' ? false : Boolean(row.no_points)
+                    no_points: sessType === 'qualifying' ? false : Boolean(row.no_points),
+                    is_wildcard: sessType === 'qualifying' ? false : Boolean(row.is_wildcard)
                 }
 
                 const { data: existingResult } = await $supabase
@@ -3571,18 +3813,20 @@
 
                 if (existingResult) {
                     let { error: resErr } = await $supabase.from("results").update(resultPayload).eq("id", existingResult.id)
-                    if (resErr && (resErr.message?.includes("no_points") || resErr.code === "PGRST204" || resErr.code === "42703")) {
+                    if (resErr && (resErr.message?.includes("is_wildcard") || resErr.message?.includes("no_points") || resErr.code === "PGRST204" || resErr.code === "42703")) {
                         const fallbackPayload = { ...resultPayload }
                         delete fallbackPayload.no_points
+                        delete fallbackPayload.is_wildcard
                         const retry = await $supabase.from("results").update(fallbackPayload).eq("id", existingResult.id)
                         resErr = retry.error
                     }
                     if (resErr) throw resErr
                 } else {
                     let { data: newRes, error: resErr } = await $supabase.from("results").insert(resultPayload).select("id").maybeSingle()
-                    if (resErr && (resErr.message?.includes("no_points") || resErr.code === "PGRST204" || resErr.code === "42703")) {
+                    if (resErr && (resErr.message?.includes("is_wildcard") || resErr.message?.includes("no_points") || resErr.code === "PGRST204" || resErr.code === "42703")) {
                         const fallbackPayload = { ...resultPayload }
                         delete fallbackPayload.no_points
+                        delete fallbackPayload.is_wildcard
                         const retry = await $supabase.from("results").insert(fallbackPayload).select("id").maybeSingle()
                         newRes = retry.data
                         resErr = retry.error
@@ -4199,12 +4443,41 @@
         return pointsSystemsMapLocal.value.get(resultsPointsSystemId.value) || null
     })
 
+    const activeEffectivePointsMap = computed(() => {
+        const sys = activeResultsPointsSystem.value
+        if (!sys || !resultsRows.value || resultsRows.value.length === 0) return new Map()
+        const scoringList = resultsRows.value.map(r => ({
+            _originalRow: r,
+            driver_id: r.driver_id || null,
+            team_id: r.team_id ? Number(r.team_id) : null,
+            car_number: r.car_number ?? null,
+            class_id: r.class_id || null,
+            scoring_position: r.scoring_position ? Number(r.scoring_position) : null,
+            classified_position: r.position ? Number(r.position) : null,
+            status: r.status || "finished",
+            fastest_lap: Boolean(r.fastest_lap),
+            grid_position: Number(r.grid_position) || null,
+            no_points: Boolean(r.no_points),
+            is_wildcard: Boolean(r.is_wildcard)
+        }))
+        const posMap = buildSessionEffectivePointsPositions(scoringList, resultsScoringMode.value || "in_class")
+        const resultMap = new Map()
+        scoringList.forEach(item => {
+            resultMap.set(item._originalRow, posMap.get(item))
+        })
+        return resultMap
+    })
+
     const getRowCalculatedPoints = (row) => {
         const sys = activeResultsPointsSystem.value
         if (!sys || !row) return null
 
+        if (row.is_wildcard) {
+            return { points: 0, isZero: true, isNoPoints: true, isWildcard: true, bonusText: "" }
+        }
+
         if (row.no_points) {
-            return { points: 0, isZero: true, isNoPoints: true, bonusText: "" }
+            return { points: 0, isZero: true, isNoPoints: true, isWildcard: false, bonusText: "" }
         }
 
         const isTeam = Boolean(isTeamEvent.value)
@@ -4217,7 +4490,7 @@
         // In "overall_strict", only the single fastest car across all classes earns FL bonus
         let isFastestLap = Boolean(row.fastest_lap)
         if (resultsScoringMode.value === "overall_strict" && isFastestLap) {
-            const flRows = (resultsRows.value || []).filter(r => r.fastest_lap && (isTeam ? r.team_id : r.driver_id))
+            const flRows = (resultsRows.value || []).filter(r => !r.is_wildcard && r.fastest_lap && (isTeam ? r.team_id : r.driver_id))
             if (flRows.length > 1) {
                 const best = flRows.reduce((prev, curr) => {
                     const prevMs = curr.best_lap ? parseTimeToMs(curr.best_lap) : (curr.best_lap_ms || 999999999)
@@ -4233,7 +4506,7 @@
         // In "overall_strict", only the single overall pole position holder earns Pole bonus
         let isPole = Boolean(row.is_pole || Number(row.grid_position) === 1)
         if (resultsScoringMode.value === "overall_strict" && isPole) {
-            const poleRows = (resultsRows.value || []).filter(r => (r.is_pole || Number(r.grid_position) === 1) && (isTeam ? r.team_id : r.driver_id))
+            const poleRows = (resultsRows.value || []).filter(r => !r.is_wildcard && (r.is_pole || Number(r.grid_position) === 1) && (isTeam ? r.team_id : r.driver_id))
             if (poleRows.length > 1) {
                 isPole = (poleRows[0] === row)
             }
@@ -4252,14 +4525,18 @@
             status: row.status || "finished",
             fastest_lap: isFastestLap,
             grid_position: Number(row.grid_position) || (isPole ? 1 : null),
-            no_points: Boolean(row.no_points)
+            no_points: Boolean(row.no_points),
+            is_wildcard: Boolean(row.is_wildcard)
         }
+
+        const effectivePos = activeEffectivePointsMap.value.get(row)
 
         const pts = calculateResultPoints(sys, scoringResult, {
             isPole,
             isFastestLap,
             multiplier: resultsPointsMultiplier.value ?? 1,
-            scoringMode: resultsScoringMode.value || "in_class"
+            scoringMode: resultsScoringMode.value || "in_class",
+            effectivePointsPosition: effectivePos
         })
 
         const bonuses = []
@@ -4275,6 +4552,8 @@
             points: pts,
             isZero: pts === 0,
             isNoPoints: Boolean(row.no_points),
+            isWildcard: Boolean(row.is_wildcard),
+            effectivePointsPos: effectivePos,
             bonusText: bonuses.length > 0 ? `+${bonuses.join("+")}` : ""
         }
     }
@@ -7328,7 +7607,7 @@
 
                         <div class="flex items-center gap-3">
                             <button
-                                v-if="availableClassesForSchedule.length > 0"
+                                v-if="isMulticlassEvent"
                                 type="button"
                                 @click="recalculateScoringPositions"
                                 class="px-2.5 py-1 text-xs font-bold bg-white dark:bg-slate-900 hover:bg-red-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-slate-700 rounded-lg transition cursor-pointer flex items-center gap-1"
@@ -7362,40 +7641,42 @@
                             class="overflow-x-auto border border-gray-200 dark:border-slate-800 shadow-sm"
                             :class="isTableOverflowing ? 'rounded-b-2xl border-t-0' : 'rounded-2xl'"
                         >
-                            <table class="w-full min-w-[950px] table-fixed text-left border-collapse">
+                            <table
+                                class="w-full table-fixed text-left border-collapse transition-all"
+                                :class="isMulticlassEvent ? 'min-w-[950px]' : (isTeamEvent ? 'min-w-[850px]' : 'min-w-[760px]')"
+                            >
                                 <thead class="bg-red-900 dark:bg-red-900 text-white text-xs">
                                     <tr v-if="!isTeamEvent">
-                                        <th class="px-2 py-3 text-center w-[4%]">Pos</th>
-                                        <th class="px-2 py-3 text-center w-[5%]">No.</th>
-                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[45%]' : 'w-[25%]'">Pembalap (Driver) <span class="text-red-300">*</span></th>
-                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[15%]' : 'w-[10%]'">Kelas (Class)</th>
-                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[8%]' : 'w-[7%]'">Pos Kelas</th>
+                                        <th class="px-2 py-3 text-center w-[5%]">Pos</th>
+                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? (isMulticlassEvent ? 'w-[43%]' : 'w-[58%]') : (isMulticlassEvent ? 'w-[27%]' : 'w-[40%]')">Pembalap (Driver) <span class="text-red-300">*</span></th>
+                                        <th v-if="isMulticlassEvent" class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[15%]' : 'w-[10%]'">Kelas (Class)</th>
+                                        <th v-if="isMulticlassEvent" class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[8%]' : 'w-[7%]'">Pos Kelas</th>
                                         <th class="px-2 py-3 text-center w-[7%]" title="Poin yang diperoleh berdasarkan sistem poin dan mode penilaian">Poin</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[8%]">Status</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[7%]">Laps</th>
-                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[13%]' : 'w-[10%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[13%]' : 'w-[13%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
-                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-1 py-3 text-center w-[4%]" title="Wildcard: Tidak berhak poin kejuaraan, poin digeser ke pembalap berikutnya">WC</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-1 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan (poin hangus)">No Pts</th>
+                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[5%]' : 'w-[5%]'">Aksi</th>
                                     </tr>
                                     <tr v-else>
-                                        <th class="px-2 py-3 text-center w-[4%]">Pos</th>
+                                        <th class="px-2 py-3 text-center w-[5%]">Pos</th>
                                         <th class="px-2 py-3 text-center w-[5%]">No.</th>
-                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[40%]' : 'w-[21%]'">Tim (Team Name) <span class="text-red-300">*</span></th>
-                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[18%]' : 'w-[12%]'">Kelas (Class)</th>
-                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[9%]' : 'w-[7%]'">Pos Kelas</th>
+                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? (isMulticlassEvent ? 'w-[38%]' : 'w-[56%]') : (isMulticlassEvent ? 'w-[23%]' : 'w-[38%]')">Tim (Team Name) <span class="text-red-300">*</span></th>
+                                        <th v-if="isMulticlassEvent" class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[18%]' : 'w-[12%]'">Kelas (Class)</th>
+                                        <th v-if="isMulticlassEvent" class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[9%]' : 'w-[7%]'">Pos Kelas</th>
                                         <th class="px-2 py-3 text-center w-[7%]" title="Poin yang diperoleh berdasarkan sistem poin dan mode penilaian">Poin</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[8%]">Status</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[7%]">Laps</th>
-                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[13%]' : 'w-[11%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
+                                        <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[13%]' : 'w-[13%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan">No Pts</th>
-                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[4%]' : 'w-[4%]'">Aksi</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-1 py-3 text-center w-[4%]" title="Wildcard: Tidak berhak poin kejuaraan, poin digeser ke tim berikutnya">WC</th>
+                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-1 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan (poin hangus)">No Pts</th>
+                                        <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[5%]' : 'w-[5%]'">Aksi</th>
                                     </tr>
                                 </thead>
                             <tbody class="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-950 text-xs">
                                 <tr v-if="loadingResults" class="text-center py-8">
-                                    <td :colspan="selectedSessionType === 'qualifying' ? 8 : 12" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                    <td :colspan="totalResultsColumns" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                                         <div class="flex items-center justify-center gap-2">
                                             <Icon name="material-symbols:refresh" class="animate-spin text-xl text-red-700" />
                                             <span>Memuat data hasil balapan...</span>
@@ -7404,7 +7685,7 @@
                                 </tr>
 
                                 <tr v-else-if="displayedResultsRows.length === 0" class="text-center py-8">
-                                    <td :colspan="selectedSessionType === 'qualifying' ? 8 : 12" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                    <td :colspan="totalResultsColumns" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                                         <div class="flex flex-col items-center justify-center gap-2">
                                             <span>Belum ada baris posisi{{ selectedEntryClassId !== 'ALL' ? ' untuk kelas ini' : '' }}. Klik tombol "+1 Baris" untuk menambahkan posisi.</span>
                                         </div>
@@ -7415,38 +7696,32 @@
                                     v-for="(row, idx) in displayedResultsRows"
                                     :key="row._rowId || row.id || idx"
                                     v-show="selectedEntryClassId !== 'ALL' || resultsClassFilter === 'ALL' || row.class_id === resultsClassFilter"
-                                    class="transition-colors hover:bg-gray-50 dark:hover:bg-slate-900/60"
+                                    draggable="true"
+                                    @dragstart="onRowDragStart(idx, $event)"
+                                    @dragover="onRowDragOver(idx, $event)"
+                                    @dragleave="onRowDragLeave(idx, $event)"
+                                    @drop="onRowDrop(idx, $event)"
+                                    @dragend="onRowDragEnd"
+                                    class="transition-all"
                                     :class="{
-                                        'bg-yellow-50/40 dark:bg-yellow-950/20': (selectedEntryClassId !== 'ALL' ? row.scoring_position === 1 : row.position === 1),
-                                        'bg-slate-50/40 dark:bg-slate-900/40': (selectedEntryClassId !== 'ALL' ? row.scoring_position === 2 : row.position === 2),
-                                        'bg-amber-50/30 dark:bg-amber-950/20': (selectedEntryClassId !== 'ALL' ? row.scoring_position === 3 : row.position === 3),
+                                        'bg-yellow-50/40 dark:bg-yellow-950/20': (selectedEntryClassId !== 'ALL' ? row.scoring_position === 1 : row.position === 1) && dragOverRowIndex !== idx,
+                                        'bg-slate-50/40 dark:bg-slate-900/40': (selectedEntryClassId !== 'ALL' ? row.scoring_position === 2 : row.position === 2) && dragOverRowIndex !== idx,
+                                        'bg-amber-50/30 dark:bg-amber-950/20': (selectedEntryClassId !== 'ALL' ? row.scoring_position === 3 : row.position === 3) && dragOverRowIndex !== idx,
+                                        'hover:bg-gray-50 dark:hover:bg-slate-900/60': dragOverRowIndex !== idx,
+                                        'opacity-35 scale-[0.99]': draggedRowIndex === idx,
+                                        'border-t-2 border-t-red-600 bg-red-50/60 dark:bg-red-950/40': dragOverRowIndex === idx && draggedRowIndex !== idx && dragInsertPosition === 'before',
+                                        'border-b-2 border-b-red-600 bg-red-50/60 dark:bg-red-950/40': dragOverRowIndex === idx && draggedRowIndex !== idx && dragInsertPosition === 'after'
                                     }"
                                 >
                                     <!-- Position Column -->
-                                    <td class="px-2 py-2.5 text-center">
-                                        <div class="flex items-center justify-center gap-1">
-                                            <div class="flex flex-col">
-                                                <button
-                                                    type="button"
-                                                    @click="moveDisplayedRowUp(idx)"
-                                                    :disabled="idx === 0"
-                                                    class="text-gray-400 hover:text-red-700 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed leading-none p-0.5"
-                                                    title="Pindah ke Atas"
-                                                >
-                                                    <Icon name="material-symbols:arrow-drop-up" class="text-base" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    @click="moveDisplayedRowDown(idx)"
-                                                    :disabled="idx === displayedResultsRows.length - 1"
-                                                    class="text-gray-400 hover:text-red-700 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed leading-none p-0.5"
-                                                    title="Pindah ke Bawah"
-                                                >
-                                                    <Icon name="material-symbols:arrow-drop-down" class="text-base" />
-                                                </button>
-                                            </div>
+                                    <td class="px-1 py-2.5 text-center">
+                                        <div class="flex items-center justify-center">
                                             <span
-                                                class="w-7 h-7 rounded-lg flex items-center justify-center font-extrabold text-xs shrink-0"
+                                                draggable="true"
+                                                @dragstart="onRowDragStart(idx, $event)"
+                                                @dragend="onRowDragEnd"
+                                                class="w-7 h-7 rounded-lg flex items-center justify-center font-extrabold text-xs shrink-0 cursor-grab active:cursor-grabbing select-none"
+                                                title="Tahan dan geser untuk memindahkan posisi"
                                                 :class="{
                                                     'bg-yellow-400 text-yellow-950 border border-yellow-500 shadow-xs': (selectedEntryClassId !== 'ALL' ? row.scoring_position === 1 : row.position === 1),
                                                     'bg-slate-300 text-slate-900 border border-slate-400 shadow-xs': (selectedEntryClassId !== 'ALL' ? row.scoring_position === 2 : row.position === 2),
@@ -7460,7 +7735,7 @@
                                     </td>
 
                                     <!-- Car Number Column -->
-                                    <td class="px-2 py-2.5 text-center">
+                                    <td v-if="isTeamEvent" class="px-2 py-2.5 text-center">
                                         <input
                                             :data-grid-row="idx"
                                             data-grid-col="0"
@@ -7751,7 +8026,7 @@
                                     </td>
 
                                     <!-- Class Column -->
-                                    <td class="px-2 py-2.5">
+                                    <td v-if="isMulticlassEvent" class="px-2 py-2.5">
                                         <div class="relative flex items-center">
                                             <select
                                                 :data-grid-row="idx"
@@ -7771,7 +8046,7 @@
                                     </td>
 
                                     <!-- Scoring / In-Class Position Column -->
-                                    <td class="px-2 py-2.5 text-center">
+                                    <td v-if="isMulticlassEvent" class="px-2 py-2.5 text-center">
                                         <div class="flex items-center justify-center">
                                             <input
                                                 :data-grid-row="idx"
@@ -7793,9 +8068,21 @@
                                             <div
                                                 v-if="getRowCalculatedPoints(row)"
                                                 class="flex items-center justify-center gap-1"
-                                                :title="`Poin: ${getRowCalculatedPoints(row).points} pts (${resultsScoringMode === 'overall' ? 'Mode Overall' : 'Mode Per Kelas'}${getRowCalculatedPoints(row).bonusText ? ', Bonus ' + getRowCalculatedPoints(row).bonusText : ''})`"
+                                                :title="getRowCalculatedPoints(row).isWildcard
+                                                    ? 'Wildcard: Tidak berhak mendapatkan poin kejuaraan, poin kejuaraan digeser ke pembalap berikutnya'
+                                                    : (getRowCalculatedPoints(row).effectivePointsPos && getRowCalculatedPoints(row).effectivePointsPos !== (row.scoring_position || row.position)
+                                                        ? `Poin: ${getRowCalculatedPoints(row).points} pts (Mendapatkan poin posisi P${getRowCalculatedPoints(row).effectivePointsPos} karena wildcard)`
+                                                        : `Poin: ${getRowCalculatedPoints(row).points} pts (${resultsScoringMode === 'overall' ? 'Mode Overall' : 'Mode Per Kelas'}${getRowCalculatedPoints(row).bonusText ? ', Bonus ' + getRowCalculatedPoints(row).bonusText : ''})`)"
                                             >
                                                 <span
+                                                    v-if="getRowCalculatedPoints(row).isWildcard"
+                                                    class="px-2 py-0.5 rounded-md font-bold text-xs shrink-0 flex items-center gap-1 border bg-purple-100 text-purple-900 dark:bg-purple-950/70 dark:text-purple-300 border-purple-300 dark:border-purple-800"
+                                                >
+                                                    <span>0</span>
+                                                    <span class="text-[9px] font-semibold text-purple-600 dark:text-purple-400">WC</span>
+                                                </span>
+                                                <span
+                                                    v-else
                                                     class="px-2 py-0.5 rounded-md font-bold text-xs shrink-0 flex items-center gap-1 border"
                                                     :class="getRowCalculatedPoints(row).isNoPoints
                                                         ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-slate-700 line-through'
@@ -7805,6 +8092,13 @@
                                                 >
                                                     <span>{{ formatPoints(getRowCalculatedPoints(row).points) }}</span>
                                                     <span class="text-[9px] font-normal opacity-75">pts</span>
+                                                    <span
+                                                        v-if="getRowCalculatedPoints(row).effectivePointsPos && getRowCalculatedPoints(row).effectivePointsPos !== (row.scoring_position || row.position)"
+                                                        class="text-[8px] font-bold text-amber-700 dark:text-amber-400"
+                                                        title="Poin digeser dari wildcard"
+                                                    >
+                                                        (P{{ getRowCalculatedPoints(row).effectivePointsPos }})
+                                                    </span>
                                                 </span>
                                                 <span
                                                     v-if="getRowCalculatedPoints(row).bonusText"
@@ -7839,22 +8133,6 @@
                                         </select>
                                     </td>
 
-                                    <!-- Laps Column -->
-                                    <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">
-                                        <input
-                                            :data-grid-row="idx"
-                                            data-grid-col="5"
-                                            v-model.number="row.num_laps"
-                                            type="number"
-                                            min="0"
-                                            placeholder="0"
-                                            @focus="$event.target.select && $event.target.select()"
-                                            @keydown="handleResultsGridKeydown(idx, 5, $event)"
-                                            class="w-full max-w-[76px] p-1.5 text-xs text-center rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-500"
-                                            title="Jumlah Putaran / Laps Selesai"
-                                        />
-                                    </td>
-
                                     <!-- Gap / Total Time Column -->
                                     <td class="px-2 py-2.5">
                                         <input
@@ -7864,8 +8142,8 @@
                                             type="text"
                                             @focus="$event.target.select && $event.target.select()"
                                             @keydown="handleResultsGridKeydown(idx, selectedSessionType === 'qualifying' ? 4 : 6, $event)"
-                                            :placeholder="selectedSessionType === 'qualifying' ? (idx === 0 ? '1:23.456' : '0.123') : '0.123'"
-                                            :title="selectedSessionType === 'qualifying' ? 'Catatan Waktu Kualifikasi atau Selisih Gap' : 'Selisih Gap atau Total Waktu'"
+                                            :placeholder="selectedSessionType === 'qualifying' ? (idx === 0 ? '1:23.456' : '0.123') : (idx === 0 ? '25:34.567' : '+1.234 / +1 Lap')"
+                                            :title="selectedSessionType === 'qualifying' ? 'Catatan Waktu Kualifikasi atau Selisih Gap' : 'Selisih Gap, Total Waktu, atau Lap (+1 Lap)'"
                                             class="w-full p-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
                                         />
                                     </td>
@@ -7891,8 +8169,19 @@
                                         </div>
                                     </td>
 
+                                    <!-- Wildcard Column -->
+                                    <td v-if="selectedSessionType !== 'qualifying'" class="px-1 py-2.5 text-center">
+                                        <input
+                                            :id="`wc-${idx}`"
+                                            v-model="row.is_wildcard"
+                                            type="checkbox"
+                                            class="w-4 h-4 accent-purple-600 rounded cursor-pointer"
+                                            title="Centang jika pembalap/tim adalah wildcard (tidak berhak poin, poin digeser ke pembalap berikutnya)"
+                                        />
+                                    </td>
+
                                     <!-- No Points Column -->
-                                    <td v-if="selectedSessionType !== 'qualifying'" class="px-2 py-2.5 text-center">
+                                    <td v-if="selectedSessionType !== 'qualifying'" class="px-1 py-2.5 text-center">
                                         <input
                                             :id="`nopts-${idx}`"
                                             :data-grid-row="idx"
@@ -7901,13 +8190,21 @@
                                             @keydown="handleResultsGridKeydown(idx, 8, $event)"
                                             type="checkbox"
                                             class="w-4 h-4 accent-amber-600 rounded cursor-pointer"
-                                            title="Centang jika pembalap/tim tidak berhak mendapatkan poin kejuaraan pada sesi ini"
+                                            title="Centang jika pembalap/tim tidak berhak mendapatkan poin kejuaraan pada sesi ini (poin hangus)"
                                         />
                                     </td>
 
                                     <!-- Actions Column -->
-                                    <td class="px-2 py-2.5 text-center">
-                                        <div class="flex items-center justify-center gap-1">
+                                    <td class="px-1 py-2.5 text-center">
+                                        <div class="flex items-center justify-center gap-0.5">
+                                            <button
+                                                type="button"
+                                                @click="insertResultRowBelow(row)"
+                                                class="p-1.5 rounded-lg text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-slate-800 transition cursor-pointer"
+                                                title="Sisipkan baris baru di bawah baris ini (seperti Excel)"
+                                            >
+                                                <Icon name="material-symbols:add-row-below" class="text-base" />
+                                            </button>
                                             <button
                                                 type="button"
                                                 @click="removeDisplayedRow(row)"

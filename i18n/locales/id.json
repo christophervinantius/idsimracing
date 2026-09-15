@@ -139,5 +139,8 @@
     "starts": "Start",
     "poles": "Pole",
     "fls": "FL",
-    "championshipPosition": "Posisi Kejuaraan"
+    "championshipPosition": "Posisi Kejuaraan",
+    "note": "Catatan",
+    "wildcard": "Wildcard",
+    "noPoints": "No Pts"
 }

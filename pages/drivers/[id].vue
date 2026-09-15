@@ -152,12 +152,13 @@
                             penalty_time_ns,
                             fastest_lap,
                             is_provisional,
-                            no_points
+                            no_points,
+                            is_wildcard
                         )
                     `)
                     .eq("driver_id", driverId.value)
 
-                if (error && (error.message?.includes("classes") || error.code === "PGRST204" || error.code === "42703")) {
+                if (error && (error.message?.includes("classes") || error.message?.includes("is_wildcard") || error.code === "PGRST204" || error.code === "42703")) {
                     const res = await $supabase
                         .from("event_entries")
                         .select(`
@@ -661,7 +662,8 @@
                         status: res.status,
                         fastest_lap: Boolean(res.fastest_lap),
                         grid_position: Number(res.grid_position) || null,
-                        no_points: Boolean(res.no_points)
+                        no_points: Boolean(res.no_points),
+                        is_wildcard: Boolean(res.is_wildcard)
                     }, {
                         isPole,
                         multiplier,
@@ -738,7 +740,8 @@
                     isWin,
                     isPodium,
                     points: pts,
-                    noPoints: Boolean(res.no_points)
+                    noPoints: Boolean(res.no_points),
+                    isWildcard: Boolean(res.is_wildcard)
                 })
             }
         }
@@ -802,7 +805,7 @@
         const podiums = raceResults.filter(r => r.isPodium).length
 
         // 6. Points Finishes: race sessions where points > 0
-        const pointsFinishes = raceResults.filter(r => !r.noPoints && r.points > 0).length
+        const pointsFinishes = raceResults.filter(r => !r.noPoints && !r.isWildcard && r.points > 0).length
 
         // 7. Championships Won: only defined as won if 1st in standings AND all races in championship have finished
         const now = new Date()
@@ -872,6 +875,10 @@
     // 7. Results Table Filter & Navigation (Only Races)
     const filteredResults = computed(() => {
         return processedResults.value.filter(r => r.sessionType !== "qualifying" && r.sessionType !== "q")
+    })
+
+    const hasNoteColumn = computed(() => {
+        return (filteredResults.value || []).some(r => r.isWildcard || r.noPoints)
     })
 
     const getChampPositionCellClass = (pos) => {
@@ -1360,6 +1367,7 @@
                                     <!-- <th class="py-3 px-2 text-center whitespace-nowrap">{{ $t('grid') }}</th> -->
                                     <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('position') }}</th>
                                     <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('points') }}</th>
+                                    <th v-if="hasNoteColumn" class="py-3 px-3 text-center whitespace-nowrap">{{ $t('note') || 'Catatan' }}</th>
                                 </tr>
                             </thead>
                             <tbody class="text-sm lg:text-base divide-y divide-gray-200 dark:divide-slate-800">
@@ -1454,10 +1462,16 @@
 
                                     <!-- Points -->
                                     <td class="py-3 px-3 text-center whitespace-nowrap font-bold">
-                                        <span v-if="item.points > 0" class="text-emerald-700 dark:text-emerald-400">
+                                        <span v-if="!item.isWildcard && !item.noPoints && item.points > 0" class="text-emerald-700 dark:text-emerald-400">
                                             +{{ item.points }}
                                         </span>
                                         <span v-else></span>
+                                    </td>
+
+                                    <!-- Note (Catatan) -->
+                                    <td v-if="hasNoteColumn" class="py-3 px-3 text-center whitespace-nowrap font-medium text-black dark:text-white">
+                                        <span v-if="item.isWildcard">{{ $t('wildcard') || 'Wildcard' }}</span>
+                                        <span v-else-if="item.noPoints">{{ $t('noPoints') || 'No Pts' }}</span>
                                     </td>
                                 </tr>
                             </tbody>

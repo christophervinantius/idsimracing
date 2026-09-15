@@ -76,12 +76,13 @@ export const fetchSessionsForScoring = async (
                 grid_position,
                 fastest_lap,
                 best_lap_ms,
-                no_points
+                no_points,
+                is_wildcard
             )
         `)
         .in("schedule_id", scheduleIds)
 
-    if (error && (error.message?.includes("drivers") || error.message?.includes("class_id") || error.message?.includes("car_number") || error.message?.includes("no_points") || error.message?.includes("best_lap_ms") || error.code === "PGRST204" || error.code === "42703")) {
+    if (error && (error.message?.includes("drivers") || error.message?.includes("class_id") || error.message?.includes("car_number") || error.message?.includes("no_points") || error.message?.includes("is_wildcard") || error.message?.includes("best_lap_ms") || error.code === "PGRST204" || error.code === "42703")) {
         const res = await supabase
             .from("event_entries")
             .select(`
@@ -144,7 +145,8 @@ export const fetchSessionsForScoring = async (
                 fastest_lap: Boolean(res.fastest_lap),
                 best_lap_ms: res.best_lap_ms ? Number(res.best_lap_ms) : null,
                 grid_position: res.grid_position ?? null,
-                no_points: Boolean(res.no_points)
+                no_points: Boolean(res.no_points),
+                is_wildcard: Boolean(res.is_wildcard)
             }
             session.results.push(scoring)
         }

@@ -139,5 +139,8 @@
     "starts": "Starts",
     "poles": "Poles",
     "fls": "FLs",
-    "championshipPosition": "Championship Position"
+    "championshipPosition": "Championship Position",
+    "note": "Note",
+    "wildcard": "Wildcard",
+    "noPoints": "No Pts"
 }

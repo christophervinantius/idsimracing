@@ -602,7 +602,11 @@
                 const entriesMap = new Map()
 
                 if (session && session.results) {
+                    const effectivePosMap = buildSessionEffectivePointsPositions(session.results, effectiveScoringMode)
+
                     for (const r of session.results) {
+                        // Wildcard drivers do not participate in championship standings
+                        if (r.is_wildcard) continue
                         if (targetClassId && r.class_id && String(r.class_id) !== targetClassId) continue
 
                         const entityKeys = []
@@ -621,7 +625,7 @@
                         }
 
                         const classFastestMap = new Map()
-                        const flCandidates = (session?.results || []).filter(r => r.fastest_lap)
+                        const flCandidates = (session?.results || []).filter(r => !r.is_wildcard && r.fastest_lap)
                         if (flCandidates.length > 0) {
                             for (const fl of flCandidates) {
                                 const classKey = fl.class_id ? String(fl.class_id) : "__overall__"
@@ -629,7 +633,7 @@
                             }
                         } else {
                             for (const sessR of session?.results || []) {
-                                if ((sessR.best_lap_ms ?? 0) <= 0) continue
+                                if (sessR.is_wildcard || (sessR.best_lap_ms ?? 0) <= 0) continue
                                 const classKey = sessR.class_id ? String(sessR.class_id) : "__overall__"
                                 const currentBest = classFastestMap.get(classKey)
                                 if (!currentBest || (sessR.best_lap_ms < currentBest.best_lap_ms)) {
@@ -643,10 +647,13 @@
                             ? (overallFastestResult !== null && r === overallFastestResult)
                             : (Boolean(r.fastest_lap) || (classFastestMap.get(classKey) === r))
 
-                        const posForScoring = (effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict")
-                            ? (r.classified_position ?? r.scoring_position)
-                            : (r.scoring_position ?? r.classified_position)
-                        const canScorePosition = isScoringStatus(r.status) && isClassified(r) && !r.no_points
+                        const effectivePos = effectivePosMap.get(r)
+                        const posForScoring = effectivePos !== null && effectivePos !== undefined
+                            ? effectivePos
+                            : ((effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict")
+                                ? (r.classified_position ?? r.scoring_position)
+                                : (r.scoring_position ?? r.classified_position))
+                        const canScorePosition = isScoringStatus(r.status) && isClassified(r) && !r.no_points && !r.is_wildcard
                         const positionPoints = canScorePosition ? getPositionPoints(system, posForScoring) : 0
 
                         for (const key of entityKeys) {
@@ -655,18 +662,20 @@
                                 isPole,
                                 isFastestLap,
                                 multiplier,
-                                scoringMode: effectiveScoringMode
+                                scoringMode: effectiveScoringMode,
+                                effectivePointsPosition: effectivePos
                             })
 
                             entriesMap.set(key, {
-                                scoring_position: r.scoring_position,
-                                classified_position: r.classified_position,
+                                scoring_position: effectivePos ?? r.scoring_position,
+                                classified_position: effectivePos ?? r.classified_position,
                                 status: r.status,
                                 isPole,
                                 fastest_lap: isFastestLap,
                                 points: pts,
                                 position_points: positionPoints,
                                 no_points: Boolean(r.no_points),
+                                is_wildcard: Boolean(r.is_wildcard),
                                 driver_id: r.driver_id,
                                 driver_ids: r.driver_ids,
                                 class_id: r.class_id
