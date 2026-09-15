@@ -1152,11 +1152,11 @@
                 <div class="flex items-center gap-2 font-extrabold text-black dark:text-white text-xl lg:text-2xl">
                     <span>{{ stats.championshipsWon === 1 ? $t('championshipSingle', { count: stats.championshipsWon }) : $t('championshipPlural', { count: stats.championshipsWon }) }}</span>
                 </div>
-                <div class="flex flex-wrap gap-2">
+                <div :class="stats.championshipsWon > 1 ? 'flex flex-col gap-2' : 'flex flex-wrap gap-2'">
                     <div
                         v-for="ch in stats.championshipsWonList"
                         :key="ch.id"
-                        class="inline-flex items-center gap-1 text-base lg:text-lg font-bold text-black dark:text-white flex-wrap"
+                        class="inline-flex items-center gap-1.5 text-base lg:text-lg font-bold text-black dark:text-white flex-wrap"
                     >
                         <span v-if="ch.organizer" :class="getOrganizerStyle(ch.organizer)" class="text-[10px] lg:text-xs">
                             {{ ch.organizer }}

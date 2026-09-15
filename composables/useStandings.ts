@@ -412,6 +412,7 @@ export const calculateStandings = (
 
         // Precompute effective points position for regular drivers (wildcards shift points to regular drivers)
         const effectivePosMap = buildSessionEffectivePointsPositions(session.results, effectiveScoringMode)
+        const inClassEffectivePosMap = buildSessionEffectivePointsPositions(session.results, "in_class")
 
         // Aggregate points and best finish position for each entity in this session
         const sessionAgg = new Map<string, { points: number; bestPos: number | null }>()
@@ -487,13 +488,12 @@ export const calculateStandings = (
                 if (isScoringStatus(result.status) && isClassified(result)) {
                     // For a championship, wins, podiums, and countback within the championship standings
                     // are based on the effective championship position (excluding wildcards).
-                    const pos = effectivePos !== null && effectivePos !== undefined
-                        ? effectivePos
-                        : (isClassChampionship
-                            ? (result.scoring_position ?? result.classified_position)
-                            : ((effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict")
-                                ? (result.classified_position ?? result.scoring_position)
-                                : (result.scoring_position ?? result.classified_position)))
+                    // In overall_strict without class scoping, position is overall.
+                    // In overall (with class bonus / multiclass) or in_class or class championships, position is per class.
+                    const inClassPos = inClassEffectivePosMap.get(result) ?? result.scoring_position ?? result.classified_position
+                    const pos = (effectiveScoringMode === "overall_strict" && !isClassChampionship)
+                        ? (effectivePos !== null && effectivePos !== undefined ? effectivePos : (result.classified_position ?? result.scoring_position))
+                        : (inClassPos !== null && inClassPos !== undefined ? inClassPos : (result.scoring_position ?? result.classified_position))
                     if (pos !== null && pos !== undefined) {
                         if (cur.bestPos === null || Number(pos) < cur.bestPos) cur.bestPos = Number(pos)
                     }

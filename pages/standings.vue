@@ -604,6 +604,23 @@
                 if (session && session.results) {
                     const effectivePosMap = buildSessionEffectivePointsPositions(session.results, effectiveScoringMode)
 
+                    // Compute in-class finish position for each result so that multiclass sessions
+                    // always have accurate in-class finish positions starting from 1
+                    const sortedSessionResults = [...session.results].sort((a, b) => {
+                        const posA = a.classified_position ?? a.scoring_position ?? 9999
+                        const posB = b.classified_position ?? b.scoring_position ?? 9999
+                        return posA - posB
+                    })
+                    const classCounters = new Map()
+                    const inClassPosMap = new Map()
+                    for (const res of sortedSessionResults) {
+                        const cKey = res.class_id ? String(res.class_id) : '__overall__'
+                        const nextClassPos = (classCounters.get(cKey) || 0) + 1
+                        classCounters.set(cKey, nextClassPos)
+                        const resolvedClassPos = (Number(res.scoring_position) > 0) ? Number(res.scoring_position) : nextClassPos
+                        inClassPosMap.set(res, resolvedClassPos)
+                    }
+
                     for (const r of session.results) {
                         // Wildcard drivers do not participate in championship standings
                         if (r.is_wildcard) continue
@@ -656,6 +673,8 @@
                         const canScorePosition = isScoringStatus(r.status) && isClassified(r) && !r.no_points && !r.is_wildcard
                         const positionPoints = canScorePosition ? getPositionPoints(system, posForScoring) : 0
 
+                        const inClassPos = inClassPosMap.get(r) ?? (Number(r.scoring_position) > 0 ? Number(r.scoring_position) : r.classified_position)
+
                         for (const key of entityKeys) {
                             const isPole = Number(r.grid_position) === 1 || poleKeys.has(key)
                             const pts = calculateResultPoints(system, r, {
@@ -667,8 +686,9 @@
                             })
 
                             entriesMap.set(key, {
-                                scoring_position: effectivePos ?? r.scoring_position,
-                                classified_position: effectivePos ?? r.classified_position,
+                                scoring_position: inClassPos,
+                                classified_position: r.classified_position,
+                                effective_points_position: effectivePos,
                                 status: r.status,
                                 isPole,
                                 fastest_lap: isFastestLap,
@@ -796,14 +816,14 @@
             effectiveScoringMode = rnd?.session_type === "qualifying" ? "in_class" : "overall"
         }
 
-        // For events using overall or overall_strict points system, in per-class standings,
-        // finish positions in the round cells start in order from 1 (in-class position: scoring_position),
-        // exactly matching how public results page displays per-class positions (1, 2, 3...) while retaining overall points.
-        const pos = isClassContext
-            ? (entry.scoring_position ?? entry.classified_position)
-            : (effectiveScoringMode === "overall_strict" || effectiveScoringMode === "overall"
-                ? (entry.classified_position ?? entry.scoring_position)
-                : (entry.scoring_position ?? entry.classified_position))
+        // For events with overall points system and bonus for each class (scoring_mode === "overall"),
+        // or any in-class/multiclass context, finish positions in the round cells are shown per class
+        // (in-class position: scoring_position), exactly matching how public results page displays
+        // per-class positions (1, 2, 3...) while retaining overall points.
+        // Only overall_strict without class context displays overall classified_position.
+        const pos = (effectiveScoringMode === "overall_strict" && !isClassContext)
+            ? (entry.classified_position ?? entry.scoring_position)
+            : (entry.scoring_position ?? entry.classified_position)
 
         if (pos === null || pos === undefined) {
             return { text: "-", bgClass: "bg-transparent text-gray-400" }
