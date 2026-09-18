@@ -435,6 +435,101 @@
         { watch: [driverId] }
     )
 
+    // 5. Fetch Organizers & Games for detail popups
+    const { data: allOrganizers } = await useAsyncData("all-organizers", async () => {
+        try {
+            const { data } = await $supabase
+                .from("organizers")
+                .select("abbreviation, name, description_en, description_id, discord, youtube, instagram, twitter, facebook, tiktok")
+            return data || []
+        } catch {
+            return []
+        }
+    })
+
+    const { data: allGames } = await useAsyncData("all-games", async () => {
+        try {
+            const { data } = await $supabase
+                .from("games")
+                .select("abbreviation, name, description_en, description_id, steam_link, other_link")
+            return data || []
+        } catch {
+            return []
+        }
+    })
+
+    const organizationData = reactive({
+        organizer: "",
+        name: "",
+        description_en: "",
+        description_id: "",
+        youtube: "",
+        discord: "",
+        instagram: "",
+        twitter: "",
+        facebook: "",
+        tiktok: ""
+    })
+
+    const setOrganizationByAbbr = (abbr) => {
+        const org = (allOrganizers.value || []).find(o => o.abbreviation === abbr)
+        if (org) {
+            organizationData.organizer = org.abbreviation || ""
+            organizationData.name = org.name || ""
+            organizationData.description_en = org.description_en || ""
+            organizationData.description_id = org.description_id || ""
+            organizationData.youtube = org.youtube || ""
+            organizationData.discord = org.discord || ""
+            organizationData.instagram = org.instagram || ""
+            organizationData.twitter = org.twitter || ""
+            organizationData.facebook = org.facebook || ""
+            organizationData.tiktok = org.tiktok || ""
+        } else {
+            organizationData.organizer = abbr || ""
+            organizationData.name = abbr || ""
+            organizationData.description_en = ""
+            organizationData.description_id = ""
+            organizationData.youtube = ""
+            organizationData.discord = ""
+            organizationData.instagram = ""
+            organizationData.twitter = ""
+            organizationData.facebook = ""
+            organizationData.tiktok = ""
+        }
+    }
+
+    provide("organizationData", organizationData)
+
+    const gameData = reactive({
+        game: "",
+        name: "",
+        description_en: "",
+        description_id: "",
+        steam_link: "",
+        other_link: ""
+    })
+
+    const setGameByAbbr = (abbr) => {
+        const gm = (allGames.value || []).find(g => g.abbreviation === abbr)
+        if (gm) {
+            gameData.game = gm.abbreviation || ""
+            gameData.name = gm.name || ""
+            gameData.description_en = gm.description_en || ""
+            gameData.description_id = gm.description_id || ""
+            gameData.steam_link = gm.steam_link || ""
+            gameData.other_link = gm.other_link || ""
+        } else {
+            gameData.game = abbr || ""
+            gameData.name = abbr || ""
+            gameData.description_en = ""
+            gameData.description_id = ""
+            gameData.steam_link = ""
+            gameData.other_link = ""
+        }
+    }
+
+    provide("gameData", gameData)
+
     // Country Mapping Helpers
     const COUNTRY_MAP = {
         "australia": { code: "au", abbr: "AUS" },
@@ -564,41 +659,41 @@
     // }
 
     const getOrganizerStyle = (organizer) => {
-        let style = "px-2 py-0.5 font-bold rounded-md text-xs lg:text-sm "
+        let style = "px-2 py-0.5 font-bold rounded-md text-xs lg:text-sm cursor-pointer transition-colors "
         if (organizer === "ACI") {
-            style += "bg-red-500 text-white"
+            style += "bg-red-500 hover:bg-red-600 text-white"
         } else if (organizer === "97SRC") {
-            style += "bg-white text-black"
+            style += "bg-white hover:bg-neutral-300 text-black"
         } else if (organizer === "CRC") {
-            style += "bg-yellow-500 text-black"
+            style += "bg-yellow-500 hover:bg-yellow-600 text-black"
         } else if (organizer === "BRM") {
-            style += "bg-sky-500 text-black"
+            style += "bg-sky-500 hover:bg-sky-600 text-black"
         } else if (organizer === "JRC") {
-            style += "bg-indigo-500 text-black"
+            style += "bg-indigo-500 hover:bg-indigo-600 text-black"
         } else if (organizer === "ERGP") {
-            style += "bg-white text-red-600"
+            style += "bg-white hover:bg-neutral-300 text-red-600"
         } else if (organizer === "SRC") {
-            style += "bg-blue-500 text-white"
+            style += "bg-blue-500 hover:bg-blue-600 text-white"
         } else if (organizer === "ISL") {
-            style += "bg-pink-800 text-white"
+            style += "bg-pink-800 hover:bg-pink-900 text-white"
         } else {
-            style += "bg-gray-700 text-white"
+            style += "bg-gray-700 hover:bg-gray-600 text-white"
         }
         return style
     }
 
     const getGameStyle = (game) => {
-        let style = "px-2 py-0.5 font-bold rounded-md text-xs lg:text-sm "
+        let style = "px-2 py-0.5 font-bold rounded-md text-xs lg:text-sm cursor-pointer transition-colors "
         if (game === "AC") {
-            style += "bg-red-500 text-white"
+            style += "bg-red-500 hover:bg-red-600 text-white"
         } else if (game === "ACC") {
-            style += "bg-white text-red-600"
+            style += "bg-white hover:bg-neutral-300 text-red-600"
         } else if (game === "RBR") {
-            style += "bg-slate-800 text-white"
+            style += "bg-slate-800 hover:bg-slate-700 text-white"
         } else if (game === "LMU") {
-            style += "bg-blue-500 text-white"
+            style += "bg-amber-500 hover:bg-amber-600 text-black"
         } else {
-            style += "bg-gray-700 text-white"
+            style += "bg-gray-700 hover:bg-gray-600 text-white"
         }
         return style
     }
@@ -1158,12 +1253,32 @@
                         :key="ch.id"
                         class="inline-flex items-center gap-1.5 text-base lg:text-lg font-bold text-black dark:text-white flex-wrap"
                     >
-                        <span v-if="ch.organizer" :class="getOrganizerStyle(ch.organizer)" class="text-[10px] lg:text-xs">
-                            {{ ch.organizer }}
-                        </span>
-                        <span v-if="ch.game" :class="getGameStyle(ch.game)" class="text-[10px] lg:text-xs">
-                            {{ ch.game }}
-                        </span>
+                        <UModal v-if="ch.organizer" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                            <button
+                                type="button"
+                                :class="getOrganizerStyle(ch.organizer)"
+                                class="text-[10px] lg:text-xs"
+                                @click="setOrganizationByAbbr(ch.organizer)"
+                            >
+                                {{ ch.organizer }}
+                            </button>
+                            <template #content>
+                                <ModalOrganization />
+                            </template>
+                        </UModal>
+                        <UModal v-if="ch.game" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                            <button
+                                type="button"
+                                :class="getGameStyle(ch.game)"
+                                class="text-[10px] lg:text-xs"
+                                @click="setGameByAbbr(ch.game)"
+                            >
+                                {{ ch.game }}
+                            </button>
+                            <template #content>
+                                <ModalGame />
+                            </template>
+                        </UModal>
                         <span>{{ ch.eventName }} (S{{ ch.seasonNumber }}){{ ch.className ? ` - ${ch.className}` : '' }}</span>
                     </div>
                 </div>
@@ -1267,12 +1382,32 @@
                                     <!-- Event Name -->
                                     <td class="py-3 px-3 lg:px-4 whitespace-nowrap font-bold">
                                         <div class="flex items-center gap-1.5 flex-wrap">
-                                            <span v-if="item.organizerAbbr" :class="getOrganizerStyle(item.organizerAbbr)" class="text-[10px] lg:text-xs">
-                                                {{ item.organizerAbbr }}
-                                            </span>
-                                            <span v-if="item.gameAbbr" :class="getGameStyle(item.gameAbbr)" class="text-[10px] lg:text-xs">
-                                                {{ item.gameAbbr }}
-                                            </span>
+                                            <UModal v-if="item.organizerAbbr" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                                                <button
+                                                    type="button"
+                                                    :class="getOrganizerStyle(item.organizerAbbr)"
+                                                    class="text-[10px] lg:text-xs"
+                                                    @click="setOrganizationByAbbr(item.organizerAbbr)"
+                                                >
+                                                    {{ item.organizerAbbr }}
+                                                </button>
+                                                <template #content>
+                                                    <ModalOrganization />
+                                                </template>
+                                            </UModal>
+                                            <UModal v-if="item.gameAbbr" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                                                <button
+                                                    type="button"
+                                                    :class="getGameStyle(item.gameAbbr)"
+                                                    class="text-[10px] lg:text-xs"
+                                                    @click="setGameByAbbr(item.gameAbbr)"
+                                                >
+                                                    {{ item.gameAbbr }}
+                                                </button>
+                                                <template #content>
+                                                    <ModalGame />
+                                                </template>
+                                            </UModal>
                                             <span>{{ item.eventName }}</span>
                                         </div>
                                     </td>
@@ -1387,12 +1522,32 @@
                                     <!-- Event -->
                                     <td class="py-3 px-3 lg:px-4 whitespace-nowrap font-bold">
                                         <div class="flex items-center gap-1.5 flex-wrap">
-                                            <span v-if="item.organizerAbbr" :class="getOrganizerStyle(item.organizerAbbr)" class="text-[10px] lg:text-xs">
-                                                {{ item.organizerAbbr }}
-                                            </span>
-                                            <span v-if="item.gameAbbr" :class="getGameStyle(item.gameAbbr)" class="text-[10px] lg:text-xs">
-                                                {{ item.gameAbbr }}
-                                            </span>
+                                            <UModal v-if="item.organizerAbbr" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                                                <button
+                                                    type="button"
+                                                    :class="getOrganizerStyle(item.organizerAbbr)"
+                                                    class="text-[10px] lg:text-xs"
+                                                    @click.stop="setOrganizationByAbbr(item.organizerAbbr)"
+                                                >
+                                                    {{ item.organizerAbbr }}
+                                                </button>
+                                                <template #content>
+                                                    <ModalOrganization />
+                                                </template>
+                                            </UModal>
+                                            <UModal v-if="item.gameAbbr" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                                                <button
+                                                    type="button"
+                                                    :class="getGameStyle(item.gameAbbr)"
+                                                    class="text-[10px] lg:text-xs"
+                                                    @click.stop="setGameByAbbr(item.gameAbbr)"
+                                                >
+                                                    {{ item.gameAbbr }}
+                                                </button>
+                                                <template #content>
+                                                    <ModalGame />
+                                                </template>
+                                            </UModal>
                                             <span>{{ item.eventName }}</span>
                                         </div>
                                     </td>

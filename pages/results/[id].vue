@@ -32,11 +32,23 @@
                         name,
                         games (
                             abbreviation,
-                            name
+                            name,
+                            description_en,
+                            description_id,
+                            steam_link,
+                            other_link
                         ),
                         organizers (
                             abbreviation,
-                            name
+                            name,
+                            description_en,
+                            description_id,
+                            discord,
+                            youtube,
+                            instagram,
+                            twitter,
+                            facebook,
+                            tiktok
                         )
                     )
                 `)
@@ -1304,40 +1316,88 @@
     }
 
     const getOrganizerStyle = (organizer) => {
-        let style = "px-2 py-1 font-bold rounded-md text-sm lg:text-base "
+        let style = "px-2 py-1 font-bold rounded-md text-sm lg:text-base cursor-pointer "
         if(organizer === "ACI"){
-            style += "bg-red-500 text-white"
+            style += "bg-red-500 hover:bg-red-600 text-white"
         }else if(organizer === "97SRC"){
-            style += "bg-white text-black"
+            style += "bg-white hover:bg-neutral-300 text-black"
         }else if(organizer === "CRC"){
-            style += "bg-yellow-500 text-black"
+            style += "bg-yellow-500 hover:bg-yellow-600 text-black"
         }else if(organizer === "BRM"){
-            style += "bg-sky-500 text-black"
+            style += "bg-sky-500 hover:bg-sky-600 text-black"
         }else if(organizer === "JRC"){
-            style += "bg-indigo-500 text-black"
+            style += "bg-indigo-500 hover:bg-indigo-600 text-black"
         }else if(organizer === "ERGP"){
-            style += "bg-white text-red-600"
+            style += "bg-white hover:bg-neutral-300 text-red-600"
         }else if(organizer === "SRC"){
-            style += "bg-blue-500 text-white"
+            style += "bg-blue-500 hover:bg-blue-600 text-white"
         }else if(organizer === "ISL"){
-            style += "bg-pink-800 text-white"
+            style += "bg-pink-800 hover:bg-pink-900 text-white"
         }
         return style
     }
 
     const getGameStyle = (game) => {
-        let style = "px-2 py-1 font-bold rounded-md text-sm lg:text-base "
+        let style = "px-2 py-1 font-bold rounded-md text-sm lg:text-base cursor-pointer "
         if(game === "AC"){
-            style += "bg-red-500 text-white"
+            style += "bg-red-500 hover:bg-red-600 text-white"
         }else if(game === "ACC"){
-            style += "bg-white text-red-600"
+            style += "bg-white hover:bg-neutral-300 text-red-600"
         }else if(game === "RBR"){
-            style += "bg-black text-white"
+            style += "bg-black hover:bg-neutral-600 text-white"
         }else if(game === "LMU"){
-            style += "bg-amber-500 text-black"
+            style += "bg-amber-500 hover:bg-amber-600 text-black"
         }
         return style
     }
+
+    const organizationData = reactive({
+        organizer: "",
+        name: "",
+        description_en: "",
+        description_id: "",
+        youtube: "",
+        discord: "",
+        instagram: "",
+        twitter: "",
+        facebook: "",
+        tiktok: ""
+    })
+
+    const setOrganizationData = (organizer, name, description_en, description_id, youtube, discord, instagram, twitter, facebook, tiktok) => {
+        organizationData.organizer = organizer
+        organizationData.name = name
+        organizationData.description_en = description_en
+        organizationData.description_id = description_id
+        organizationData.youtube = youtube
+        organizationData.discord = discord
+        organizationData.instagram = instagram
+        organizationData.twitter = twitter
+        organizationData.facebook = facebook
+        organizationData.tiktok = tiktok
+    }
+
+    provide("organizationData", organizationData)
+
+    const gameData = reactive({
+        game: "",
+        name: "",
+        description_en: "",
+        description_id: "",
+        steam_link: "",
+        other_link: ""
+    })
+
+    const setGameData = (game, name, description_en, description_id, steam_link, other_link) => {
+        gameData.game = game
+        gameData.name = name
+        gameData.description_en = description_en
+        gameData.description_id = description_id
+        gameData.steam_link = steam_link
+        gameData.other_link = other_link
+    }
+
+    provide("gameData", gameData)
 
     const getTextStyle = (event) => {
         let style = " "
@@ -1417,12 +1477,48 @@
         <div v-if="scheduleItem" :class="getCardStyle(scheduleItem.events?.name)">
             <div class="flex items-center justify-between mb-2">
                 <div class="flex items-center gap-1.5 flex-wrap">
-                    <span v-if="scheduleItem.events?.organizers?.abbreviation" :class="getOrganizerStyle(scheduleItem.events.organizers.abbreviation)">
-                        {{ scheduleItem.events.organizers.abbreviation }}
-                    </span>
-                    <span v-if="scheduleItem.events?.games?.abbreviation" :class="getGameStyle(scheduleItem.events.games.abbreviation)">
-                        {{ scheduleItem.events.games.abbreviation }}
-                    </span>
+                    <UModal v-if="scheduleItem.events?.organizers?.abbreviation" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                        <button
+                            type="button"
+                            :class="getOrganizerStyle(scheduleItem.events.organizers.abbreviation)"
+                            @click="setOrganizationData(
+                                scheduleItem.events.organizers.abbreviation,
+                                scheduleItem.events.organizers.name,
+                                scheduleItem.events.organizers.description_en,
+                                scheduleItem.events.organizers.description_id,
+                                scheduleItem.events.organizers.youtube,
+                                scheduleItem.events.organizers.discord,
+                                scheduleItem.events.organizers.instagram,
+                                scheduleItem.events.organizers.twitter,
+                                scheduleItem.events.organizers.facebook,
+                                scheduleItem.events.organizers.tiktok
+                            )"
+                        >
+                            {{ scheduleItem.events.organizers.abbreviation }}
+                        </button>
+                        <template #content>
+                            <ModalOrganization />
+                        </template>
+                    </UModal>
+                    <UModal v-if="scheduleItem.events?.games?.abbreviation" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                        <button
+                            type="button"
+                            :class="getGameStyle(scheduleItem.events.games.abbreviation)"
+                            @click="setGameData(
+                                scheduleItem.events.games.abbreviation,
+                                scheduleItem.events.games.name,
+                                scheduleItem.events.games.description_en,
+                                scheduleItem.events.games.description_id,
+                                scheduleItem.events.games.steam_link,
+                                scheduleItem.events.games.other_link
+                            )"
+                        >
+                            {{ scheduleItem.events.games.abbreviation }}
+                        </button>
+                        <template #content>
+                            <ModalGame />
+                        </template>
+                    </UModal>
                 </div>
                 <div v-if="scheduleItem.country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
                     <Icon :name="`flag-${ scheduleItem.country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />

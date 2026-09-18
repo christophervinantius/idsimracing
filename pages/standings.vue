@@ -1229,10 +1229,105 @@
             </div>
         </div>
 
-        <!-- Loading championships / standings -->
-        <div v-if="loadingChampionships || loadingStandings" class="py-20 flex flex-col items-center justify-center gap-3">
-            <Icon name="material-symbols:refresh" class="animate-spin text-4xl text-red-700" />
-            <p class="text-sm text-gray-500 dark:text-gray-400">{{ $t('loading') }}</p>
+        <!-- Skeleton Standings Table Loader -->
+        <div v-if="loadingChampionships || loadingStandings" class="w-full flex flex-col gap-6 lg:gap-8">
+            <div class="overflow-x-auto bg-white dark:bg-slate-950 animate-pulse">
+                <table class="w-full text-sm lg:text-base border-collapse">
+                    <thead class="bg-red-900 dark:bg-red-900 text-white">
+                        <tr>
+                            <th class="w-1/12 px-2 lg:px-4 py-2 text-center font-bold min-w-[36px]">
+                                {{ $t('position') }}
+                            </th>
+                            <th class="px-2 lg:px-4 py-2 text-center font-bold min-w-[150px] lg:min-w-[180px]">
+                                {{ entityType === 'driver' ? $t('driver') : $t('carNumber') }}
+                            </th>
+                            <th v-if="entityType !== 'driver'" class="px-2 lg:px-4 py-2 text-center font-bold min-w-[120px] lg:min-w-[150px]">
+                                {{ $t('team') }}
+                            </th>
+                            <th
+                                v-for="col in (sortedRounds?.length > 0 ? sortedRounds.length : 5)"
+                                :key="`skel-th-${col}`"
+                                class="px-2 lg:px-3 py-2 text-center font-bold min-w-[52px] lg:min-w-[58px]"
+                            >
+                                <div class="flex flex-col items-center justify-center gap-1">
+                                    <span class="leading-tight">R{{ col }}</span>
+                                    <div class="w-6 h-4 lg:w-7 lg:h-4.5 bg-red-800/80 rounded-xs"></div>
+                                </div>
+                            </th>
+                            <th class="w-1/12 px-2 lg:px-4 py-2 text-center font-bold min-w-[50px]">
+                                {{ $t('points') }}
+                            </th>
+                            <th class="w-1/12 px-2 lg:px-4 py-2 text-center font-bold min-w-[50px]">
+                                {{ $t('gapLeader') }}
+                            </th>
+                            <th class="w-1/12 px-2 lg:px-4 py-2 text-center font-bold min-w-[50px]">
+                                {{ $t('gapPrevious') }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in 10"
+                            :key="`skel-row-${row}`"
+                            class="border-b border-slate-300 dark:border-slate-700 text-center bg-red-50 dark:bg-slate-950"
+                        >
+                            <!-- Position -->
+                            <td class="px-2 lg:px-4 py-3">
+                                <div class="h-4 bg-slate-300 dark:bg-slate-700 rounded-sm mx-auto w-5"></div>
+                            </td>
+
+                            <!-- Driver / Car Number -->
+                            <td class="px-2 lg:px-4 py-3">
+                                <div v-if="entityType === 'driver'" class="flex items-center gap-2">
+                                    <div class="w-5 h-3.5 bg-slate-300 dark:bg-slate-700 rounded-xs shrink-0"></div>
+                                    <div
+                                        class="h-4 bg-slate-300 dark:bg-slate-700 rounded-sm"
+                                        :class="[
+                                            row % 4 === 1 ? 'w-32' : '',
+                                            row % 4 === 2 ? 'w-24' : '',
+                                            row % 4 === 3 ? 'w-36' : '',
+                                            row % 4 === 0 ? 'w-28' : ''
+                                        ]"
+                                    ></div>
+                                </div>
+                                <div v-else class="h-4 bg-slate-300 dark:bg-slate-700 rounded-sm mx-auto w-6"></div>
+                            </td>
+
+                            <!-- Team -->
+                            <td v-if="entityType !== 'driver'" class="px-2 lg:px-4 py-3">
+                                <div
+                                    class="h-4 bg-slate-300 dark:bg-slate-700 rounded-sm text-left"
+                                    :class="row % 2 === 0 ? 'w-28' : 'w-36'"
+                                ></div>
+                            </td>
+
+                            <!-- Rounds Result Cells -->
+                            <td
+                                v-for="col in (sortedRounds?.length > 0 ? sortedRounds.length : 5)"
+                                :key="`skel-cell-${col}`"
+                                class="p-1"
+                            >
+                                <div class="w-8 h-6 bg-slate-200 dark:bg-slate-800 rounded-sm mx-auto"></div>
+                            </td>
+
+                            <!-- Points -->
+                            <td class="px-2 lg:px-4 py-3">
+                                <div class="h-4 bg-slate-300 dark:bg-slate-700 rounded-sm mx-auto w-8"></div>
+                            </td>
+
+                            <!-- Gap Leader -->
+                            <td class="px-2 lg:px-4 py-3">
+                                <div class="h-4 bg-slate-300 dark:bg-slate-700 rounded-sm mx-auto w-8"></div>
+                            </td>
+
+                            <!-- Gap Previous -->
+                            <td class="px-2 lg:px-4 py-3">
+                                <div class="h-4 bg-slate-300 dark:bg-slate-700 rounded-sm mx-auto w-8"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Content Area -->

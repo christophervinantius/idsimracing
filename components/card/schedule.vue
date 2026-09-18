@@ -214,7 +214,7 @@
     <div :class="getCardStyle(event)">
         <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-1">
-                <UModal>
+                <UModal :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
                     <button :class="getOrganizerStyle(organizer)" @click="emits('organizerClick')">
                         {{ organizer }}
                     </button>
@@ -222,7 +222,7 @@
                         <ModalOrganization />
                     </template>
                 </UModal>
-                <UModal>
+                <UModal :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
                     <button :class="getGameStyle(game)" @click="emits('gameClick')">
                         {{ game }}
                     </button>
