@@ -44,8 +44,8 @@
 </script>
 
 <template>
-    <div class="sticky top-0 z-50">
-        <nav class="w-full flex items-center justify-between bg-red-900 dark:bg-red-900 px-4 lg:px-16 py-4 text-white">
+    <div class="sticky top-0 z-50 bg-red-900 dark:bg-red-900">
+        <nav class="relative z-10 w-full flex items-center justify-between bg-red-900 dark:bg-red-900 px-4 lg:px-16 py-4 text-white border-none outline-none">
             <div class="flex items-center gap-4 lg:gap-16">
                 <div class="flex items-center">
                     <NuxtImg src="/images/IDSimRacing.png" alt="ID Sim Racing" class="h-8 lg:h-10 w-auto object-contain" />
@@ -113,7 +113,7 @@
         >
             <div
                 v-if="isMenuOpen"
-                class="md:hidden bg-red-900 dark:bg-red-900 border-t border-red-800 px-4 py-3 shadow-xl text-white flex flex-col gap-2.5"
+                class="md:hidden relative z-0 bg-red-900 dark:bg-red-900 -mt-1 px-4 pt-1 pb-3 shadow-xl text-white flex flex-col gap-2.5 border-none outline-none"
             >
                 <ul class="flex flex-col gap-1 font-bold text-base">
                     <li>
