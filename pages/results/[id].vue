@@ -455,10 +455,15 @@
         return availableSessions.value.length > 1
     })
 
-    // Auto-select first session if current active tab is not available
+    // Auto-select session: respect route.query.session if valid, otherwise fallback to first available session
     watch(availableSessions, (sessions) => {
-        if (sessions.length > 0 && !sessions.some(s => s.id === activeSessionTab.value)) {
-            activeSessionTab.value = sessions[0].id
+        if (sessions.length > 0) {
+            const querySession = route.query.session
+            if (querySession && sessions.some(s => s.id === querySession)) {
+                activeSessionTab.value = querySession
+            } else if (!sessions.some(s => s.id === activeSessionTab.value)) {
+                activeSessionTab.value = sessions[0].id
+            }
         }
     }, { immediate: true })
 

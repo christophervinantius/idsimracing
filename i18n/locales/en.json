@@ -144,5 +144,14 @@
     "championshipPosition": "Championship Position",
     "note": "Note",
     "wildcard": "Wildcard",
-    "noPoints": "No Pts"
+    "noPoints": "No Pts",
+    "resultsTitle": "Indonesia Sim Racing Race Results",
+    "totalResults": "Total: {total} races",
+    "status": "Status",
+    "searchRace": "Search by event, circuit, or winner...",
+    "allOrganizers": "All Organizers",
+    "allStatuses": "All Statuses",
+    "noResultsFound": "No race results found with this filter.",
+    "mostRecent": "Most Recent",
+    "oldest": "Oldest"
 }

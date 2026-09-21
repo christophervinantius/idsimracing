@@ -144,5 +144,14 @@
     "championshipPosition": "Posisi Kejuaraan",
     "note": "Catatan",
     "wildcard": "Wildcard",
-    "noPoints": "No Pts"
+    "noPoints": "No Pts",
+    "resultsTitle": "Hasil Balapan Sim Racing Indonesia",
+    "totalResults": "Total: {total} balapan",
+    "status": "Status",
+    "searchRace": "Cari event, sirkuit, atau pemenang...",
+    "allOrganizers": "Semua Penyelenggara",
+    "allStatuses": "Semua Status",
+    "noResultsFound": "Tidak ada hasil balapan yang ditemukan dengan filter ini.",
+    "mostRecent": "Terbaru",
+    "oldest": "Terlama"
 }
