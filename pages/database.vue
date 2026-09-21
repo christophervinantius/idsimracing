@@ -1,26 +1,34 @@
 <script setup>
-    const { t } = useI18n()
+    const { t, locale } = useI18n()
+
+    const pageTitle = computed(() =>
+        locale.value === "en"
+            ? "Indonesian Sim Racing Driver Database | ID Sim Racing"
+            : "Database Pembalap Sim Racing Indonesia | ID Sim Racing"
+    )
+
+    const pageDescription = computed(() =>
+        locale.value === "en"
+            ? "Comprehensive directory of Indonesian sim racing drivers. Search permanent race numbers, driver profiles, teams, and community affiliations."
+            : "Direktori dan database pembalap sim racing Indonesia terlengkap. Cari nomor start permanen, profil pembalap, tim, dan afiliasi komunitas."
+    )
 
     useHead({
         htmlAttrs: {
-            lang: "id"
+            lang: () => (locale.value === "en" ? "en" : "id")
         },
-        title: "ID Sim Racing Database",
-        meta: [
-            {
-                name: "description",
-                content: "Database Sim Racer Indonesia"
-            }
+        link: [
+            { rel: "canonical", href: "https://idsimracing.pages.dev/database" }
         ]
     })
 
     useSeoMeta({
-        title: "ID Sim Racing",
-        ogTitle: "ID Sim Racing",
-        twitterTitle: "ID Sim Racing",
-        description: "Database Sim Racer Indonesia",
-        ogDescription: "Database Sim Racer Indonesia",
-        twitterDescription: "Database Sim Racer Indonesia",
+        title: pageTitle,
+        ogTitle: pageTitle,
+        twitterTitle: pageTitle,
+        description: pageDescription,
+        ogDescription: pageDescription,
+        twitterDescription: pageDescription,
         ogImage: "https://idsimracing.pages.dev/images/1.png",
         twitterImage: "https://idsimracing.pages.dev/images/1.png",
         ogUrl: "https://idsimracing.pages.dev/database",

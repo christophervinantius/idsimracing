@@ -6,15 +6,15 @@
         title: "Admin | ID Sim Racing",
         meta: [
             {
-                name: "description",
-                content: "Halaman Admin Update Jadwal Balapan, Database Pembalap, Tim, dan Rental ID Sim Racing"
+                name: "robots",
+                content: "noindex, nofollow"
             }
         ]
     })
 
     useSeoMeta({
         title: "Admin | ID Sim Racing",
-        description: "Halaman Admin Update Jadwal Balapan, Database Pembalap, Tim, dan Rental ID Sim Racing"
+        robots: "noindex, nofollow"
     })
 
     const { $supabase } = useNuxtApp()

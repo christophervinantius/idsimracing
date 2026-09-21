@@ -1,2 +1,5 @@
-User-Agent: *
-Disallow:
+User-agent: *
+Disallow: /admpg
+Disallow: /admpg/
+
+Sitemap: https://idsimracing.pages.dev/sitemap.xml

@@ -1,29 +1,5 @@
 <script setup>
-    useHead({
-        htmlAttrs: {
-            lang: "id"
-        },
-        title: "ID Sim Racing Rentals",
-        meta: [
-            {
-                name: "description",
-                content: "Rental Sim Racer Indonesia"
-            }
-        ]
-    })
-
-    useSeoMeta({
-        title: "ID Sim Racing",
-        ogTitle: "ID Sim Racing",
-        twitterTitle: "ID Sim Racing",
-        description: "Rental Sim Racer Indonesia",
-        ogDescription: "Rental Sim Racer Indonesia",
-        twitterDescription: "Rental Sim Racer Indonesia",
-        ogImage: "https://idsimracing.pages.dev/images/1.png",
-        twitterImage: "https://idsimracing.pages.dev/images/1.png",
-        ogUrl: "https://idsimracing.pages.dev/rentals",
-        twitterCard: "summary_large_image",
-    })
+    const { t, locale } = useI18n()
 
     const { $supabase } = useNuxtApp()
 
@@ -41,6 +17,57 @@
             .order("name", { ascending: true })
         if(error) throw error
         return data
+    })
+
+    const pageTitle = computed(() =>
+        locale.value === "en"
+            ? "Indonesian Racing Simulator Rental Centers | ID Sim Racing"
+            : "Daftar Rental Simulator Balap Indonesia | ID Sim Racing"
+    )
+
+    const pageDescription = computed(() =>
+        locale.value === "en"
+            ? "Directory of sim racing simulator rental spots and lounges across Indonesia (Jakarta, Tangerang, Bandung, Surabaya, etc.) with rig specs, pricing, and locations."
+            : "Temukan tempat rental simulator balap (sim racing) terdekat di Indonesia (Jakarta, Tangerang, Bandung, Surabaya, dll) lengkap dengan spesifikasi rig, harga, dan lokasi."
+    )
+
+    useHead({
+        htmlAttrs: {
+            lang: () => (locale.value === "en" ? "en" : "id")
+        },
+        link: [
+            { rel: "canonical", href: "https://idsimracing.pages.dev/rentals" }
+        ],
+        script: [
+            {
+                type: "application/ld+json",
+                children: () => JSON.stringify({
+                    "@context": "https://schema.org",
+                    "@type": "ItemList",
+                    "name": "Daftar Tempat Rental Sim Racing Indonesia",
+                    "description": "Tempat rental simulator balap (sim racing) di Indonesia",
+                    "itemListElement": (rentals.value || []).map((r, idx) => ({
+                        "@type": "ListItem",
+                        "position": idx + 1,
+                        "name": r.name,
+                        "description": r.province ? `${r.name} - ${r.province}` : r.name
+                    }))
+                })
+            }
+        ]
+    })
+
+    useSeoMeta({
+        title: pageTitle,
+        ogTitle: pageTitle,
+        twitterTitle: pageTitle,
+        description: pageDescription,
+        ogDescription: pageDescription,
+        twitterDescription: pageDescription,
+        ogImage: "https://idsimracing.pages.dev/images/1.png",
+        twitterImage: "https://idsimracing.pages.dev/images/1.png",
+        ogUrl: "https://idsimracing.pages.dev/rentals",
+        twitterCard: "summary_large_image",
     })
 
     const selectedProvinces = ref([])

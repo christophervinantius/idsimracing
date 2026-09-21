@@ -2,26 +2,48 @@
     import { Calendar } from 'v-calendar'
     import 'v-calendar/style.css'
 
+    const { t, locale } = useI18n()
+
+    const siteTitle = computed(() =>
+        locale.value === "en"
+            ? "Indonesian Sim Racing Race Calendar | ID Sim Racing"
+            : "Kalender Balap Sim Racing Indonesia | ID Sim Racing"
+    )
+
+    const siteDescription = computed(() =>
+        locale.value === "en"
+            ? "Comprehensive Indonesian sim racing race calendar and schedule for Assetto Corsa, ACC, LMU, and RBR across top organizers and leagues."
+            : "Jadwal dan kalender balapan sim racing Indonesia terlengkap (Assetto Corsa, ACC, LMU, RBR) dari berbagai komunitas dan organizer."
+    )
+
     useHead({
         htmlAttrs: {
-            lang: "id"
+            lang: () => (locale.value === "en" ? "en" : "id")
         },
-        title: "ID Sim Racing",
-        meta: [
+        link: [
+            { rel: "canonical", href: "https://idsimracing.pages.dev" }
+        ],
+        script: [
             {
-                name: "description",
-                content: "Pusat Sim Racer Indonesia"
+                type: "application/ld+json",
+                children: JSON.stringify({
+                    "@context": "https://schema.org",
+                    "@type": "WebSite",
+                    "name": "ID Sim Racing",
+                    "url": "https://idsimracing.pages.dev",
+                    "description": "Pusat Kalender, Hasil Balapan, Klasemen, dan Database Sim Racing Indonesia"
+                })
             }
         ]
     })
 
     useSeoMeta({
-        title: "ID Sim Racing",
-        ogTitle: "ID Sim Racing",
-        twitterTitle: "ID Sim Racing",
-        description: "Pusat Sim Racer Indonesia",
-        ogDescription: "Pusat Sim Racer Indonesia",
-        twitterDescription: "Pusat Sim Racer Indonesia",
+        title: siteTitle,
+        ogTitle: siteTitle,
+        twitterTitle: siteTitle,
+        description: siteDescription,
+        ogDescription: siteDescription,
+        twitterDescription: siteDescription,
         ogImage: "https://idsimracing.pages.dev/images/1.png",
         twitterImage: "https://idsimracing.pages.dev/images/1.png",
         ogUrl: "https://idsimracing.pages.dev",
@@ -79,8 +101,6 @@
         }
         return data
     })
-
-    const { locale, t } = useI18n()
 
     const showTopButton = ref(false)
     const showCalendarButton = ref(false)

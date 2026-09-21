@@ -66,6 +66,145 @@
         }
     })
 
+    // SEO Meta Tags & Structured Data for Race Detail
+    // Format: Organizer - Event Name - Season - Round - Circuit (e.g., CRC Endurance Championship S7 R1 - Fuji Speedway)
+    const formattedRaceName = computed(() => {
+        if (!scheduleItem.value) return ""
+
+        const org = scheduleItem.value.events?.organizers?.abbreviation?.trim() || ""
+        const rawEventName = scheduleItem.value.events?.name?.trim() || ""
+
+        let eventWithOrg = rawEventName
+        if (org) {
+            if (!rawEventName.toLowerCase().startsWith(org.toLowerCase())) {
+                eventWithOrg = `${org} ${rawEventName}`.trim()
+            }
+        }
+
+        const rawSeason = scheduleItem.value.season
+        let seasonStr = ""
+        if (rawSeason !== null && rawSeason !== undefined && String(rawSeason).trim() !== "") {
+            const s = String(rawSeason).trim()
+            seasonStr = s.toUpperCase().startsWith("S") ? s.toUpperCase() : `S${s}`
+        }
+
+        const rawRound = scheduleItem.value.round
+        let roundStr = ""
+        if (rawRound !== null && rawRound !== undefined && String(rawRound).trim() !== "") {
+            const r = String(rawRound).trim()
+            if (/^\d+$/.test(r)) {
+                roundStr = `R${r}`
+            } else if (r.toUpperCase().startsWith("R") && /^\d+$/.test(r.slice(1))) {
+                roundStr = r.toUpperCase()
+            } else {
+                roundStr = r
+            }
+        }
+
+        const raceCore = [eventWithOrg, seasonStr, roundStr].filter(Boolean).join(" ")
+        const circuit = scheduleItem.value.circuit?.trim() || ""
+
+        if (circuit) {
+            return raceCore ? `${raceCore} - ${circuit}` : circuit
+        }
+        return raceCore
+    })
+
+    const pageTitle = computed(() => {
+        if (!scheduleItem.value || !formattedRaceName.value) {
+            return locale.value === "en" ? "Race Results | ID Sim Racing" : "Hasil Balapan | ID Sim Racing"
+        }
+        return `${formattedRaceName.value} | ID Sim Racing`
+    })
+
+    const pageDescription = computed(() => {
+        if (!scheduleItem.value) {
+            return locale.value === "en"
+                ? "Official race results and classification on ID Sim Racing."
+                : "Hasil resmi dan klasifikasi balapan di ID Sim Racing."
+        }
+        const raceName = formattedRaceName.value || scheduleItem.value.events?.name || "Race"
+        if (locale.value === "en") {
+            return `Official race results and classification for ${raceName}. View podium winners, best lap times, and finishing positions.`
+        }
+        return `Hasil resmi dan klasifikasi balapan ${raceName}. Lihat pemenang podium, catatan waktu lap terbaik, dan posisi finis pembalap.`
+    })
+
+    useHead({
+        htmlAttrs: {
+            lang: () => (locale.value === "en" ? "en" : "id")
+        },
+        link: [
+            { rel: "canonical", href: () => `https://idsimracing.pages.dev/results/${scheduleId.value}` }
+        ],
+        script: [
+            {
+                type: "application/ld+json",
+                children: () => JSON.stringify({
+                    "@context": "https://schema.org",
+                    "@type": "SportsEvent",
+                    "name": formattedRaceName.value || scheduleItem.value?.events?.name || "Sim Racing Race",
+                    "startDate": scheduleItem.value?.date || undefined,
+                    "location": {
+                        "@type": "Place",
+                        "name": scheduleItem.value?.circuit || "Virtual Circuit"
+                    },
+                    "organizer": {
+                        "@type": "Organization",
+                        "name": scheduleItem.value?.events?.organizers?.name || scheduleItem.value?.events?.organizers?.abbreviation || "ID Sim Racing"
+                    }
+                })
+            }
+        ]
+    })
+
+    useSeoMeta({
+        title: pageTitle,
+        ogTitle: pageTitle,
+        twitterTitle: pageTitle,
+        description: pageDescription,
+        ogDescription: pageDescription,
+        twitterDescription: pageDescription,
+        ogImage: "https://idsimracing.pages.dev/images/1.png",
+        twitterImage: "https://idsimracing.pages.dev/images/1.png",
+        ogUrl: () => `https://idsimracing.pages.dev/results/${scheduleId.value}`,
+        twitterCard: "summary_large_image"
+    })
+
+    // Share Page
+    const isCopied = ref(false)
+    let copyTimeout = null
+
+    const sharePage = async () => {
+        const url = typeof window !== "undefined" ? window.location.href : ""
+        const title = pageTitle.value || "ID Sim Racing"
+
+        if (typeof navigator !== "undefined" && navigator.share) {
+            try {
+                await navigator.share({
+                    title,
+                    url
+                })
+                return
+            } catch (err) {
+                if (err.name === "AbortError") return
+            }
+        }
+
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+            try {
+                await navigator.clipboard.writeText(url)
+                isCopied.value = true
+                if (copyTimeout) clearTimeout(copyTimeout)
+                copyTimeout = setTimeout(() => {
+                    isCopied.value = false
+                }, 2000)
+            } catch (e) {
+                console.error("Clipboard copy failed:", e)
+            }
+        }
+    }
+
     // 2. Fetch event_entries and results from Supabase database
     const { data: dbEntries, pending: loadingEntries } = await useAsyncData(`schedule-entries-${scheduleId.value}`, async () => {
         if (!scheduleId.value) return []
@@ -1189,16 +1328,6 @@
         return parsedRows.value.length > 0 && parsedRows.value.some(r => r.isTeamEntry)
     })
 
-    useHead({
-        title: "ID Sim Racing",
-        meta: [
-            {
-                name: "description",
-                content: "ID Sim Racing"
-            }
-        ]
-    })
-
     const formatDate = (date) => {
         if (!date) return ""
         let newDate = new Date(date)
@@ -1559,6 +1688,14 @@
                         <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
                     </div>
                 </NuxtLink>
+
+                <button
+                    type="button"
+                    @click="sharePage"
+                    class="text-sm lg:text-base text-white bg-red-900 hover:bg-red-800 px-2.5 py-1 rounded-md font-bold cursor-pointer transition"
+                >
+                    {{ isCopied ? $t('copied') : $t('share') }}
+                </button>
             </div>
         </div>
 

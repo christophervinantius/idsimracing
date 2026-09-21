@@ -327,7 +327,8 @@ export const calculateStandings = (
         } else if (isClassChampionship) {
             effectiveScoringMode = "in_class"
         } else {
-            effectiveScoringMode = champEvent.session_type === "qualifying" ? "in_class" : "overall"
+            const isQualiSession = ['qualifying', 'q', 'quali'].includes(String(champEvent.session_type || '').toLowerCase().trim())
+            effectiveScoringMode = isQualiSession ? "in_class" : "overall"
         }
 
         let poleKeys: Set<string> = new Set()
@@ -502,10 +503,12 @@ export const calculateStandings = (
             }
         }
 
+        const isRaceSession = !champEvent.session_type || !['qualifying', 'q', 'quali'].includes(String(champEvent.session_type).toLowerCase().trim())
+
         for (const [key, val] of sessionAgg) {
-            const win = val.bestPos === 1
-            const podium = val.bestPos !== null && val.bestPos <= 3
-            bump(key, val.points, val.bestPos, win, podium)
+            const win = isRaceSession && val.bestPos === 1
+            const podium = isRaceSession && val.bestPos !== null && val.bestPos <= 3
+            bump(key, val.points, isRaceSession ? val.bestPos : null, win, podium)
         }
     }
 

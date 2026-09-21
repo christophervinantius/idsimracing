@@ -3,26 +3,34 @@
 
     const { t, locale } = useI18n()
 
+    const pageTitle = computed(() =>
+        locale.value === "en"
+            ? "Indonesian Sim Racing Race Results | ID Sim Racing"
+            : "Hasil Balapan Sim Racing Indonesia | ID Sim Racing"
+    )
+
+    const pageDescription = computed(() =>
+        locale.value === "en"
+            ? "Complete Indonesian sim racing race results: podium winners, lap times, penalties, and multiclass classifications across all series."
+            : "Hasil lengkap balapan sim racing Indonesia: podium pemenang, catatan waktu lap, penalti, dan klasifikasi per kelas di berbagai event."
+    )
+
     useHead({
         htmlAttrs: {
-            lang: locale.value === "en" ? "en" : "id"
+            lang: () => (locale.value === "en" ? "en" : "id")
         },
-        title: t("resultsTitle"),
-        meta: [
-            {
-                name: "description",
-                content: locale.value === "en" ? "Indonesia Sim Racing Race Results" : "Hasil Balapan Sim Racing Indonesia"
-            }
+        link: [
+            { rel: "canonical", href: "https://idsimracing.pages.dev/results" }
         ]
     })
 
     useSeoMeta({
-        title: "ID Sim Racing - Hasil Balapan",
-        ogTitle: "ID Sim Racing - Hasil Balapan",
-        twitterTitle: "ID Sim Racing - Hasil Balapan",
-        description: "Hasil Balapan Sim Racing Indonesia",
-        ogDescription: "Hasil Balapan Sim Racing Indonesia",
-        twitterDescription: "Hasil Balapan Sim Racing Indonesia",
+        title: pageTitle,
+        ogTitle: pageTitle,
+        twitterTitle: pageTitle,
+        description: pageDescription,
+        ogDescription: pageDescription,
+        twitterDescription: pageDescription,
         ogImage: "https://idsimracing.pages.dev/images/1.png",
         twitterImage: "https://idsimracing.pages.dev/images/1.png",
         ogUrl: "https://idsimracing.pages.dev/results",

@@ -1,31 +1,39 @@
 <script setup>
+    const { t, locale } = useI18n()
+
+    const pageTitle = computed(() =>
+        locale.value === "en"
+            ? "Indonesian Sim Racing Standings | ID Sim Racing"
+            : "Klasemen Sim Racing Indonesia | ID Sim Racing"
+    )
+
+    const pageDescription = computed(() =>
+        locale.value === "en"
+            ? "Latest Indonesian sim racing championship standings, driver and team points across all leagues and virtual racing series."
+            : "Klasemen poin pembalap dan tim sim racing Indonesia terbaru dari berbagai liga, kategori kejuaraan, dan event balap virtual."
+    )
+
     useHead({
         htmlAttrs: {
-            lang: "id"
+            lang: () => (locale.value === "en" ? "en" : "id")
         },
-        title: "Klasemen | ID Sim Racing",
-        meta: [
-            {
-                name: "description",
-                content: "Klasemen pembalap dan tim sim racing Indonesia"
-            }
+        link: [
+            { rel: "canonical", href: "https://idsimracing.pages.dev/standings" }
         ]
     })
 
     useSeoMeta({
-        title: "Klasemen | ID Sim Racing",
-        ogTitle: "Klasemen | ID Sim Racing",
-        twitterTitle: "Klasemen | ID Sim Racing",
-        description: "Klasemen pembalap dan tim sim racing Indonesia",
-        ogDescription: "Klasemen pembalap dan tim sim racing Indonesia",
-        twitterDescription: "Klasemen pembalap dan tim sim racing Indonesia",
+        title: pageTitle,
+        ogTitle: pageTitle,
+        twitterTitle: pageTitle,
+        description: pageDescription,
+        ogDescription: pageDescription,
+        twitterDescription: pageDescription,
         ogImage: "https://idsimracing.pages.dev/images/1.png",
         twitterImage: "https://idsimracing.pages.dev/images/1.png",
         ogUrl: "https://idsimracing.pages.dev/standings",
         twitterCard: "summary_large_image"
     })
-
-    const { t } = useI18n()
     const { $supabase } = useNuxtApp()
 
     // All championships that already have standings worth showing.
@@ -315,7 +323,8 @@
         return null
     }
 
-    const sortedRounds = computed(() => {
+    // All rounds in championship (used for points calculations, progression map, and self-healing)
+    const allSortedRounds = computed(() => {
         const list = [...(championshipRounds.value || [])]
         list.sort((a, b) => {
             const da = a.schedule?.date ? new Date(a.schedule.date).getTime() : 0
@@ -327,6 +336,26 @@
             return String(a.session_type || "").localeCompare(String(b.session_type || ""))
         })
         return list
+    })
+
+    const isQualifyingSession = (sessionType) => {
+        const st = String(sessionType || "").toLowerCase().trim()
+        return st === "qualifying" || st === "q" || st === "quali"
+    }
+
+    const qualifyingOffersPoints = (qRound) => {
+        if (!qRound) return false
+        if (!qRound.points_system_id) return false
+        const sys = allPointsSystemsMap.value?.get(qRound.points_system_id)
+        if (!sys) return true
+        const hasRulePoints = sys.points_system_rules?.some(r => Number(r.points) > 0)
+        const hasBonusPoints = sys.points_bonuses?.some(b => Number(b.points) > 0)
+        return Boolean(hasRulePoints || hasBonusPoints)
+    }
+
+    // Table columns: ONLY race sessions (qualifying positions will be displayed within race columns)
+    const sortedRounds = computed(() => {
+        return allSortedRounds.value.filter(r => !isQualifyingSession(r.session_type))
     })
 
     const fetchStandings = async () => {
@@ -707,7 +736,9 @@
                 const roundKey = `${round.schedule_id}::${round.session_type || 'race'}`
                 newMap.set(round.id, { hasResults, entries: entriesMap })
                 newMap.set(roundKey, { hasResults, entries: entriesMap })
-                newMap.set(String(round.schedule_id), { hasResults, entries: entriesMap })
+                if (!isQualifyingSession(round.session_type) || !newMap.has(String(round.schedule_id))) {
+                    newMap.set(String(round.schedule_id), { hasResults, entries: entriesMap })
+                }
             }
 
             progressionMap.value = newMap
@@ -757,13 +788,79 @@
             progressionMap.value.get(`${rnd.schedule_id}::${rnd.session_type || 'race'}`) ||
             progressionMap.value.get(String(rnd.schedule_id))
 
-        if (!sessionData || !sessionData.hasResults) {
-            return { text: "", isBlank: true, bgClass: "bg-transparent" }
+        const entry = sessionData?.hasResults
+            ? (sessionData.entries.get(key) || (entityType.value === "team" ? sessionData.entries.get(String(row.team_id)) : null))
+            : null
+
+        // Check if there is a qualifying session that offers points for this round
+        let qRound = null
+        let offersQPoints = false
+        if (rnd.schedule_id) {
+            const racesForSchedule = sortedRounds.value.filter(r => r.schedule_id === rnd.schedule_id)
+            const isFirstRace = racesForSchedule.length === 0 || racesForSchedule[0].id === rnd.id
+            if (isFirstRace) {
+                qRound = allSortedRounds.value.find(r => {
+                    if (r.schedule_id !== rnd.schedule_id) return false
+                    return isQualifyingSession(r.session_type)
+                })
+                if (qRound && qualifyingOffersPoints(qRound)) {
+                    offersQPoints = true
+                }
+            }
         }
 
-        const entry = sessionData.entries.get(key) ||
-            (entityType.value === "team" ? sessionData.entries.get(String(row.team_id)) : null)
+        let qEntry = null
+        let qualiPos = null
+        let qualiPoints = 0
+        if (offersQPoints && qRound) {
+            const qSessionData = progressionMap.value.get(qRound.id) ||
+                progressionMap.value.get(`${rnd.schedule_id}::qualifying`) ||
+                progressionMap.value.get(`${rnd.schedule_id}::q`)
+            if (qSessionData?.entries) {
+                qEntry = qSessionData.entries.get(key) ||
+                    (entityType.value === "team" ? qSessionData.entries.get(String(row.team_id)) : null)
+                if (qEntry) {
+                    qualiPoints = Number(qEntry.points) || 0
+                    const qStatus = String(qEntry.status || "finished").toLowerCase().trim()
+                    if (qStatus !== "dns" && qStatus !== "dsq" && qStatus !== "disqualified") {
+                        const isClassChampionship = Boolean(selectedChampionship.value?.class_id)
+                        const isClassFiltered = Boolean(selectedClassKey.value && selectedClassKey.value !== 'overall')
+                        const isClassContext = isClassChampionship || isClassFiltered
+                        let effectiveQScoringMode = "in_class"
+                        if (qRound.scoring_mode === "overall_strict") effectiveQScoringMode = "overall_strict"
+                        else if (qRound.scoring_mode === "overall") effectiveQScoringMode = "overall"
+                        else if (qRound.scoring_mode === "in_class") effectiveQScoringMode = "in_class"
+                        else if (isClassChampionship) effectiveQScoringMode = "in_class"
+                        else effectiveQScoringMode = "in_class"
+
+                        const qRawPos = (effectiveQScoringMode === "overall_strict" && !isClassContext)
+                            ? (qEntry.classified_position ?? qEntry.scoring_position)
+                            : (qEntry.scoring_position ?? qEntry.classified_position)
+                        if (qRawPos !== null && qRawPos !== undefined) {
+                            qualiPos = Number(qRawPos)
+                        }
+                    }
+                }
+            }
+        }
+
         if (!entry) {
+            if (offersQPoints && qualiPos) {
+                const bgClass = qualiPoints > 0
+                    ? "bg-emerald-100 dark:bg-emerald-800/60 text-emerald-950 dark:text-emerald-100 font-medium"
+                    : "bg-blue-100 dark:bg-blue-900/40 text-blue-950 dark:text-blue-200 font-medium"
+                const ptsText = qualiPoints > 0 ? ` • ${formatPoints(qualiPoints)} pts` : ''
+                return {
+                    text: "-",
+                    pos: null,
+                    qualiPos,
+                    hasQualiPoints: true,
+                    title: `Qualifying: P${qualiPos}${ptsText}`,
+                    isPole: qualiPos === 1 || Boolean(qEntry?.isPole),
+                    fastestLap: false,
+                    bgClass
+                }
+            }
             return { text: "", isBlank: true, bgClass: "bg-transparent" }
         }
 
@@ -773,6 +870,9 @@
             return {
                 text: "DSQ",
                 pos: null,
+                qualiPos: offersQPoints ? qualiPos : null,
+                hasQualiPoints: offersQPoints && Boolean(qualiPos),
+                title: "DSQ",
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
                 bgClass: "bg-black text-white font-medium"
@@ -780,9 +880,15 @@
         }
 
         if (status === "dns") {
+            const pts = (Number(entry.points) || 0) + (offersQPoints ? qualiPoints : 0)
+            const ptsText = pts > 0 ? ` • ${formatPoints(pts)} pts` : ''
+            const qInfo = offersQPoints && qualiPos ? ` (Qualifying: P${qualiPos}${qualiPoints > 0 ? `, ${formatPoints(qualiPoints)} pts` : ''})` : ''
             return {
                 text: "DNS",
                 pos: null,
+                qualiPos: offersQPoints ? qualiPos : null,
+                hasQualiPoints: offersQPoints && Boolean(qualiPos),
+                title: `DNS${ptsText}${qInfo}`,
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
                 bgClass: "bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-medium"
@@ -790,9 +896,15 @@
         }
 
         if (status === "dnf" || status === "retired") {
+            const pts = (Number(entry.points) || 0) + (offersQPoints ? qualiPoints : 0)
+            const ptsText = pts > 0 ? ` • ${formatPoints(pts)} pts` : ''
+            const qInfo = offersQPoints && qualiPos ? ` (Qualifying: P${qualiPos}${qualiPoints > 0 ? `, ${formatPoints(qualiPoints)} pts` : ''})` : ''
             return {
                 text: "DNF",
                 pos: null,
+                qualiPos: offersQPoints ? qualiPos : null,
+                hasQualiPoints: offersQPoints && Boolean(qualiPos),
+                title: `DNF${ptsText}${qInfo}`,
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
                 bgClass: "bg-purple-200 dark:bg-purple-900/60 text-purple-950 dark:text-purple-200 font-medium"
@@ -813,7 +925,7 @@
         } else if (isClassChampionship) {
             effectiveScoringMode = "in_class"
         } else {
-            effectiveScoringMode = rnd?.session_type === "qualifying" ? "in_class" : "overall"
+            effectiveScoringMode = "overall"
         }
 
         // For events with overall points system and bonus for each class (scoring_mode === "overall"),
@@ -829,6 +941,9 @@
             return { text: "-", bgClass: "bg-transparent text-gray-400" }
         }
 
+        const racePoints = Number(entry.points ?? entry.position_points ?? 0)
+        const totalRoundPoints = racePoints + (offersQPoints ? qualiPoints : 0)
+
         let bgClass = "bg-blue-100 dark:bg-blue-900/40 text-blue-950 dark:text-blue-200 font-medium" // Non-points
 
         if (entry.no_points) {
@@ -839,19 +954,31 @@
             bgClass = "bg-slate-300 dark:bg-slate-400 text-slate-950 dark:text-black font-medium"
         } else if (pos === 3) {
             bgClass = "bg-amber-200 dark:bg-amber-500/80 text-amber-950 dark:text-black font-medium"
-        } else if ((entry.points ?? entry.position_points ?? 0) > 0) {
+        } else if (totalRoundPoints > 0) {
             bgClass = "bg-emerald-100 dark:bg-emerald-800/60 text-emerald-950 dark:text-emerald-100 font-medium"
         }
 
         const overallText = (entry.classified_position && entry.classified_position !== pos)
             ? ` (P${entry.classified_position} Overall)`
             : ''
-        const ptsText = entry.points !== undefined ? ` • ${formatPoints(entry.points)} pts` : ''
-        const title = entry.no_points ? 'Tanpa Poin (No points)' : `P${pos}${overallText}${ptsText}`
+
+        let title = ""
+        if (entry.no_points) {
+            title = 'Tanpa Poin (No points)'
+        } else if (offersQPoints && qualiPos) {
+            const qText = `Q: P${qualiPos}${qualiPoints > 0 ? ` (${formatPoints(qualiPoints)} pts)` : ''}`
+            const rText = `R: P${pos}${overallText}${racePoints > 0 ? ` (${formatPoints(racePoints)} pts)` : ''}`
+            title = `${rText} | ${qText} • Total: ${formatPoints(totalRoundPoints)} pts`
+        } else {
+            const ptsText = totalRoundPoints > 0 ? ` • ${formatPoints(totalRoundPoints)} pts` : ''
+            title = `P${pos}${overallText}${ptsText}`
+        }
 
         return {
             text: String(pos),
             pos,
+            qualiPos: offersQPoints ? qualiPos : null,
+            hasQualiPoints: offersQPoints && Boolean(qualiPos),
             title,
             isPole: Boolean(entry.isPole),
             fastestLap: Boolean(entry.fastest_lap),
@@ -938,11 +1065,13 @@
         // synthesize the standings rows dynamically from progressionMap so users always see results.
         if (list.length === 0 && progressionMap.value.size > 0 && selectedChampionship.value) {
             const synthMap = new Map()
-            for (const round of sortedRounds.value || []) {
+            for (const round of allSortedRounds.value || []) {
                 const sessionData = progressionMap.value.get(round.id) ||
                     progressionMap.value.get(`${round.schedule_id}::${round.session_type || 'race'}`) ||
                     progressionMap.value.get(String(round.schedule_id))
                 if (!sessionData?.entries) continue
+
+                const isRace = !isQualifyingSession(round.session_type)
 
                 for (const [key, entry] of sessionData.entries.entries()) {
                     const cur = synthMap.get(key) || {
@@ -957,9 +1086,11 @@
                         position: 1
                     }
                     cur.points += (Number(entry.points) || 0)
-                    const pos = entry.scoring_position ?? entry.classified_position
-                    if (pos === 1) cur.wins += 1
-                    if (pos && pos <= 3) cur.podiums += 1
+                    if (isRace) {
+                        const pos = entry.scoring_position ?? entry.classified_position
+                        if (pos === 1) cur.wins += 1
+                        if (pos && pos <= 3) cur.podiums += 1
+                    }
                     synthMap.set(key, cur)
                 }
             }
@@ -1445,7 +1576,8 @@
                                 >
                                     <span v-if="!getMatrixCellData(row, rnd).isBlank" class="relative inline-flex items-center">
                                         <span>{{ getMatrixCellData(row, rnd).text }}</span>
-                                        <sup v-if="getMatrixCellData(row, rnd).isPole" class="font-medium text-[10px] lg:text-xs ml-0.5">P</sup>
+                                        <sup v-if="getMatrixCellData(row, rnd).hasQualiPoints && getMatrixCellData(row, rnd).qualiPos" class="font-bold text-[10px] lg:text-xs ml-0.5" :title="`Qualifying: P${getMatrixCellData(row, rnd).qualiPos}`">{{ getMatrixCellData(row, rnd).qualiPos }}</sup>
+                                        <sup v-if="getMatrixCellData(row, rnd).isPole && !getMatrixCellData(row, rnd).hasQualiPoints" class="font-medium text-[10px] lg:text-xs ml-0.5">P</sup>
                                         <sup v-if="getMatrixCellData(row, rnd).fastestLap" class="font-medium text-[10px] lg:text-xs ml-0.5">F</sup>
                                     </span>
                                 </div>

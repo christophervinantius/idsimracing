@@ -1185,7 +1185,7 @@
     }
 
     useHead(() => ({
-        title: driver.value ? `${driver.value.name} - ID Sim Racing` : "Driver Profile - ID Sim Racing",
+        title: driver.value ? `${driver.value.name} | ID Sim Racing` : "Driver Profile | ID Sim Racing",
         meta: [
             {
                 name: "description",
@@ -1193,6 +1193,40 @@
             }
         ]
     }))
+
+    // Share Page
+    const isCopied = ref(false)
+    let copyTimeout = null
+
+    const sharePage = async () => {
+        const url = typeof window !== "undefined" ? window.location.href : ""
+        const title = driver.value ? `${driver.value.name} | ID Sim Racing` : "ID Sim Racing"
+
+        if (typeof navigator !== "undefined" && navigator.share) {
+            try {
+                await navigator.share({
+                    title,
+                    url
+                })
+                return
+            } catch (err) {
+                if (err.name === "AbortError") return
+            }
+        }
+
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+            try {
+                await navigator.clipboard.writeText(url)
+                isCopied.value = true
+                if (copyTimeout) clearTimeout(copyTimeout)
+                copyTimeout = setTimeout(() => {
+                    isCopied.value = false
+                }, 2000)
+            } catch (e) {
+                console.error("Clipboard copy failed:", e)
+            }
+        }
+    }
 </script>
 
 <template>
@@ -1239,6 +1273,16 @@
                     <div v-if="driver.rating" class="text-base lg:text-lg">
                         <span>{{ driver.rating }}</span>
                     </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 items-center mt-3">
+                    <button
+                        type="button"
+                        @click="sharePage"
+                        class="text-sm lg:text-base text-white bg-red-900 hover:bg-red-800 px-3 py-1 rounded-md font-bold cursor-pointer transition"
+                    >
+                        {{ isCopied ? $t('copied') : $t('share') }}
+                    </button>
                 </div>
             </div>
 

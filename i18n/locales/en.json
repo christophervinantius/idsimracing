@@ -153,5 +153,7 @@
     "allStatuses": "All Statuses",
     "noResultsFound": "No race results found with this filter.",
     "mostRecent": "Most Recent",
-    "oldest": "Oldest"
+    "oldest": "Oldest",
+    "share": "Share",
+    "copied": "Copied!"
 }
