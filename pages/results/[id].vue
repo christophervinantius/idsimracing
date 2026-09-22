@@ -1,5 +1,5 @@
 <script setup>
-    import { calculateResultPoints } from "~/composables/useStandings"
+    import { calculateResultPoints, matchSessionType } from "~/composables/useStandings"
     import { cleanTeamName, parseTeamInfo, formatLapTime } from "~/composables/useRaceResult"
 
     const route = useRoute()
@@ -472,9 +472,12 @@
         } else if (currentTab === 'race_2' || currentTab === 'r2') {
             targetType = 'race_2'
         } else if (currentTab === 'race_1' || currentTab === 'r1') {
-            targetType = champEvents.value.some(e => e.session_type === 'race_1') ? 'race_1' : 'race'
+            targetType = champEvents.value.some(e => matchSessionType('race_1', e.session_type)) ? 'race_1' : 'race'
         }
-        return champEvents.value.find(e => e.session_type === targetType) || champEvents.value[0] || null
+        const matched = champEvents.value.find(e => matchSessionType(targetType, e.session_type))
+        if (matched) return matched
+        if (targetType === 'qualifying') return null
+        return champEvents.value[0] || null
     })
 
     const currentPointsSystem = computed(() => {
@@ -923,9 +926,13 @@
             const isFastest = isStrictOverall
                 ? (bestLapMs > 0 && bestLapMs === fastestLapInRace)
                 : (Boolean(result.fastest_lap) || (bestLapMs > 0 && (bestLapMs === classFastestMs || bestLapMs === fastestLapInRace)))
-            const isPole = isStrictOverall
-                ? (Number(result.grid_position) === 1 && (Number(result.classified_position ?? result.scoring_position) === 1 || index === 0))
-                : Number(result.grid_position) === 1
+            const isPole = isQualifying
+                ? (isStrictOverall
+                    ? (Number(result.classified_position ?? result.scoring_position) === 1 || index === 0)
+                    : (Number(result.scoring_position) === 1 || Number(result.classified_position) === 1 || index === 0))
+                : (isStrictOverall
+                    ? (Number(result.grid_position) === 1 && (Number(result.classified_position ?? result.scoring_position) === 1 || index === 0))
+                    : Number(result.grid_position) === 1)
 
             const classPos = (classPositionsMap.get(classKey) || 0) + 1
             classPositionsMap.set(classKey, classPos)
@@ -1093,7 +1100,7 @@
                 bestLapMs,
                 bestLap: bestLapMs > 0 ? formatLapTime(bestLapMs) : "",
                 isFastestLap: isFastest,
-                isPole: Number(result.grid_position) === 1,
+                isPole,
                 qualifyingLapTime,
                 gap,
                 classId,
@@ -1156,7 +1163,13 @@
     const showProgressionColumn = false
 
     const hasPointsColumn = computed(() => {
-        if (isQualifyingSession.value) return false
+        if (isQualifyingSession.value) {
+            if (!currentPointsSystem.value) return false
+            const hasRulePoints = currentPointsSystem.value.points_system_rules?.some(r => Number(r.points) > 0)
+            const hasBonusPoints = currentPointsSystem.value.points_bonuses?.some(b => Number(b.points) > 0)
+            const hasCalculatedPoints = parsedRows.value.some(r => r.points !== null && r.points !== undefined && r.points > 0)
+            return Boolean(hasRulePoints || hasBonusPoints || hasCalculatedPoints)
+        }
         if (isTeamSession.value) return true
         return Boolean(currentPointsSystem.value || parsedRows.value.some(r => r.points !== null && r.points !== undefined && r.points > 0))
     })
@@ -1793,7 +1806,7 @@
                                 <th v-if="hasNoteColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[80px]">{{ $t('note') || 'Catatan' }}</th>
                                 <th v-if="hasTimeGapColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[90px]" :class="isQualifyingSession ? 'whitespace-nowrap' : ''">{{ isQualifyingSession ? $t('fastestLapGap') : $t('timeGap') }}</th>
                                 <th v-if="hasPenaltyColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('penalty') }}</th>
-                                <th v-if="hasPointsColumn && !isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('points') }}</th>
+                                <th v-if="hasPointsColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('points') }}</th>
                             </tr>
                             <!-- Individual Event Header -->
                             <tr v-else>
@@ -1803,7 +1816,7 @@
                                 <th v-if="hasNoteColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[80px]">{{ $t('note') || 'Catatan' }}</th>
                                 <th v-if="hasTimeGapColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[90px]" :class="isQualifyingSession ? 'whitespace-nowrap' : ''">{{ isQualifyingSession ? $t('fastestLapGap') : $t('timeGap') }}</th>
                                 <th v-if="hasPenaltyColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('penalty') }}</th>
-                                <th v-if="hasPointsColumn && !isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('points') }}</th>
+                                <th v-if="hasPointsColumn" class="py-2.5 px-3 lg:px-4 text-center min-w-[60px]">{{ $t('points') }}</th>
                             </tr>
                         </thead>
                         <tbody class="text-sm lg:text-base">
@@ -1897,7 +1910,7 @@
                                      </td>
 
                                      <!-- Points -->
-                                     <td v-if="hasPointsColumn && !isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center font-bold text-sm lg:text-base">
+                                     <td v-if="hasPointsColumn" class="py-2.5 px-3 lg:px-4 text-center font-bold text-sm lg:text-base">
                                          <span v-if="item.isWildcard || item.noPoints"></span>
                                          <span v-else-if="item.points > 0">{{ formatPoints(item.points) }}</span>
                                          <span v-else-if="item.disqualified || item.status === 'dns' || item.status === 'dnf'"></span>
@@ -2002,7 +2015,7 @@
                                      </td>
 
                                      <!-- Points -->
-                                     <td v-if="hasPointsColumn && !isQualifyingSession" class="py-2.5 px-3 lg:px-4 text-center font-bold text-sm lg:text-base">
+                                     <td v-if="hasPointsColumn" class="py-2.5 px-3 lg:px-4 text-center font-bold text-sm lg:text-base">
                                          <span v-if="item.isWildcard || item.noPoints"></span>
                                          <span
                                              v-else-if="item.points > 0"

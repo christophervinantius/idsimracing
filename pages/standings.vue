@@ -700,7 +700,7 @@
                                 ? (r.classified_position ?? r.scoring_position)
                                 : (r.scoring_position ?? r.classified_position))
                         const canScorePosition = isScoringStatus(r.status) && isClassified(r) && !r.no_points && !r.is_wildcard
-                        const positionPoints = canScorePosition ? getPositionPoints(system, posForScoring) : 0
+                        const positionPoints = canScorePosition ? (getPositionPoints(system, posForScoring) * multiplier) : 0
 
                         const inClassPos = inClassPosMap.get(r) ?? (Number(r.scoring_position) > 0 ? Number(r.scoring_position) : r.classified_position)
 
@@ -943,6 +943,7 @@
 
         const racePoints = Number(entry.points ?? entry.position_points ?? 0)
         const totalRoundPoints = racePoints + (offersQPoints ? qualiPoints : 0)
+        const hasPositionPoints = Number(entry.position_points || 0) > 0
 
         let bgClass = "bg-blue-100 dark:bg-blue-900/40 text-blue-950 dark:text-blue-200 font-medium" // Non-points
 
@@ -954,7 +955,7 @@
             bgClass = "bg-slate-300 dark:bg-slate-400 text-slate-950 dark:text-black font-medium"
         } else if (pos === 3) {
             bgClass = "bg-amber-200 dark:bg-amber-500/80 text-amber-950 dark:text-black font-medium"
-        } else if (totalRoundPoints > 0) {
+        } else if (hasPositionPoints) {
             bgClass = "bg-emerald-100 dark:bg-emerald-800/60 text-emerald-950 dark:text-emerald-100 font-medium"
         }
 
