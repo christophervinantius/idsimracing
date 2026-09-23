@@ -201,7 +201,6 @@
     })
 
     const filteredDrivers = computed(() => {
-        currentPage.value = 1
         if(!database.value) return []
         const driversData = database.value.filter(driver => {
             const matchesName = driver.name ? driver.name.toLowerCase().includes(searchQuery.value.toLowerCase()) : false
@@ -229,15 +228,19 @@
     })
 
     const currentPage = ref(1)
-    const itemsPerPage = 50
+    const itemsPerPage = ref(10)
+
+    watch([searchQuery, selectedCountries, selectedTeams, selectedRatings, selectedOrganizer, sortBy, itemsPerPage], () => {
+        currentPage.value = 1
+    })
 
     const paginatedDrivers = computed(() => {
-        const start = (currentPage.value - 1) * itemsPerPage
-        const end = start + itemsPerPage
+        const start = (currentPage.value - 1) * itemsPerPage.value
+        const end = start + itemsPerPage.value
         return filteredDrivers.value.slice(start, end)
     })
 
-    const totalPages = computed(() => Math.ceil(filteredDrivers.value.length / itemsPerPage))
+    const totalPages = computed(() => Math.ceil(filteredDrivers.value.length / itemsPerPage.value) || 1)
 
     const goToPage = (page) => {
         if(page >= 1 && page <= totalPages.value){
@@ -301,7 +304,7 @@
         </div>
         <div class="mx-auto flex flex-col justify-center items-center gap-4">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
+                <!-- <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('organizer') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
@@ -310,7 +313,7 @@
                             :items="organizersList"
                         />
                     </div>
-                </div>
+                </div> -->
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('rating') }}</label>
                     <div class="flex items-center gap-2">
@@ -329,8 +332,6 @@
                         </button>
                     </div>
                 </div>
-            </div>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('country') }}</label>
                     <div class="flex items-center gap-2">
@@ -349,7 +350,7 @@
                         </button>
                     </div>
                 </div>
-                <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
+                <!-- <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('team') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
@@ -366,7 +367,7 @@
                             <Icon name="mdi:filter-off" mode="svg" />
                         </button>
                     </div>
-                </div>
+                </div> -->
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
@@ -470,39 +471,52 @@
         <div v-else class="text-center text-white text-base lg:text-lg leading-6">
             {{ $t('noDriversFound') }}
         </div>
-        <div v-if="totalPages > 1" class="flex justify-center items-center gap-2 mt-4">
-            <div class="flex gap-2">
-                <button 
-                    @click="goToPage(1)" 
-                    :disabled="currentPage === 1"
-                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+        <div v-if="totalPages > 1 || filteredDrivers.length > 10" class="mx-auto w-full lg:w-3/4 flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+            <div class="flex items-center gap-2 text-sm lg:text-base text-black dark:text-white">
+                <span class="font-bold">{{ $t('perPage') }}:</span>
+                <select
+                    v-model.number="itemsPerPage"
+                    class="border border-red-900/50 dark:border-red-900 rounded-md px-2 py-1 bg-red-50 dark:bg-slate-950 text-black dark:text-white cursor-pointer text-sm lg:text-base font-bold"
                 >
-                    <Icon name="material-symbols:first-page" mode="svg" />
-                </button>
-                <button 
-                    @click="goToPage(currentPage - 1)" 
-                    :disabled="currentPage === 1"
-                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
-                >
-                    <Icon name="material-symbols:arrow-back-ios" mode="svg" />
-                </button>
+                    <option :value="10">10</option>
+                    <option :value="25">25</option>
+                    <option :value="50">50</option>
+                </select>
             </div>
-            <span class="px-3 py-1 font-bold text-sm lg:text-base">{{ currentPage }} / {{ totalPages }}</span>
-            <div class="flex gap-2">
-                <button 
-                    @click="goToPage(currentPage + 1)" 
-                    :disabled="currentPage === totalPages"
-                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
-                >
-                    <Icon name="material-symbols:arrow-forward-ios" mode="svg" />
-                </button>
-                <button 
-                    @click="goToPage(totalPages)" 
-                    :disabled="currentPage === totalPages"
-                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
-                >
-                    <Icon name="material-symbols:last-page" mode="svg" />
-                </button>
+            <div v-if="totalPages > 1" class="flex justify-center items-center gap-2">
+                <div class="flex gap-2">
+                    <button 
+                        @click="goToPage(1)" 
+                        :disabled="currentPage === 1"
+                        class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                        <Icon name="material-symbols:first-page" mode="svg" />
+                    </button>
+                    <button 
+                        @click="goToPage(currentPage - 1)" 
+                        :disabled="currentPage === 1"
+                        class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                        <Icon name="material-symbols:arrow-back-ios" mode="svg" />
+                    </button>
+                </div>
+                <span class="px-3 py-1 font-bold text-sm lg:text-base text-black dark:text-white">{{ currentPage }} / {{ totalPages }}</span>
+                <div class="flex gap-2">
+                    <button 
+                        @click="goToPage(currentPage + 1)" 
+                        :disabled="currentPage === totalPages"
+                        class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                        <Icon name="material-symbols:arrow-forward-ios" mode="svg" />
+                    </button>
+                    <button 
+                        @click="goToPage(totalPages)" 
+                        :disabled="currentPage === totalPages"
+                        class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                        <Icon name="material-symbols:last-page" mode="svg" />
+                    </button>
+                </div>
             </div>
         </div>
         <button v-if="showTopButton" @click="scrollToTop" class="fixed bottom-12 right-8 bg-red-900 dark:bg-red-900 text-white p-2 lg:p-4 font-bold rounded-full cursor-pointer">

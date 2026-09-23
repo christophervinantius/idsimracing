@@ -681,9 +681,9 @@
 
     // Pagination
     const currentPage = ref(1)
-    const itemsPerPage = 50
+    const itemsPerPage = ref(10)
 
-    watch([searchQuery, selectedOrganizer, selectedStatus, sortBy], () => {
+    watch([searchQuery, selectedOrganizer, selectedStatus, sortBy, itemsPerPage], () => {
         currentPage.value = 1
     })
 
@@ -735,11 +735,11 @@
     })
 
     const paginatedRaces = computed(() => {
-        const start = (currentPage.value - 1) * itemsPerPage
-        return filteredRaces.value.slice(start, start + itemsPerPage)
+        const start = (currentPage.value - 1) * itemsPerPage.value
+        return filteredRaces.value.slice(start, start + itemsPerPage.value)
     })
 
-    const totalPages = computed(() => Math.ceil(filteredRaces.value.length / itemsPerPage) || 1)
+    const totalPages = computed(() => Math.ceil(filteredRaces.value.length / itemsPerPage.value) || 1)
 
     const goToPage = (page) => {
         if (page >= 1 && page <= totalPages.value) {
@@ -1093,40 +1093,53 @@
             <div v-else>{{ $t('noResultsFound') }}</div>
         </div>
 
-        <!-- Pagination (Identical to database.vue) -->
-        <div v-if="totalPages > 1" class="flex justify-center items-center gap-2 mt-4 text-black dark:text-white">
-            <div class="flex gap-2">
-                <button
-                    @click="goToPage(1)"
-                    :disabled="currentPage === 1"
-                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+        <!-- Pagination Controls -->
+        <div v-if="totalPages > 1 || filteredRaces.length > 10" class="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+            <div class="flex items-center gap-2 text-sm lg:text-base text-black dark:text-white">
+                <span class="font-bold">{{ $t('perPage') }}:</span>
+                <select
+                    v-model.number="itemsPerPage"
+                    class="border border-red-900/50 dark:border-red-900 rounded-md px-2 py-1 bg-red-50 dark:bg-slate-950 text-black dark:text-white cursor-pointer text-sm lg:text-base font-bold"
                 >
-                    <Icon name="material-symbols:first-page" mode="svg" />
-                </button>
-                <button
-                    @click="goToPage(currentPage - 1)"
-                    :disabled="currentPage === 1"
-                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
-                >
-                    <Icon name="material-symbols:arrow-back-ios" mode="svg" />
-                </button>
+                    <option :value="10">10</option>
+                    <option :value="25">25</option>
+                    <option :value="50">50</option>
+                </select>
             </div>
-            <span class="px-3 py-1 font-bold text-sm lg:text-base">{{ currentPage }} / {{ totalPages }}</span>
-            <div class="flex gap-2">
-                <button
-                    @click="goToPage(currentPage + 1)"
-                    :disabled="currentPage === totalPages"
-                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
-                >
-                    <Icon name="material-symbols:arrow-forward-ios" mode="svg" />
-                </button>
-                <button
-                    @click="goToPage(totalPages)"
-                    :disabled="currentPage === totalPages"
-                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
-                >
-                    <Icon name="material-symbols:last-page" mode="svg" />
-                </button>
+            <div v-if="totalPages > 1" class="flex justify-center items-center gap-2">
+                <div class="flex gap-2">
+                    <button
+                        @click="goToPage(1)"
+                        :disabled="currentPage === 1"
+                        class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                        <Icon name="material-symbols:first-page" mode="svg" />
+                    </button>
+                    <button
+                        @click="goToPage(currentPage - 1)"
+                        :disabled="currentPage === 1"
+                        class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                        <Icon name="material-symbols:arrow-back-ios" mode="svg" />
+                    </button>
+                </div>
+                <span class="px-3 py-1 font-bold text-sm lg:text-base text-black dark:text-white">{{ currentPage }} / {{ totalPages }}</span>
+                <div class="flex gap-2">
+                    <button
+                        @click="goToPage(currentPage + 1)"
+                        :disabled="currentPage === totalPages"
+                        class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                        <Icon name="material-symbols:arrow-forward-ios" mode="svg" />
+                    </button>
+                    <button
+                        @click="goToPage(totalPages)"
+                        :disabled="currentPage === totalPages"
+                        class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                        <Icon name="material-symbols:last-page" mode="svg" />
+                    </button>
+                </div>
             </div>
         </div>
 

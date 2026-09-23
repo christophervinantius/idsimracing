@@ -812,8 +812,8 @@
                     country_2: sched?.country_2,
                     className: raceClass,
                     isMulticlass,
-                    gameAbbr: event?.games?.abbreviation,
-                    organizerAbbr: event?.organizers?.abbreviation,
+                    gameAbbr: event?.games?.abbreviation || (Array.isArray(event?.games) ? event?.games[0]?.abbreviation : null),
+                    organizerAbbr: event?.organizers?.abbreviation || (Array.isArray(event?.organizers) ? event?.organizers[0]?.abbreviation : null),
                     sessionType: sessType,
                     sessionLabel: sessType === "qualifying" ? t("qualifying") : (sessType === "race_1" ? t("race1") : (sessType === "race_2" ? t("race2") : t("race"))),
                     carNumber: entry.car_number,
@@ -968,9 +968,112 @@
     })
 
     // 7. Results Table Filter & Navigation (Only Races)
-    const filteredResults = computed(() => {
+    const allRaces = computed(() => {
         return processedResults.value.filter(r => r.sessionType !== "qualifying" && r.sessionType !== "q")
     })
+
+    // Organizer filter options from driver's races
+    const selectedOrganizer = ref("all")
+    const organizerOptions = computed(() => {
+        const list = [{ value: "all", label: t("all") }]
+        const foundOrgs = new Set()
+        for (const r of allRaces.value) {
+            if (r.organizerAbbr) {
+                foundOrgs.add(r.organizerAbbr)
+            }
+        }
+        const sorted = [...foundOrgs].sort()
+        for (const val of sorted) {
+            list.push({ value: val, label: val })
+        }
+        return list
+    })
+
+    const selectedOrganizerOption = computed({
+        get() {
+            return organizerOptions.value.find(o => o.value === selectedOrganizer.value) || organizerOptions.value[0]
+        },
+        set(val) {
+            if (!val) {
+                selectedOrganizer.value = "all"
+            } else if (typeof val === "object" && "value" in val) {
+                selectedOrganizer.value = val.value || "all"
+            } else {
+                selectedOrganizer.value = String(val)
+            }
+        }
+    })
+
+    // Game filter options from driver's races
+    const selectedGame = ref("all")
+    const gameOptions = computed(() => {
+        const list = [{ value: "all", label: t("all") }]
+        const foundGames = new Set()
+        for (const r of allRaces.value) {
+            if (r.gameAbbr) {
+                foundGames.add(r.gameAbbr)
+            }
+        }
+        const sorted = [...foundGames].sort()
+        for (const val of sorted) {
+            list.push({ value: val, label: val })
+        }
+        return list
+    })
+
+    const selectedGameOption = computed({
+        get() {
+            return gameOptions.value.find(o => o.value === selectedGame.value) || gameOptions.value[0]
+        },
+        set(val) {
+            if (!val) {
+                selectedGame.value = "all"
+            } else if (typeof val === "object" && "value" in val) {
+                selectedGame.value = val.value || "all"
+            } else {
+                selectedGame.value = String(val)
+            }
+        }
+    })
+
+    const resetResultsFilter = () => {
+        selectedOrganizer.value = "all"
+        selectedGame.value = "all"
+        currentPage.value = 1
+    }
+
+    const filteredResults = computed(() => {
+        return allRaces.value.filter(r => {
+            if (selectedOrganizer.value !== "all" && r.organizerAbbr !== selectedOrganizer.value) {
+                return false
+            }
+            if (selectedGame.value !== "all" && r.gameAbbr !== selectedGame.value) {
+                return false
+            }
+            return true
+        })
+    })
+
+    // Pagination for race results table (default 10 results per page)
+    const currentPage = ref(1)
+    const itemsPerPage = ref(10)
+
+    watch([selectedOrganizer, selectedGame, itemsPerPage], () => {
+        currentPage.value = 1
+    })
+
+    const paginatedResults = computed(() => {
+        const start = (currentPage.value - 1) * itemsPerPage.value
+        return filteredResults.value.slice(start, start + itemsPerPage.value)
+    })
+
+    const totalPages = computed(() => Math.ceil(filteredResults.value.length / itemsPerPage.value) || 1)
+
+    const goToPage = (page) => {
+        if (page >= 1 && page <= totalPages.value) {
+            currentPage.value = page
+        }
+    }
 
     const hasNoteColumn = computed(() => {
         return (filteredResults.value || []).some(r => r.isWildcard || r.noPoints)
@@ -1517,164 +1620,266 @@
 
             <!-- Results Section -->
             <div class="space-y-4">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div>
                         <h2 class="text-lg lg:text-xl font-extrabold text-black dark:text-white flex items-center gap-2">
                             <span>{{ $t('driverResults') }}</span>
                         </h2>
                     </div>
+
+                    <!-- Filters for Organizer and Game -->
+                    <div v-if="allRaces.length > 0" class="flex flex-wrap items-center gap-3">
+                        <!-- Organizer Filter -->
+                        <div class="flex items-center gap-2 text-sm lg:text-base">
+                            <label class="text-black dark:text-white font-bold whitespace-nowrap">{{ $t('organizer') }}:</label>
+                            <USelectMenu
+                                class="text-sm lg:text-base w-36 sm:w-44 border-2 border-red-900 dark:border-red-900 rounded-md p-1.5 sm:p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                v-model="selectedOrganizerOption"
+                                :items="organizerOptions"
+                                option-attribute="label"
+                            />
+                            <button
+                                v-if="selectedOrganizer !== 'all'"
+                                @click="selectedOrganizer = 'all'"
+                                class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                :title="$t('resetFilter')"
+                            >
+                                <Icon name="mdi:filter-off" mode="svg" />
+                            </button>
+                        </div>
+
+                        <!-- Game Filter -->
+                        <div class="flex items-center gap-2 text-sm lg:text-base">
+                            <label class="text-black dark:text-white font-bold whitespace-nowrap">{{ $t('game') }}:</label>
+                            <USelectMenu
+                                class="text-sm lg:text-base w-36 sm:w-44 border-2 border-red-900 dark:border-red-900 rounded-md p-1.5 sm:p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                                v-model="selectedGameOption"
+                                :items="gameOptions"
+                                option-attribute="label"
+                            />
+                            <button
+                                v-if="selectedGame !== 'all'"
+                                @click="selectedGame = 'all'"
+                                class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                :title="$t('resetFilter')"
+                            >
+                                <Icon name="mdi:filter-off" mode="svg" />
+                            </button>
+                        </div>
+
+                        <!-- Reset Filter Button -->
+                        <button
+                            v-if="selectedOrganizer !== 'all' || selectedGame !== 'all'"
+                            @click="resetResultsFilter"
+                            class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold px-3 py-2 rounded-lg cursor-pointer whitespace-nowrap"
+                        >
+                            {{ $t('resetFilter') }}
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Empty State -->
                 <div v-if="filteredResults.length === 0" class="text-center py-12 border border-dashed border-gray-300 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900">
-                    <p class="text-gray-500 dark:text-gray-400 text-sm lg:text-base">{{ $t('noDriverResults') }}</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-sm lg:text-base">{{ allRaces.length === 0 ? $t('noDriverResults') : $t('noResultsFound') }}</p>
                 </div>
 
                 <!-- Results History Table -->
-                <div v-else class="border border-gray-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-red-900 dark:bg-red-900 text-white text-sm lg:text-base select-none font-bold">
-                                <tr>
-                                    <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('date') }}</th>
-                                    <th class="py-3 px-3 lg:px-4 text-center whitespace-nowrap">{{ $t('events') }}</th>
-                                    <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('class') }}</th>
-                                    <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('season') }}</th>
-                                    <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('round') }}</th>
-                                    <th class="py-3 px-3 lg:px-4 text-center whitespace-nowrap">{{ $t('circuit') }}</th>
-                                    <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('session') }}</th>
-                                    <!-- <th class="py-3 px-2 text-center whitespace-nowrap">{{ $t('grid') }}</th> -->
-                                    <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('position') }}</th>
-                                    <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('points') }}</th>
-                                    <th v-if="hasNoteColumn" class="py-3 px-3 text-center whitespace-nowrap">{{ $t('note') || 'Catatan' }}</th>
-                                </tr>
-                            </thead>
-                            <tbody class="text-sm lg:text-base divide-y divide-gray-200 dark:divide-slate-800">
-                                <tr
-                                    v-for="item in filteredResults"
-                                    :key="item.id"
-                                    @click="navigateToResult(item.scheduleId)"
-                                    :title="item.scheduleId ? $t('viewEventResults') : ''"
-                                    :class="item.scheduleId ? 'cursor-pointer hover:bg-red-50/80 dark:hover:bg-red-950/40' : ''"
-                                    class="border-b border-gray-100 dark:border-slate-900 transition-colors"
-                                >
-                                    <!-- Date -->
-                                    <td class="py-3 px-3 text-center whitespace-nowrap text-black dark:text-white font-medium">
-                                        {{ formatDate(item.date) }}
-                                    </td>
+                <div v-else class="space-y-4">
+                    <div class="border border-gray-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-red-900 dark:bg-red-900 text-white text-sm lg:text-base select-none font-bold">
+                                    <tr>
+                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('date') }}</th>
+                                        <th class="py-3 px-3 lg:px-4 text-center whitespace-nowrap">{{ $t('events') }}</th>
+                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('class') }}</th>
+                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('season') }}</th>
+                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('round') }}</th>
+                                        <th class="py-3 px-3 lg:px-4 text-center whitespace-nowrap">{{ $t('circuit') }}</th>
+                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('session') }}</th>
+                                        <!-- <th class="py-3 px-2 text-center whitespace-nowrap">{{ $t('grid') }}</th> -->
+                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('position') }}</th>
+                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('points') }}</th>
+                                        <th v-if="hasNoteColumn" class="py-3 px-3 text-center whitespace-nowrap">{{ $t('note') || 'Catatan' }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-sm lg:text-base divide-y divide-gray-200 dark:divide-slate-800">
+                                    <tr
+                                        v-for="item in paginatedResults"
+                                        :key="item.id"
+                                        @click="navigateToResult(item.scheduleId)"
+                                        :title="item.scheduleId ? $t('viewEventResults') : ''"
+                                        :class="item.scheduleId ? 'cursor-pointer hover:bg-red-50/80 dark:hover:bg-red-950/40' : ''"
+                                        class="border-b border-gray-100 dark:border-slate-900 transition-colors"
+                                    >
+                                        <!-- Date -->
+                                        <td class="py-3 px-3 text-center whitespace-nowrap text-black dark:text-white font-medium">
+                                            {{ formatDate(item.date) }}
+                                        </td>
 
-                                    <!-- Event -->
-                                    <td class="py-3 px-3 lg:px-4 whitespace-nowrap font-bold">
-                                        <div class="flex items-center gap-1.5 flex-wrap">
-                                            <UModal v-if="item.organizerAbbr" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
-                                                <button
-                                                    type="button"
-                                                    :class="getOrganizerStyle(item.organizerAbbr)"
-                                                    class="text-[10px] lg:text-xs"
-                                                    @click.stop="setOrganizationByAbbr(item.organizerAbbr)"
-                                                >
-                                                    {{ item.organizerAbbr }}
-                                                </button>
-                                                <template #content>
-                                                    <ModalOrganization />
-                                                </template>
-                                            </UModal>
-                                            <UModal v-if="item.gameAbbr" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
-                                                <button
-                                                    type="button"
-                                                    :class="getGameStyle(item.gameAbbr)"
-                                                    class="text-[10px] lg:text-xs"
-                                                    @click.stop="setGameByAbbr(item.gameAbbr)"
-                                                >
-                                                    {{ item.gameAbbr }}
-                                                </button>
-                                                <template #content>
-                                                    <ModalGame />
-                                                </template>
-                                            </UModal>
-                                            <span>{{ item.eventName }}</span>
-                                        </div>
-                                    </td>
+                                        <!-- Event -->
+                                        <td class="py-3 px-3 lg:px-4 whitespace-nowrap font-bold">
+                                            <div class="flex items-center gap-1.5 flex-wrap">
+                                                <UModal v-if="item.organizerAbbr" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                                                    <button
+                                                        type="button"
+                                                        :class="getOrganizerStyle(item.organizerAbbr)"
+                                                        class="text-[10px] lg:text-xs"
+                                                        @click.stop="setOrganizationByAbbr(item.organizerAbbr)"
+                                                    >
+                                                        {{ item.organizerAbbr }}
+                                                    </button>
+                                                    <template #content>
+                                                        <ModalOrganization />
+                                                    </template>
+                                                </UModal>
+                                                <UModal v-if="item.gameAbbr" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                                                    <button
+                                                        type="button"
+                                                        :class="getGameStyle(item.gameAbbr)"
+                                                        class="text-[10px] lg:text-xs"
+                                                        @click.stop="setGameByAbbr(item.gameAbbr)"
+                                                    >
+                                                        {{ item.gameAbbr }}
+                                                    </button>
+                                                    <template #content>
+                                                        <ModalGame />
+                                                    </template>
+                                                </UModal>
+                                                <span>{{ item.eventName }}</span>
+                                            </div>
+                                        </td>
 
-                                    <!-- Class (filled if multiclass) -->
-                                    <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
-                                        <span v-if="item.className && item.className !== '-'" class="text-black dark:text-white">
-                                            {{ item.className }}
-                                        </span>
-                                        <span v-else></span>
-                                    </td>
-
-                                    <!-- Season -->
-                                    <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
-                                        <span v-if="item.season">{{ item.season }}</span>
-                                        <span v-else class="text-gray-400">-</span>
-                                    </td>
-
-                                    <!-- Round -->
-                                    <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
-                                        <span v-if="item.round !== null && item.round !== undefined">{{ item.round }}</span>
-                                        <span v-else class="text-gray-400">-</span>
-                                    </td>
-
-                                    <!-- Circuit -->
-                                    <td class="py-3 px-3 lg:px-4 whitespace-nowrap">
-                                        <div class="flex items-center gap-1.5">
-                                            <Icon
-                                                v-if="getCircuitCountryCode(item.country)"
-                                                :name="`flag-${getCircuitCountryCode(item.country)}-4x3`"
-                                                mode="svg"
-                                                class="w-4 h-3 rounded-xs shrink-0"
-                                            />
-                                            <Icon
-                                                v-if="getCircuitCountryCode(item.country_2)"
-                                                :name="`flag-${getCircuitCountryCode(item.country_2)}-4x3`"
-                                                mode="svg"
-                                                class="w-4 h-3 rounded-xs shrink-0"
-                                            />
-                                            <span class="font-medium text-black dark:text-white">
-                                                {{ item.circuit }}
+                                        <!-- Class (filled if multiclass) -->
+                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
+                                            <span v-if="item.className && item.className !== '-'" class="text-black dark:text-white">
+                                                {{ item.className }}
                                             </span>
-                                        </div>
-                                    </td>
+                                            <span v-else></span>
+                                        </td>
 
-                                    <!-- Session Type -->
-                                    <td class="py-3 px-3 text-center whitespace-nowrap font-medium text-black dark:text-white">
-                                        {{ getSessionLabel(item.sessionType) }}
-                                    </td>
+                                        <!-- Season -->
+                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
+                                            <span v-if="item.season">{{ item.season }}</span>
+                                            <span v-else class="text-gray-400">-</span>
+                                        </td>
 
-                                    <!-- Grid Position -->
-                                    <!-- <td class="py-3 px-2 text-center whitespace-nowrap font-medium text-gray-600 dark:text-gray-400">
-                                        <span v-if="item.gridPosition > 0">
-                                            P{{ item.gridPosition }}
-                                        </span>
-                                        <span v-else>-</span>
-                                    </td> -->
+                                        <!-- Round -->
+                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
+                                            <span v-if="item.round !== null && item.round !== undefined">{{ item.round }}</span>
+                                            <span v-else class="text-gray-400">-</span>
+                                        </td>
 
-                                    <!-- Finish Position (with Pole Position 'P' and Fastest Lap 'F' superscripts) -->
-                                    <td class="py-3 px-3 text-center whitespace-nowrap font-bold">
-                                        <span :class="getPositionBadge(item).class" class="relative inline-flex items-center justify-center">
-                                            <span>{{ getPositionBadge(item).label }}</span>
-                                            <sup v-if="item.isPole" class="font-medium text-[10px] lg:text-xs ml-0.5">P</sup>
-                                            <sup v-if="item.isFastestLap" class="font-medium text-[10px] lg:text-xs ml-0.5">F</sup>
-                                        </span>
-                                    </td>
+                                        <!-- Circuit -->
+                                        <td class="py-3 px-3 lg:px-4 whitespace-nowrap">
+                                            <div class="flex items-center gap-1.5">
+                                                <Icon
+                                                    v-if="getCircuitCountryCode(item.country)"
+                                                    :name="`flag-${getCircuitCountryCode(item.country)}-4x3`"
+                                                    mode="svg"
+                                                    class="w-4 h-3 rounded-xs shrink-0"
+                                                />
+                                                <Icon
+                                                    v-if="getCircuitCountryCode(item.country_2)"
+                                                    :name="`flag-${getCircuitCountryCode(item.country_2)}-4x3`"
+                                                    mode="svg"
+                                                    class="w-4 h-3 rounded-xs shrink-0"
+                                                />
+                                                <span class="font-medium text-black dark:text-white">
+                                                    {{ item.circuit }}
+                                                </span>
+                                            </div>
+                                        </td>
 
-                                    <!-- Points -->
-                                    <td class="py-3 px-3 text-center whitespace-nowrap font-bold">
-                                        <span v-if="!item.isWildcard && !item.noPoints && item.points > 0" class="text-emerald-700 dark:text-emerald-400">
-                                            +{{ item.points }}
-                                        </span>
-                                        <span v-else></span>
-                                    </td>
+                                        <!-- Session Type -->
+                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium text-black dark:text-white">
+                                            {{ getSessionLabel(item.sessionType) }}
+                                        </td>
 
-                                    <!-- Note (Catatan) -->
-                                    <td v-if="hasNoteColumn" class="py-3 px-3 text-center whitespace-nowrap font-medium text-black dark:text-white">
-                                        <span v-if="item.isWildcard">{{ $t('wildcard') || 'Wildcard' }}</span>
-                                        <span v-else-if="item.noPoints">{{ $t('noPoints') || 'No Pts' }}</span>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                                        <!-- Grid Position -->
+                                        <!-- <td class="py-3 px-2 text-center whitespace-nowrap font-medium text-gray-600 dark:text-gray-400">
+                                            <span v-if="item.gridPosition > 0">
+                                                P{{ item.gridPosition }}
+                                            </span>
+                                            <span v-else>-</span>
+                                        </td> -->
+
+                                        <!-- Finish Position (with Pole Position 'P' and Fastest Lap 'F' superscripts) -->
+                                        <td class="py-3 px-3 text-center whitespace-nowrap font-bold">
+                                            <span :class="getPositionBadge(item).class" class="relative inline-flex items-center justify-center">
+                                                <span>{{ getPositionBadge(item).label }}</span>
+                                                <sup v-if="item.isPole" class="font-medium text-[10px] lg:text-xs ml-0.5">P</sup>
+                                                <sup v-if="item.isFastestLap" class="font-medium text-[10px] lg:text-xs ml-0.5">F</sup>
+                                            </span>
+                                        </td>
+
+                                        <!-- Points -->
+                                        <td class="py-3 px-3 text-center whitespace-nowrap font-bold">
+                                            <span v-if="!item.isWildcard && !item.noPoints && item.points > 0" class="text-emerald-700 dark:text-emerald-400">
+                                                +{{ item.points }}
+                                            </span>
+                                            <span v-else></span>
+                                        </td>
+
+                                        <!-- Note (Catatan) -->
+                                        <td v-if="hasNoteColumn" class="py-3 px-3 text-center whitespace-nowrap font-medium text-black dark:text-white">
+                                            <span v-if="item.isWildcard">{{ $t('wildcard') || 'Wildcard' }}</span>
+                                            <span v-else-if="item.noPoints">{{ $t('noPoints') || 'No Pts' }}</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Pagination Controls -->
+                    <div v-if="totalPages > 1 || filteredResults.length > 10" class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+                        <div class="flex items-center gap-2 text-sm lg:text-base text-black dark:text-white">
+                            <span class="font-bold">{{ $t('perPage') }}:</span>
+                            <select
+                                v-model.number="itemsPerPage"
+                                class="border border-red-900/50 dark:border-red-900 rounded-md px-2 py-1 bg-red-50 dark:bg-slate-950 text-black dark:text-white cursor-pointer text-sm lg:text-base font-bold"
+                            >
+                                <option :value="10">10</option>
+                                <option :value="25">25</option>
+                                <option :value="50">50</option>
+                            </select>
+                        </div>
+                        <div v-if="totalPages > 1" class="flex justify-center items-center gap-2">
+                            <div class="flex gap-2">
+                                <button 
+                                    @click="goToPage(1)" 
+                                    :disabled="currentPage === 1"
+                                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                >
+                                    <Icon name="material-symbols:first-page" mode="svg" />
+                                </button>
+                                <button 
+                                    @click="goToPage(currentPage - 1)" 
+                                    :disabled="currentPage === 1"
+                                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                >
+                                    <Icon name="material-symbols:arrow-back-ios" mode="svg" />
+                                </button>
+                            </div>
+                            <span class="px-3 py-1 font-bold text-sm lg:text-base text-black dark:text-white">{{ currentPage }} / {{ totalPages }}</span>
+                            <div class="flex gap-2">
+                                <button 
+                                    @click="goToPage(currentPage + 1)" 
+                                    :disabled="currentPage === totalPages"
+                                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                >
+                                    <Icon name="material-symbols:arrow-forward-ios" mode="svg" />
+                                </button>
+                                <button 
+                                    @click="goToPage(totalPages)" 
+                                    :disabled="currentPage === totalPages"
+                                    class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                                >
+                                    <Icon name="material-symbols:last-page" mode="svg" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
