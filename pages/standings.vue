@@ -57,6 +57,7 @@
                             id,
                             name,
                             organizers (
+                                id,
                                 abbreviation,
                                 name
                             )
@@ -87,11 +88,11 @@
         }
     })
 
-    // 4 separate filter state fields: Event, Season, Class, Standings Type
+    // 4 separate filter state fields: Organizer, Event, Season, Class
+    const selectedOrganizerId = ref(null)
     const selectedEventId = ref(null)
     const selectedSeasonId = ref(null)
     const selectedClassKey = ref("overall")
-    const selectedType = ref("driver")
 
     const getSeasonLabel = (season) => {
         if (!season) return ""
@@ -99,19 +100,45 @@
         return `${eventName} S${season.season_number}`
     }
 
-    // Available Events
+    // Available Organizers
+    const availableOrganizers = computed(() => {
+        const map = new Map()
+        for (const champ of championships.value || []) {
+            const ev = champ.seasons?.events
+            const org = ev?.organizers
+            if (!org) continue
+            const key = org.id ? String(org.id) : (org.abbreviation || org.name)
+            if (!key) continue
+            if (!map.has(key)) {
+                const name = org.name?.trim() || org.abbreviation?.trim() || "Organizer"
+                map.set(key, {
+                    id: key,
+                    name,
+                    abbreviation: org.abbreviation?.trim() || "",
+                    label: name
+                })
+            }
+        }
+        return [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
+    })
+
+    // Available Events for the selected organizer
     const availableEvents = computed(() => {
         const map = new Map()
         for (const champ of championships.value || []) {
             const ev = champ.seasons?.events
-            if (ev && !map.has(ev.id)) map.set(ev.id, ev)
+            if (!ev) continue
+            if (selectedOrganizerId.value) {
+                const org = ev.organizers
+                const orgKey = org?.id ? String(org.id) : (org?.abbreviation || org?.name)
+                if (orgKey !== String(selectedOrganizerId.value)) continue
+            }
+            if (!map.has(ev.id)) map.set(ev.id, ev)
         }
         return [...map.values()].sort((a, b) => {
-            const orgA = a.organizers?.abbreviation || a.organizers?.name || ""
-            const orgB = b.organizers?.abbreviation || b.organizers?.name || ""
-            const fullA = `${orgA} ${a.name}`.trim()
-            const fullB = `${orgB} ${b.name}`.trim()
-            return fullA.localeCompare(fullB)
+            const nameA = a.name || ""
+            const nameB = b.name || ""
+            return nameA.localeCompare(nameB)
         })
     })
 
@@ -126,24 +153,12 @@
         return [...map.values()].sort((a, b) => (b.season_number || 0) - (a.season_number || 0))
     })
 
-    // Available Standings Types for selected event + season (independent of class so Team Standings is never hidden)
-    const availableTypes = computed(() => {
-        const set = new Set()
-        for (const champ of championships.value || []) {
-            if (selectedEventId.value && champ.seasons?.events?.id !== selectedEventId.value) continue
-            if (selectedSeasonId.value && champ.season_id !== selectedSeasonId.value) continue
-            if (champ.standings_type) set.add(champ.standings_type)
-        }
-        return [...set]
-    })
-
-    // Available Classes for selected event + season + standings type
+    // Available Classes for selected event + season
     const availableClasses = computed(() => {
         const map = new Map()
         for (const champ of championships.value || []) {
             if (selectedEventId.value && champ.seasons?.events?.id !== selectedEventId.value) continue
             if (selectedSeasonId.value && champ.season_id !== selectedSeasonId.value) continue
-            if (selectedType.value && champ.standings_type !== selectedType.value) continue
             const key = champ.class_id ? String(champ.class_id) : "overall"
             const label = champ.classes?.name || "Overall"
             if (!map.has(key)) map.set(key, { value: key, label })
@@ -151,7 +166,17 @@
         return [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
     })
 
-    // Automatic cascade of filters: Event -> Season -> Type -> Class
+    // Automatic cascade of filters: Organizer -> Event -> Season -> Class
+    watchEffect(() => {
+        if (availableOrganizers.value.length > 0) {
+            if (!selectedOrganizerId.value || !availableOrganizers.value.some(o => o.id === selectedOrganizerId.value)) {
+                selectedOrganizerId.value = availableOrganizers.value[0].id
+            }
+        } else {
+            selectedOrganizerId.value = null
+        }
+    })
+
     watchEffect(() => {
         if (availableEvents.value.length > 0) {
             if (!selectedEventId.value || !availableEvents.value.some(e => e.id === selectedEventId.value)) {
@@ -173,16 +198,6 @@
     })
 
     watchEffect(() => {
-        if (availableTypes.value.length > 0) {
-            if (!selectedType.value || !availableTypes.value.includes(selectedType.value)) {
-                selectedType.value = availableTypes.value[0]
-            }
-        } else {
-            selectedType.value = "driver"
-        }
-    })
-
-    watchEffect(() => {
         if (availableClasses.value.length > 0) {
             if (!selectedClassKey.value || !availableClasses.value.some(c => c.value === selectedClassKey.value)) {
                 selectedClassKey.value = availableClasses.value[0].value
@@ -193,14 +208,14 @@
     })
 
     const selectedChampionship = computed(() => {
-        return (championships.value || []).find(c => {
+        const matches = (championships.value || []).filter(c => {
             const matchesEvent = !selectedEventId.value || c.seasons?.events?.id === selectedEventId.value
             const matchesSeason = !selectedSeasonId.value || c.season_id === selectedSeasonId.value
             const key = c.class_id ? String(c.class_id) : "overall"
             const matchesClass = key === selectedClassKey.value
-            const matchesType = c.standings_type === selectedType.value
-            return matchesEvent && matchesSeason && matchesClass && matchesType
-        }) || null
+            return matchesEvent && matchesSeason && matchesClass
+        })
+        return matches.find(c => c.standings_type === "driver") || matches[0] || null
     })
 
     const selectedChampionshipId = computed(() => selectedChampionship.value?.id || "")
@@ -997,7 +1012,7 @@
     watch(selectedChampionshipId, fetchStandings, { immediate: true })
 
     // Championships store one standings type, so the table follows it.
-    const entityType = computed(() => selectedChampionship.value?.standings_type || selectedType.value || "driver")
+    const entityType = computed(() => selectedChampionship.value?.standings_type || "driver")
 
     // Countback comparison helper
     const compareFinishPositions = (posA, posB) => {
@@ -1166,12 +1181,33 @@
         return new Date(Math.max(...stamps))
     })
 
+    const organizerSelectOptions = computed(() => {
+        return availableOrganizers.value.map(org => ({
+            value: org.id,
+            label: org.label
+        }))
+    })
+
+    const selectedOrganizerOption = computed({
+        get() {
+            return organizerSelectOptions.value.find(o => o.value === selectedOrganizerId.value) || organizerSelectOptions.value[0] || null
+        },
+        set(val) {
+            if (!val) {
+                selectedOrganizerId.value = null
+            } else if (typeof val === "object" && "value" in val) {
+                selectedOrganizerId.value = val.value
+            } else {
+                selectedOrganizerId.value = val
+            }
+        }
+    })
+
     const eventSelectOptions = computed(() => {
-        return availableEvents.value.map(ev => {
-            const org = ev.organizers?.abbreviation || ev.organizers?.name || ""
-            const label = org ? `${org} ${ev.name}` : ev.name
-            return { value: ev.id, label }
-        })
+        return availableEvents.value.map(ev => ({
+            value: ev.id,
+            label: ev.name
+        }))
     })
 
     const selectedEventOption = computed({
@@ -1179,7 +1215,13 @@
             return eventSelectOptions.value.find(o => o.value === selectedEventId.value) || eventSelectOptions.value[0] || null
         },
         set(val) {
-            selectedEventId.value = val ? val.value : null
+            if (!val) {
+                selectedEventId.value = null
+            } else if (typeof val === "object" && "value" in val) {
+                selectedEventId.value = val.value
+            } else {
+                selectedEventId.value = val
+            }
         }
     })
 
@@ -1195,7 +1237,13 @@
             return seasonSelectOptions.value.find(o => o.value === selectedSeasonId.value) || seasonSelectOptions.value[0] || null
         },
         set(val) {
-            selectedSeasonId.value = val ? val.value : null
+            if (!val) {
+                selectedSeasonId.value = null
+            } else if (typeof val === "object" && "value" in val) {
+                selectedSeasonId.value = val.value
+            } else {
+                selectedSeasonId.value = val
+            }
         }
     })
 
@@ -1206,23 +1254,13 @@
             return classSelectOptions.value.find(o => o.value === selectedClassKey.value) || classSelectOptions.value[0] || null
         },
         set(val) {
-            selectedClassKey.value = val ? val.value : "overall"
-        }
-    })
-
-    const typeSelectOptions = computed(() => {
-        return availableTypes.value.map(type => ({
-            value: type,
-            label: type === "driver" ? t("driverStandings") : t("teamStandings")
-        }))
-    })
-
-    const selectedTypeOption = computed({
-        get() {
-            return typeSelectOptions.value.find(o => o.value === selectedType.value) || typeSelectOptions.value[0] || null
-        },
-        set(val) {
-            selectedType.value = val ? val.value : "driver"
+            if (!val) {
+                selectedClassKey.value = "overall"
+            } else if (typeof val === "object" && "value" in val) {
+                selectedClassKey.value = val.value
+            } else {
+                selectedClassKey.value = val
+            }
         }
     })
 
@@ -1302,8 +1340,21 @@
 
         <!-- Filters Section -->
         <div class="mx-auto flex flex-col justify-center items-center gap-4">
-            <!-- Row 1: Event and Season -->
+            <!-- Row 1: Organizer and Event -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- Organizer Filter -->
+                <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
+                    <label class="text-black dark:text-white font-bold">{{ $t('organizer') }}</label>
+                    <div class="flex items-center gap-2">
+                        <USelectMenu
+                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            v-model="selectedOrganizerOption"
+                            :items="organizerSelectOptions"
+                            option-attribute="label"
+                        />
+                    </div>
+                </div>
+
                 <!-- Event Filter -->
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('events') }}</label>
@@ -1316,7 +1367,10 @@
                         />
                     </div>
                 </div>
+            </div>
 
+            <!-- Row 2: Season and Class -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <!-- Season Filter -->
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('season') }}</label>
@@ -1329,10 +1383,7 @@
                         />
                     </div>
                 </div>
-            </div>
 
-            <!-- Row 2: Class and Standings Type -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <!-- Class Filter -->
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('class') }}</label>
@@ -1341,19 +1392,6 @@
                             class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                             v-model="selectedClassOption"
                             :items="classSelectOptions"
-                            option-attribute="label"
-                        />
-                    </div>
-                </div>
-
-                <!-- Type Filter -->
-                <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
-                    <label class="text-black dark:text-white font-bold">{{ $t('standingsType') }}</label>
-                    <div class="flex items-center gap-2">
-                        <USelectMenu
-                            class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                            v-model="selectedTypeOption"
-                            :items="typeSelectOptions"
                             option-attribute="label"
                         />
                     </div>

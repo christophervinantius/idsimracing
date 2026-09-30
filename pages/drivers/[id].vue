@@ -973,81 +973,73 @@
     })
 
     // Organizer filter options from driver's races
-    const selectedOrganizer = ref("all")
-    const organizerOptions = computed(() => {
-        const list = [{ value: "all", label: t("all") }]
+    const organizerList = computed(() => {
         const foundOrgs = new Set()
         for (const r of allRaces.value) {
             if (r.organizerAbbr) {
                 foundOrgs.add(r.organizerAbbr)
             }
         }
-        const sorted = [...foundOrgs].sort()
-        for (const val of sorted) {
-            list.push({ value: val, label: val })
-        }
-        return list
+        return [...foundOrgs].sort()
     })
-
-    const selectedOrganizerOption = computed({
+    const selectedOrganizers = ref([])
+    const orderedSelectedOrganizers = computed({
         get() {
-            return organizerOptions.value.find(o => o.value === selectedOrganizer.value) || organizerOptions.value[0]
+            return organizerList.value.filter(o => selectedOrganizers.value.includes(o))
         },
         set(val) {
-            if (!val) {
-                selectedOrganizer.value = "all"
-            } else if (typeof val === "object" && "value" in val) {
-                selectedOrganizer.value = val.value || "all"
-            } else {
-                selectedOrganizer.value = String(val)
-            }
+            selectedOrganizers.value = val || []
         }
     })
 
     // Game filter options from driver's races
-    const selectedGame = ref("all")
-    const gameOptions = computed(() => {
-        const list = [{ value: "all", label: t("all") }]
+    const gameList = computed(() => {
         const foundGames = new Set()
         for (const r of allRaces.value) {
             if (r.gameAbbr) {
                 foundGames.add(r.gameAbbr)
             }
         }
-        const sorted = [...foundGames].sort()
-        for (const val of sorted) {
-            list.push({ value: val, label: val })
-        }
-        return list
+        return [...foundGames].sort()
     })
-
-    const selectedGameOption = computed({
+    const selectedGames = ref([])
+    const orderedSelectedGames = computed({
         get() {
-            return gameOptions.value.find(o => o.value === selectedGame.value) || gameOptions.value[0]
+            return gameList.value.filter(g => selectedGames.value.includes(g))
         },
         set(val) {
-            if (!val) {
-                selectedGame.value = "all"
-            } else if (typeof val === "object" && "value" in val) {
-                selectedGame.value = val.value || "all"
-            } else {
-                selectedGame.value = String(val)
-            }
+            selectedGames.value = val || []
         }
     })
 
+    // Initialize with all items selected by default
+    if (allRaces.value.length > 0) {
+        selectedOrganizers.value = [...organizerList.value]
+        selectedGames.value = [...gameList.value]
+    }
+    watch(organizerList, (newOrgs) => {
+        if (selectedOrganizers.value.length === 0 && newOrgs.length > 0) {
+            selectedOrganizers.value = [...newOrgs]
+        }
+    }, { immediate: true })
+    watch(gameList, (newGames) => {
+        if (selectedGames.value.length === 0 && newGames.length > 0) {
+            selectedGames.value = [...newGames]
+        }
+    }, { immediate: true })
+
     const resetResultsFilter = () => {
-        selectedOrganizer.value = "all"
-        selectedGame.value = "all"
+        selectedOrganizers.value = [...organizerList.value]
+        selectedGames.value = [...gameList.value]
         currentPage.value = 1
     }
 
     const filteredResults = computed(() => {
         return allRaces.value.filter(r => {
-            if (selectedOrganizer.value !== "all" && r.organizerAbbr !== selectedOrganizer.value) {
+            if (!selectedOrganizers.value.includes(r.organizerAbbr)) {
                 return false
             }
-            if (selectedGame.value !== "all" && r.gameAbbr !== selectedGame.value) {
+            if (!selectedGames.value.includes(r.gameAbbr)) {
                 return false
             }
             return true
@@ -1058,7 +1050,7 @@
     const currentPage = ref(1)
     const itemsPerPage = ref(10)
 
-    watch([selectedOrganizer, selectedGame, itemsPerPage], () => {
+    watch([selectedOrganizers, selectedGames, itemsPerPage], () => {
         currentPage.value = 1
     })
 
@@ -1279,6 +1271,34 @@
         if (sessType === "race_1" || sessType === "r1") return t("race1")
         if (sessType === "race_2" || sessType === "r2") return t("race2")
         return t("race")
+    }
+
+    // Event & Circuit display formatters for results history
+    const getEventDisplay = (item) => {
+        if (!item.eventName) return "-"
+        if (item.season !== null && item.season !== undefined && String(item.season).trim() !== "") {
+            const s = String(item.season).trim().replace(/^season\s*/i, "")
+            const seasonTag = s.toUpperCase().startsWith("S") ? s.toUpperCase() : `S${s}`
+            return `${item.eventName} (${seasonTag})`
+        }
+        return item.eventName
+    }
+
+    const getCircuitDisplay = (item) => {
+        let circuitName = item.circuit || "-"
+        let text = circuitName
+        if (item.round !== null && item.round !== undefined && String(item.round).trim() !== "") {
+            const r = String(item.round).trim()
+            const roundNum = r.replace(/^round\s*/i, "").replace(/^r/i, "").trim()
+            text = `R${roundNum}: ${circuitName}`
+        }
+        const st = String(item.sessionType || "").toLowerCase().trim()
+        if (st === "race_1" || st === "race1" || st === "r1") {
+            text = `${text} (${t("race1") || "Race 1"})`
+        } else if (st === "race_2" || st === "race2" || st === "r2") {
+            text = `${text} (${t("race2") || "Race 2"})`
+        }
+        return text
     }
 
     const navigateToResult = (scheduleId) => {
@@ -1631,16 +1651,16 @@
                     <div v-if="allRaces.length > 0" class="flex flex-wrap items-center gap-3">
                         <!-- Organizer Filter -->
                         <div class="flex items-center gap-2 text-sm lg:text-base">
-                            <label class="text-black dark:text-white font-bold whitespace-nowrap">{{ $t('organizer') }}:</label>
+                            <label class="text-black dark:text-white font-bold whitespace-nowrap">{{ $t('organizer') }}</label>
                             <USelectMenu
                                 class="text-sm lg:text-base w-36 sm:w-44 border-2 border-red-900 dark:border-red-900 rounded-md p-1.5 sm:p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                                v-model="selectedOrganizerOption"
-                                :items="organizerOptions"
-                                option-attribute="label"
+                                v-model="orderedSelectedOrganizers"
+                                :items="organizerList"
+                                multiple
                             />
                             <button
-                                v-if="selectedOrganizer !== 'all'"
-                                @click="selectedOrganizer = 'all'"
+                                @click="selectedOrganizers = []"
+                                :disabled="selectedOrganizers.length === 0"
                                 class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                                 :title="$t('resetFilter')"
                             >
@@ -1650,16 +1670,16 @@
 
                         <!-- Game Filter -->
                         <div class="flex items-center gap-2 text-sm lg:text-base">
-                            <label class="text-black dark:text-white font-bold whitespace-nowrap">{{ $t('game') }}:</label>
+                            <label class="text-black dark:text-white font-bold whitespace-nowrap">{{ $t('game') }}</label>
                             <USelectMenu
                                 class="text-sm lg:text-base w-36 sm:w-44 border-2 border-red-900 dark:border-red-900 rounded-md p-1.5 sm:p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                                v-model="selectedGameOption"
-                                :items="gameOptions"
-                                option-attribute="label"
+                                v-model="orderedSelectedGames"
+                                :items="gameList"
+                                multiple
                             />
                             <button
-                                v-if="selectedGame !== 'all'"
-                                @click="selectedGame = 'all'"
+                                @click="selectedGames = []"
+                                :disabled="selectedGames.length === 0"
                                 class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                                 :title="$t('resetFilter')"
                             >
@@ -1669,7 +1689,7 @@
 
                         <!-- Reset Filter Button -->
                         <button
-                            v-if="selectedOrganizer !== 'all' || selectedGame !== 'all'"
+                            v-if="selectedOrganizers.length < organizerList.length || selectedGames.length < gameList.length"
                             @click="resetResultsFilter"
                             class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold px-3 py-2 rounded-lg cursor-pointer whitespace-nowrap"
                         >
@@ -1692,11 +1712,8 @@
                                     <tr>
                                         <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('date') }}</th>
                                         <th class="py-3 px-3 lg:px-4 text-center whitespace-nowrap">{{ $t('events') }}</th>
-                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('class') }}</th>
-                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('season') }}</th>
-                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('round') }}</th>
                                         <th class="py-3 px-3 lg:px-4 text-center whitespace-nowrap">{{ $t('circuit') }}</th>
-                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('session') }}</th>
+                                        <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('class') }}</th>
                                         <!-- <th class="py-3 px-2 text-center whitespace-nowrap">{{ $t('grid') }}</th> -->
                                         <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('position') }}</th>
                                         <th class="py-3 px-3 text-center whitespace-nowrap">{{ $t('points') }}</th>
@@ -1746,28 +1763,8 @@
                                                         <ModalGame />
                                                     </template>
                                                 </UModal>
-                                                <span>{{ item.eventName }}</span>
+                                                <span>{{ getEventDisplay(item) }}</span>
                                             </div>
-                                        </td>
-
-                                        <!-- Class (filled if multiclass) -->
-                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
-                                            <span v-if="item.className && item.className !== '-'" class="text-black dark:text-white">
-                                                {{ item.className }}
-                                            </span>
-                                            <span v-else></span>
-                                        </td>
-
-                                        <!-- Season -->
-                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
-                                            <span v-if="item.season">{{ item.season }}</span>
-                                            <span v-else class="text-gray-400">-</span>
-                                        </td>
-
-                                        <!-- Round -->
-                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
-                                            <span v-if="item.round !== null && item.round !== undefined">{{ item.round }}</span>
-                                            <span v-else class="text-gray-400">-</span>
                                         </td>
 
                                         <!-- Circuit -->
@@ -1786,14 +1783,17 @@
                                                     class="w-4 h-3 rounded-xs shrink-0"
                                                 />
                                                 <span class="font-medium text-black dark:text-white">
-                                                    {{ item.circuit }}
+                                                    {{ getCircuitDisplay(item) }}
                                                 </span>
                                             </div>
                                         </td>
 
-                                        <!-- Session Type -->
-                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium text-black dark:text-white">
-                                            {{ getSessionLabel(item.sessionType) }}
+                                        <!-- Class (filled if multiclass) -->
+                                        <td class="py-3 px-3 text-center whitespace-nowrap font-medium">
+                                            <span v-if="item.className && item.className !== '-'" class="text-black dark:text-white">
+                                                {{ item.className }}
+                                            </span>
+                                            <span v-else></span>
                                         </td>
 
                                         <!-- Grid Position -->

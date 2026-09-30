@@ -127,28 +127,85 @@
         })
     }
 
+    const selectedOrganizers = ref([])
     const selectedEvents = ref([])
-    const selectedMonths = ref([])
     const selectedYears = ref([])
+    const totalOrganizers = ref(0)
     const totalEvents = ref(0)
-    const totalMonths = ref(0)
     const totalYears = ref(0)
     const selectedStatus = ref("Mendatang")
 
-    const getEventFullName = (item) => {
-        const orgAbbr = item.events?.organizers?.abbreviation
-        const eventName = item.events?.name || ""
-        return orgAbbr ? `${orgAbbr} ${eventName}` : eventName
+    const getOrganizerName = (item) => {
+        const org = Array.isArray(item.events?.organizers) ? item.events.organizers[0] : item.events?.organizers
+        if (!org) return ""
+        return org.name?.trim() || org.abbreviation?.trim() || ""
     }
+
+    const getEventFullName = (item) => {
+        return item.events?.name || ""
+    }
+
+    const organizerList = computed(() => {
+        if(!schedule.value) return []
+        const orgs = [...new Set(
+            schedule.value.map(item => getOrganizerName(item)).filter(Boolean)
+        )].sort()
+        totalOrganizers.value = orgs.length
+        return orgs
+    })
+
+    const allEventsList = computed(() => {
+        if(!schedule.value) return []
+        return [...new Set(
+            schedule.value.map(item => getEventFullName(item)).filter(Boolean)
+        )].sort()
+    })
 
     const eventList = computed(() => {
         if(!schedule.value) return []
+        const relevantSchedule = schedule.value.filter(item => {
+            const org = getOrganizerName(item)
+            return selectedOrganizers.value.includes(org)
+        })
         const events = [...new Set(
-            schedule.value.map(item => getEventFullName(item)).sort()
-        )]
-        selectedEvents.value = [...new Set(events)]
+            relevantSchedule.map(item => getEventFullName(item)).filter(Boolean)
+        )].sort()
         totalEvents.value = events.length
         return events
+    })
+
+    // Initialize organizers & events with all available items
+    if (schedule.value) {
+        const allOrgs = [...new Set(schedule.value.map(item => getOrganizerName(item)).filter(Boolean))].sort()
+        selectedOrganizers.value = [...allOrgs]
+        totalOrganizers.value = allOrgs.length
+
+        const allEvs = [...new Set(schedule.value.map(item => getEventFullName(item)).filter(Boolean))].sort()
+        selectedEvents.value = [...allEvs]
+        totalEvents.value = allEvs.length
+    }
+
+    // Keep events synchronized when selectedOrganizers changes
+    watch(selectedOrganizers, (newOrgs, oldOrgs = []) => {
+        if (!schedule.value) return
+        const addedOrgs = newOrgs.filter(o => !oldOrgs.includes(o))
+        const removedOrgs = oldOrgs.filter(o => !newOrgs.includes(o))
+
+        const newEventsForAddedOrgs = schedule.value
+            .filter(item => addedOrgs.includes(getOrganizerName(item)))
+            .map(item => getEventFullName(item))
+            .filter(Boolean)
+
+        const removedEventsSet = new Set(
+            schedule.value
+                .filter(item => removedOrgs.includes(getOrganizerName(item)))
+                .map(item => getEventFullName(item))
+                .filter(Boolean)
+        )
+
+        const currentRetained = selectedEvents.value.filter(e => !removedEventsSet.has(e))
+        const combined = [...new Set([...currentRetained, ...newEventsForAddedOrgs])]
+        selectedEvents.value = combined.filter(e => eventList.value.includes(e))
     })
 
     const yearsList = computed(() => {
@@ -162,21 +219,14 @@
         totalYears.value = years.length
         return years
     })
-    
-    const monthsList = computed(() => {
-        if(!schedule.value) return []
-        const monthIndices = [...new Set(
-            schedule.value.map(item => new Date(item.date).getMonth())
-        )].sort((a, b) => a - b)
 
-        const months = monthIndices.map(index => {
-            const date = new Date(2026, index, 1)
-            return date.toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" })
-        })
-
-        selectedMonths.value = [...months]
-        totalMonths.value = months.length
-        return months
+    const orderedSelectedOrganizers = computed({
+        get(){
+            return organizerList.value.filter(org => selectedOrganizers.value.includes(org))
+        },
+        set(newValue){
+            selectedOrganizers.value = newValue
+        }
     })
 
     const orderedSelectedEvents = computed({
@@ -185,15 +235,6 @@
         },
         set(newValue){
             selectedEvents.value = newValue
-        }
-    })
-
-    const orderedSelectedMonths = computed({
-        get(){
-            return monthsList.value.filter(month => selectedMonths.value.includes(month))
-        },
-        set(newValue) {
-            selectedMonths.value = newValue
         }
     })
 
@@ -235,21 +276,32 @@
             attributeFilter: ['class']
         })
 
+        const savedOrganizers = localStorage.getItem("selectedOrganizers")
         const savedEvents = localStorage.getItem("selectedEvents")
-        const savedMonths = localStorage.getItem("selectedMonths")
         const savedYears = localStorage.getItem("selectedYears")
         const savedStatus = localStorage.getItem("selectedStatus")
 
-        if(savedEvents){
-            selectedEvents.value = JSON.parse(savedEvents)
+        if(savedOrganizers){
+            try {
+                const parsed = JSON.parse(savedOrganizers)
+                if(Array.isArray(parsed)) selectedOrganizers.value = parsed
+            } catch(e) {}
         }
 
-        if(savedMonths){
-            selectedMonths.value = JSON.parse(savedMonths)
+        if(savedEvents){
+            try {
+                const parsed = JSON.parse(savedEvents)
+                if(Array.isArray(parsed)) {
+                    selectedEvents.value = parsed.filter(e => eventList.value.includes(e))
+                }
+            } catch(e) {}
         }
         
         if(savedYears){
-            selectedYears.value = JSON.parse(savedYears)
+            try {
+                const parsed = JSON.parse(savedYears)
+                if(Array.isArray(parsed)) selectedYears.value = parsed
+            } catch(e) {}
         }
 
         if(savedStatus){
@@ -259,12 +311,12 @@
         window.addEventListener("scroll", handleScrollTop)
         window.addEventListener("scroll", handleScrollCalendar)
 
-        watch(selectedEvents, (newValue) => {
-            localStorage.setItem("selectedEvents", JSON.stringify(newValue))
+        watch(selectedOrganizers, (newValue) => {
+            localStorage.setItem("selectedOrganizers", JSON.stringify(newValue))
         })
 
-        watch(selectedMonths, (newValue) => {
-            localStorage.setItem("selectedMonths", JSON.stringify(newValue))
+        watch(selectedEvents, (newValue) => {
+            localStorage.setItem("selectedEvents", JSON.stringify(newValue))
         })
 
         watch(selectedYears, (newValue) => {
@@ -283,22 +335,29 @@
 
     const filteredSchedule = computed(() => {
         if(!schedule.value) return []
+        const isMatch = (item) => {
+            const matchesOrganizer = selectedOrganizers.value.includes(getOrganizerName(item))
+            const matchesEvent = selectedEvents.value.includes(getEventFullName(item))
+            const matchesYear = selectedYears.value.includes(new Date(item.date).getFullYear())
+            return matchesOrganizer && matchesEvent && matchesYear
+        }
+
         if(selectedStatus.value === "Semua"){
-            return schedule.value.filter(item => selectedEvents.value.includes(getEventFullName(item)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
+            return schedule.value.filter(item => isMatch(item))
         }else if(selectedStatus.value === "Selesai"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate < todayDate && (selectedEvents.value.includes(getEventFullName(item)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
+                return eventDate < todayDate && isMatch(item)
             })
         }else if(selectedStatus.value === "Mendatang"){
             return schedule.value.filter(item => {
                 const eventDate = new Date(item.finish_date)
                 const todayDate = new Date()
-                return eventDate >= todayDate && (selectedEvents.value.includes(getEventFullName(item)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
+                return eventDate >= todayDate && isMatch(item)
             })
         }
-        return schedule.value.filter(item => selectedEvents.value.includes(getEventFullName(item)) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()))
+        return schedule.value.filter(item => isMatch(item))
     })
 
     const PAGE_SIZE = 12
@@ -316,7 +375,7 @@
         displayCount.value += PAGE_SIZE
     }
 
-    watch([selectedEvents, selectedMonths, selectedYears, selectedStatus], () => {
+    watch([selectedEvents, selectedOrganizers, selectedYears, selectedStatus], () => {
         displayCount.value = PAGE_SIZE
     })
 
@@ -325,23 +384,27 @@
         return schedule.value.filter(item => {
             const eventDate = new Date(item.finish_date)
             const todayDate = new Date()
-            return eventDate >= todayDate && (selectedEvents.value.includes(getEventFullName(item))) && (selectedMonths.value.includes(new Date(item.date).toLocaleString(locale.value === "en" ? "en-US" : "id-ID", { month: "long" }))) && selectedYears.value.includes(new Date(item.date).getFullYear()) && !item.is_postponed
+            return eventDate >= todayDate &&
+                selectedOrganizers.value.includes(getOrganizerName(item)) &&
+                selectedEvents.value.includes(getEventFullName(item)) &&
+                selectedYears.value.includes(new Date(item.date).getFullYear()) &&
+                !item.is_postponed
         }).slice(0, 3)
     })
 
     const clearFilterField = (filterType) => {
         if(filterType === "year"){
             selectedYears.value = []
-        }else if(filterType === "month"){
-            selectedMonths.value = []
+        }else if(filterType === "organizer"){
+            selectedOrganizers.value = []
         }else if(filterType === "event"){
             selectedEvents.value = []
         }
     }
 
     const resetFilter = () => {
-        selectedEvents.value = [...eventList.value]
-        selectedMonths.value = [...monthsList.value]
+        selectedOrganizers.value = [...organizerList.value]
+        selectedEvents.value = [...allEventsList.value]
         selectedYears.value = [...yearsList.value]
         selectedStatus.value = "Mendatang"
     }
@@ -627,16 +690,17 @@
             const itemMonth = new Date(item.date).getMonth()
             const itemYear = new Date(item.date).getFullYear()
             const matchesMonth = itemMonth === tableSelectedMonth.value && itemYear === tableSelectedYear.value
+            const matchesOrganizer = selectedOrganizers.value.includes(getOrganizerName(item))
             const matchesEvent = selectedEvents.value.includes(getEventFullName(item))
             const matchesYear = selectedYears.value.includes(itemYear)
             if(selectedStatus.value === 'Selesai') {
                 const finishDate = new Date(item.finish_date)
-                return matchesMonth && matchesEvent && matchesYear && finishDate < new Date()
+                return matchesMonth && matchesOrganizer && matchesEvent && matchesYear && finishDate < new Date()
             } else if(selectedStatus.value === 'Mendatang') {
                 const finishDate = new Date(item.finish_date)
-                return matchesMonth && matchesEvent && matchesYear && finishDate >= new Date()
+                return matchesMonth && matchesOrganizer && matchesEvent && matchesYear && finishDate >= new Date()
             }
-            return matchesMonth && matchesEvent && matchesYear
+            return matchesMonth && matchesOrganizer && matchesEvent && matchesYear
         })
     })
 
@@ -824,17 +888,17 @@
                         </div>
                     </div>
                     <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
-                        <label class="text-black dark:text-white font-bold">{{ $t('months') }}</label>
+                        <label class="text-black dark:text-white font-bold">{{ $t('organizer') }}</label>
                         <div class="flex items-center gap-2">
                             <USelectMenu
                                 class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                                v-model="orderedSelectedMonths"
-                                :items="monthsList"
+                                v-model="orderedSelectedOrganizers"
+                                :items="organizerList"
                                 multiple
                             />
                             <button 
-                                @click="clearFilterField('month')" 
-                                :disabled="selectedMonths.length === 0"
+                                @click="clearFilterField('organizer')" 
+                                :disabled="selectedOrganizers.length === 0"
                                 class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                             >
                                 <Icon name="mdi:filter-off" mode="svg" />
@@ -875,7 +939,7 @@
                     </div>
                 </div>
                 <div
-                    v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Mendatang' || selectedMonths.length < totalMonths || selectedYears.length < totalYears"
+                    v-if="selectedEvents.length < totalEvents || selectedStatus !== 'Mendatang' || selectedOrganizers.length < totalOrganizers || selectedYears.length < totalYears"
                     class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold px-4 py-2 rounded-lg cursor-pointer" @click="resetFilter">
                     {{ $t('resetFilter') }}
                 </div>

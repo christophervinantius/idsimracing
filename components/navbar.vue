@@ -134,22 +134,22 @@
                     </li>
                     <li>
                         <NuxtLink
-                            to="/standings"
-                            @click="isMenuOpen = false"
-                            class="w-fit flex items-center py-1 hover:opacity-80 transition-opacity"
-                            active-class="underline underline-offset-4"
-                        >
-                            {{ $t('standings') }}
-                        </NuxtLink>
-                    </li>
-                    <li>
-                        <NuxtLink
                             to="/results"
                             @click="isMenuOpen = false"
                             class="w-fit flex items-center py-1 hover:opacity-80 transition-opacity"
                             active-class="underline underline-offset-4"
                         >
                             {{ $t('results') }}
+                        </NuxtLink>
+                    </li>
+                    <li>
+                        <NuxtLink
+                            to="/standings"
+                            @click="isMenuOpen = false"
+                            class="w-fit flex items-center py-1 hover:opacity-80 transition-opacity"
+                            active-class="underline underline-offset-4"
+                        >
+                            {{ $t('standings') }}
                         </NuxtLink>
                     </li>
                     <li>

@@ -578,80 +578,221 @@
                     }
                 }
 
-                items.push({
-                    key: `${sched.id}_${sess.type}`,
-                    scheduleId: sched.id,
-                    sessionType: sess.type,
-                    sessionQuery: sess.queryParam,
-                    sessionLabelKey: sess.labelKey,
-                    fallbackLabel: sess.fallbackLabel,
-                    orderWeight: sess.orderWeight,
-                    date: sched.date,
-                    circuit: sched.circuit,
-                    country: sched.country,
-                    country_2: sched.country_2,
-                    round: sched.round,
-                    season: sched.season,
-                    eventName: sched.events?.name || "-",
-                    organizerAbbr: sched.events?.organizers?.abbreviation || "",
-                    organizerName: sched.events?.organizers?.name || "",
-                    gameAbbr: sched.events?.games?.abbreviation || "",
-                    isProvisional,
-                    isMultiClass,
-                    winners,
-                    resultUrl: `/results/${sched.id}?session=${sess.queryParam}`
-                })
+                if (isMultiClass && winners.length > 0) {
+                    for (let wIdx = 0; wIdx < winners.length; wIdx++) {
+                        const w = winners[wIdx]
+                        items.push({
+                            key: `${sched.id}_${sess.type}_${w.className || wIdx}`,
+                            scheduleId: sched.id,
+                            eventId: sched.events?.id || sched.event_id || "",
+                            sessionType: sess.type,
+                            sessionQuery: sess.queryParam,
+                            sessionLabelKey: sess.labelKey,
+                            fallbackLabel: sess.fallbackLabel,
+                            orderWeight: sess.orderWeight,
+                            classOrder: wIdx,
+                            date: sched.date,
+                            circuit: sched.circuit,
+                            country: sched.country,
+                            country_2: sched.country_2,
+                            round: sched.round,
+                            season: sched.season,
+                            eventName: sched.events?.name || "-",
+                            organizerAbbr: sched.events?.organizers?.abbreviation || "",
+                            organizerName: sched.events?.organizers?.name || sched.events?.organizers?.abbreviation || "",
+                            gameAbbr: sched.events?.games?.abbreviation || "",
+                            isProvisional,
+                            isMultiClass: true,
+                            className: w.className || "-",
+                            winner: w,
+                            resultUrl: `/results/${sched.id}?session=${sess.queryParam}`
+                        })
+                    }
+                } else {
+                    const singleClass = evClasses.length === 1 && evClasses[0].name && evClasses[0].name.toLowerCase() !== 'overall' ? evClasses[0].name : "-"
+                    items.push({
+                        key: `${sched.id}_${sess.type}`,
+                        scheduleId: sched.id,
+                        eventId: sched.events?.id || sched.event_id || "",
+                        sessionType: sess.type,
+                        sessionQuery: sess.queryParam,
+                        sessionLabelKey: sess.labelKey,
+                        fallbackLabel: sess.fallbackLabel,
+                        orderWeight: sess.orderWeight,
+                        classOrder: 0,
+                        date: sched.date,
+                        circuit: sched.circuit,
+                        country: sched.country,
+                        country_2: sched.country_2,
+                        round: sched.round,
+                        season: sched.season,
+                        eventName: sched.events?.name || "-",
+                        organizerAbbr: sched.events?.organizers?.abbreviation || "",
+                        organizerName: sched.events?.organizers?.name || sched.events?.organizers?.abbreviation || "",
+                        gameAbbr: sched.events?.games?.abbreviation || "",
+                        isProvisional,
+                        isMultiClass: false,
+                        className: singleClass,
+                        winner: winners[0] || null,
+                        resultUrl: `/results/${sched.id}?session=${sess.queryParam}`
+                    })
+                }
             }
         }
 
-        // Sort by date descending; if same date, race_2 comes before race_1
+        // Sort by date descending; if same date, race_2 comes before race_1; then by classOrder
         items.sort((a, b) => {
             const timeA = new Date(a.date).getTime() || 0
             const timeB = new Date(b.date).getTime() || 0
             if (timeA !== timeB) {
                 return timeB - timeA
             }
-            return b.orderWeight - a.orderWeight
+            if (b.orderWeight !== a.orderWeight) {
+                return b.orderWeight - a.orderWeight
+            }
+            return (a.classOrder || 0) - (b.classOrder || 0)
         })
 
         return items
     })
 
-    // Organizers list for filter dropdown
-    const organizersList = computed(() => {
+    // 1. Organizer filter
+    const organizerList = computed(() => {
         const orgs = allRaces.value.map(r => r.organizerName).filter(Boolean)
-        const unique = [...new Set(orgs)].sort()
-        return [t("all"), ...unique]
+        return [...new Set(orgs)].sort((a, b) => a.localeCompare(b))
     })
-
-    const selectedOrganizer = ref(t("all"))
-
-    // Status filter options: All, Final, Provisional
-    const statusOptions = computed(() => [
-        { value: "all", label: t("all") },
-        { value: "final", label: t("final") },
-        { value: "provisional", label: t("provisional") }
-    ])
-    const selectedStatus = ref("all")
-    const selectedStatusOption = computed({
+    const selectedOrganizers = ref([])
+    const orderedSelectedOrganizers = computed({
         get() {
-            return statusOptions.value.find(o => o.value === selectedStatus.value) || statusOptions.value[0]
+            return organizerList.value.filter(o => selectedOrganizers.value.includes(o))
         },
         set(val) {
-            if (!val) {
-                selectedStatus.value = "all"
-            } else if (typeof val === "object" && "value" in val) {
-                selectedStatus.value = val.value || "all"
-            } else {
-                selectedStatus.value = String(val)
-            }
+            selectedOrganizers.value = val || []
         }
     })
 
-    // Sort options: Most Recent, Oldest
+    // 2. Event filter (cascading from Organizer)
+    const allEventsList = computed(() => {
+        const events = new Set()
+        for (const race of allRaces.value) {
+            if (race.eventName && race.eventName !== "-") {
+                events.add(race.eventName)
+            }
+        }
+        return [...events].sort((a, b) => a.localeCompare(b))
+    })
+
+    const eventList = computed(() => {
+        const events = new Set()
+        for (const race of allRaces.value) {
+            if (selectedOrganizers.value.includes(race.organizerName)) {
+                if (race.eventName && race.eventName !== "-") {
+                    events.add(race.eventName)
+                }
+            }
+        }
+        return [...events].sort((a, b) => a.localeCompare(b))
+    })
+    const selectedEvents = ref([])
+    const orderedSelectedEvents = computed({
+        get() {
+            return eventList.value.filter(e => selectedEvents.value.includes(e))
+        },
+        set(val) {
+            selectedEvents.value = val || []
+        }
+    })
+
+    // 3. Season filter (cascading from Organizer & Event)
+    const allSeasonsList = computed(() => {
+        const seasons = new Set()
+        for (const race of allRaces.value) {
+            if (race.season !== null && race.season !== undefined && race.season !== "") {
+                seasons.add(String(race.season))
+            }
+        }
+        return [...seasons].sort((a, b) => Number(b) - Number(a)).map(s => `Season ${s}`)
+    })
+
+    const seasonList = computed(() => {
+        const seasons = new Set()
+        for (const race of allRaces.value) {
+            if (selectedOrganizers.value.includes(race.organizerName) && selectedEvents.value.includes(race.eventName)) {
+                if (race.season !== null && race.season !== undefined && race.season !== "") {
+                    seasons.add(String(race.season))
+                }
+            }
+        }
+        return [...seasons].sort((a, b) => Number(b) - Number(a)).map(s => `Season ${s}`)
+    })
+    const selectedSeasons = ref([])
+    const orderedSelectedSeasons = computed({
+        get() {
+            return seasonList.value.filter(s => selectedSeasons.value.includes(s))
+        },
+        set(val) {
+            selectedSeasons.value = val || []
+        }
+    })
+
+    // Initialize all selections with every available item
+    if (allRaces.value.length > 0) {
+        selectedOrganizers.value = [...organizerList.value]
+        selectedEvents.value = [...allEventsList.value]
+        selectedSeasons.value = [...allSeasonsList.value]
+    }
+    watch(organizerList, (newOrgs) => {
+        if (selectedOrganizers.value.length === 0 && newOrgs.length > 0) {
+            selectedOrganizers.value = [...newOrgs]
+        }
+    }, { immediate: true })
+    watch(allEventsList, (newEvents) => {
+        if (selectedEvents.value.length === 0 && newEvents.length > 0) {
+            selectedEvents.value = [...newEvents]
+        }
+    }, { immediate: true })
+    watch(allSeasonsList, (newSeasons) => {
+        if (selectedSeasons.value.length === 0 && newSeasons.length > 0) {
+            selectedSeasons.value = [...newSeasons]
+        }
+    }, { immediate: true })
+
+    // Keep events synchronized when selectedOrganizers changes
+    watch(selectedOrganizers, (newOrgs, oldOrgs = []) => {
+        if (!allRaces.value.length) return
+        const addedOrgs = newOrgs.filter(o => !oldOrgs.includes(o))
+        const removedOrgs = oldOrgs.filter(o => !newOrgs.includes(o))
+
+        const newEventsForAddedOrgs = allRaces.value
+            .filter(r => addedOrgs.includes(r.organizerName))
+            .map(r => r.eventName)
+            .filter(name => name && name !== "-")
+
+        const removedEventsSet = new Set(
+            allRaces.value
+                .filter(r => removedOrgs.includes(r.organizerName))
+                .map(r => r.eventName)
+                .filter(name => name && name !== "-")
+        )
+
+        const currentRetained = selectedEvents.value.filter(e => !removedEventsSet.has(e))
+        const combined = [...new Set([...currentRetained, ...newEventsForAddedOrgs])]
+        selectedEvents.value = combined.filter(e => eventList.value.includes(e))
+    })
+
+    // Keep seasons synchronized when seasonList changes
+    watch(seasonList, (newList, oldList = []) => {
+        if (!allRaces.value.length) return
+        const added = newList.filter(s => !oldList.includes(s))
+        const removedSet = new Set(oldList.filter(s => !newList.includes(s)))
+        const retained = selectedSeasons.value.filter(s => !removedSet.has(s))
+        selectedSeasons.value = [...new Set([...retained, ...added])]
+    })
+
+    // 4. Order by earliest/newest
     const sortOptions = computed(() => [
-        { value: "recent", label: t("mostRecent") },
-        { value: "oldest", label: t("oldest") }
+        { value: "recent", label: locale.value === "en" ? "Newest" : "Terbaru" },
+        { value: "oldest", label: locale.value === "en" ? "Earliest" : "Terlama" }
     ])
     const sortBy = ref("recent")
     const selectedSortBy = computed({
@@ -669,53 +810,28 @@
         }
     })
 
-    const searchQuery = ref("")
-
-    const isAllOrganizerSelected = computed(() => {
-        return !selectedOrganizer.value ||
-            selectedOrganizer.value === t("all") ||
-            selectedOrganizer.value === "all" ||
-            selectedOrganizer.value === "All" ||
-            selectedOrganizer.value === "Semua"
-    })
-
     // Pagination
     const currentPage = ref(1)
     const itemsPerPage = ref(10)
 
-    watch([searchQuery, selectedOrganizer, selectedStatus, sortBy, itemsPerPage], () => {
+    watch([selectedOrganizers, selectedEvents, selectedSeasons, sortBy, itemsPerPage], () => {
         currentPage.value = 1
     })
 
     // Filtered races computed
     const filteredRaces = computed(() => {
-        const q = (searchQuery.value || "").toLowerCase().trim()
-
         const list = allRaces.value.filter(race => {
             // Organizer filter
-            if (!isAllOrganizerSelected.value && race.organizerName !== selectedOrganizer.value) {
+            if (!selectedOrganizers.value.includes(race.organizerName)) {
                 return false
             }
-            // Status filter
-            if (selectedStatus.value === "final" && race.isProvisional) {
+            // Event filter
+            if (!selectedEvents.value.includes(race.eventName)) {
                 return false
             }
-            if (selectedStatus.value === "provisional" && !race.isProvisional) {
+            // Season filter
+            if (!selectedSeasons.value.includes(`Season ${race.season}`)) {
                 return false
-            }
-            // Search query (Event, Circuit, Winners, Organizer)
-            if (q) {
-                const matchEvent = (race.eventName || "").toLowerCase().includes(q)
-                const matchCircuit = (race.circuit || "").toLowerCase().includes(q)
-                const matchWinner = (race.winners || []).some(w => {
-                    const str = w.isTeam ? (w.displayName || "") : (w.name || "")
-                    const cls = w.className || ""
-                    return str.toLowerCase().includes(q) || cls.toLowerCase().includes(q)
-                })
-                const matchOrg = (race.organizerAbbr || "").toLowerCase().includes(q) || (race.organizerName || "").toLowerCase().includes(q)
-                if (!matchEvent && !matchCircuit && !matchWinner && !matchOrg) {
-                    return false
-                }
             }
             return true
         })
@@ -726,10 +842,12 @@
             const timeB = new Date(b.date).getTime() || 0
             if (sortBy.value === "recent") {
                 if (timeA !== timeB) return timeB - timeA
-                return b.orderWeight - a.orderWeight
+                if (b.orderWeight !== a.orderWeight) return b.orderWeight - a.orderWeight
+                return (a.classOrder || 0) - (b.classOrder || 0)
             } else {
                 if (timeA !== timeB) return timeA - timeB
-                return a.orderWeight - b.orderWeight
+                if (a.orderWeight !== b.orderWeight) return a.orderWeight - b.orderWeight
+                return (a.classOrder || 0) - (b.classOrder || 0)
             }
         })
     })
@@ -750,18 +868,22 @@
     // Clear specific filter
     const clearFilterField = (type) => {
         if (type === "organizer") {
-            selectedOrganizer.value = t("all")
-        } else if (type === "status") {
-            selectedStatus.value = "all"
+            selectedOrganizers.value = []
+        } else if (type === "event") {
+            selectedEvents.value = []
+        } else if (type === "season") {
+            selectedSeasons.value = []
+        } else if (type === "sort") {
+            sortBy.value = "recent"
         }
         currentPage.value = 1
     }
 
     // Reset all filters
     const resetFilter = () => {
-        searchQuery.value = ""
-        selectedOrganizer.value = t("all")
-        selectedStatus.value = "all"
+        selectedOrganizers.value = [...organizerList.value]
+        selectedEvents.value = [...allEventsList.value]
+        selectedSeasons.value = [...allSeasonsList.value]
         sortBy.value = "recent"
         currentPage.value = 1
     }
@@ -769,9 +891,9 @@
     // Check if any filter is active
     const isFilterActive = computed(() => {
         return (
-            (searchQuery.value && searchQuery.value.trim() !== "") ||
-            !isAllOrganizerSelected.value ||
-            selectedStatus.value !== "all" ||
+            selectedOrganizers.value.length < organizerList.value.length ||
+            selectedEvents.value.length < allEventsList.value.length ||
+            selectedSeasons.value.length < allSeasonsList.value.length ||
             sortBy.value !== "recent"
         )
     })
@@ -805,6 +927,35 @@
             month: "short",
             day: "numeric"
         })
+    }
+
+    // Event & Circuit display formatters
+    const getEventDisplay = (race) => {
+        if (!race.eventName) return "-"
+        if (race.season !== null && race.season !== undefined && String(race.season).trim() !== "") {
+            const s = String(race.season).trim().replace(/^season\s*/i, "")
+            const seasonTag = s.toUpperCase().startsWith("S") ? s.toUpperCase() : `S${s}`
+            return `${race.eventName} (${seasonTag})`
+        }
+        return race.eventName
+    }
+
+    const getCircuitDisplay = (race) => {
+        let circuitName = race.circuit || "-"
+        let text = circuitName
+        if (race.round !== null && race.round !== undefined && String(race.round).trim() !== "") {
+            const r = String(race.round).trim()
+            const roundNum = r.replace(/^round\s*/i, "").replace(/^r/i, "").trim()
+            text = `R${roundNum}: ${circuitName}`
+        }
+        const st = String(race.sessionType || "").toLowerCase().trim()
+        const sk = String(race.sessionLabelKey || "").toLowerCase().trim()
+        if (st === "race_1" || st === "race1" || st === "r1" || sk === "race1") {
+            text = `${text} (${t("race1") || "Race 1"})`
+        } else if (st === "race_2" || st === "race2" || st === "r2" || sk === "race2") {
+            text = `${text} (${t("race2") || "Race 2"})`
+        }
+        return text
     }
 
     // Badges styling
@@ -856,21 +1007,23 @@
             {{ $t('resultsTitle') }}
         </div>
 
-        <!-- Filter Section (Identical styling and centering to database.vue) -->
+        <!-- Filter Section -->
         <div class="mx-auto flex flex-col justify-center items-center gap-4">
-            <!-- Row 1: Organizer & Search -->
+            <!-- Row 1: Organizer & Event -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- Organizer Filter -->
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('organizer') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
                             class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                            v-model="selectedOrganizer"
-                            :items="organizersList"
+                            v-model="orderedSelectedOrganizers"
+                            :items="organizerList"
+                            multiple
                         />
                         <button
                             @click="clearFilterField('organizer')"
-                            :disabled="isAllOrganizerSelected"
+                            :disabled="selectedOrganizers.length === 0"
                             class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
@@ -878,17 +1031,20 @@
                     </div>
                 </div>
 
+                <!-- Event Filter -->
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
-                    <label class="text-black dark:text-white font-bold">{{ $t('name') }} / Event / {{ $t('winner') }}</label>
+                    <label class="text-black dark:text-white font-bold">{{ $t('events') }}</label>
                     <div class="flex items-center gap-2">
-                        <input
-                            v-model="searchQuery"
-                            type="text"
-                            :placeholder="$t('searchRace')"
+                        <USelectMenu
                             class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
+                            v-model="orderedSelectedEvents"
+                            :items="eventList"
+                            multiple
                         />
                         <button
-                            class="invisible text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
+                            @click="clearFilterField('event')"
+                            :disabled="selectedEvents.length === 0"
+                            class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
                         </button>
@@ -896,21 +1052,21 @@
                 </div>
             </div>
 
-            <!-- Row 2: Status & Sort By -->
+            <!-- Row 2: Season & Order By -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- Season Filter -->
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
-                    <label class="text-black dark:text-white font-bold">{{ $t('status') }}</label>
+                    <label class="text-black dark:text-white font-bold">{{ $t('season') }}</label>
                     <div class="flex items-center gap-2">
                         <USelectMenu
                             class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
-                            v-model="selectedStatusOption"
-                            :items="statusOptions"
-                            value-attribute="value"
-                            option-attribute="label"
+                            v-model="orderedSelectedSeasons"
+                            :items="seasonList"
+                            multiple
                         />
                         <button
-                            @click="clearFilterField('status')"
-                            :disabled="selectedStatus === 'all'"
+                            @click="clearFilterField('season')"
+                            :disabled="selectedSeasons.length === 0"
                             class="text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
                         >
                             <Icon name="mdi:filter-off" mode="svg" />
@@ -918,6 +1074,7 @@
                     </div>
                 </div>
 
+                <!-- Order By Filter -->
                 <div class="flex flex-col gap-1 items-start text-sm lg:text-base">
                     <label class="text-black dark:text-white font-bold">{{ $t('sortBy') }}</label>
                     <div class="flex items-center gap-2">
@@ -925,14 +1082,8 @@
                             class="text-sm lg:text-base w-75 border-2 border-red-900 dark:border-red-900 rounded-md p-2 bg-red-50 dark:bg-slate-950 text-black dark:text-white"
                             v-model="selectedSortBy"
                             :items="sortOptions"
-                            value-attribute="value"
                             option-attribute="label"
                         />
-                        <button
-                            class="invisible text-white bg-red-900 dark:bg-red-900 text-sm lg:text-base font-bold p-2 rounded-lg cursor-pointer disabled:opacity-50"
-                        >
-                            <Icon name="mdi:filter-off" mode="svg" />
-                        </button>
                     </div>
                 </div>
             </div>
@@ -956,19 +1107,17 @@
                 </div>
             </div> -->
 
-            <!-- Table: Date - Event - Season - Round - Circuit - Session - Winner - Status -->
+            <!-- Table: Date - Event - Circuit - Class - Winner - Status -->
             <div class="overflow-x-auto w-full">
                 <table class="w-full">
                     <thead class="bg-red-900 dark:bg-red-900 text-white">
                         <tr>
-                            <th class="w-[9%] px-2 lg:px-4 py-2 text-sm lg:text-base text-left whitespace-nowrap">{{ $t('date') }}</th>
-                            <th class="w-[31%] px-2 lg:px-4 py-2 text-sm lg:text-base text-left">{{ $t('events') }}</th>
-                            <th class="w-[5%] px-2 lg:px-4 py-2 text-sm lg:text-base text-center whitespace-nowrap">{{ $t('season') }}</th>
-                            <th class="w-[5%] px-2 lg:px-4 py-2 text-sm lg:text-base text-center whitespace-nowrap">{{ $t('round') }}</th>
-                            <th class="w-[23%] px-2 lg:px-4 py-2 text-sm lg:text-base text-left">{{ $t('circuit') }}</th>
-                            <th class="w-[7%] px-2 lg:px-4 py-2 text-sm lg:text-base text-center whitespace-nowrap">{{ $t('session') }}</th>
-                            <th class="w-[15%] px-2 lg:px-4 py-2 text-sm lg:text-base text-left">{{ $t('winner') }}</th>
-                            <th class="w-[5%] px-2 lg:px-4 py-2 text-sm lg:text-base text-center whitespace-nowrap">{{ $t('status') }}</th>
+                            <th class="w-[10%] px-2 lg:px-4 py-2 text-sm lg:text-base text-left whitespace-nowrap">{{ $t('date') }}</th>
+                            <th class="w-[32%] px-2 lg:px-4 py-2 text-sm lg:text-base text-left">{{ $t('events') }}</th>
+                            <th class="w-[26%] px-2 lg:px-4 py-2 text-sm lg:text-base text-left">{{ $t('circuit') }}</th>
+                            <th class="w-[8%] px-2 lg:px-4 py-2 text-sm lg:text-base text-center whitespace-nowrap">{{ $t('class') }}</th>
+                            <th class="w-[18%] px-2 lg:px-4 py-2 text-sm lg:text-base text-left">{{ $t('winner') }}</th>
+                            <th class="w-[6%] px-2 lg:px-4 py-2 text-sm lg:text-base text-center whitespace-nowrap">{{ $t('status') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -979,12 +1128,12 @@
                             class="text-center border-b border-slate-300 dark:border-slate-700 bg-red-50 dark:bg-slate-950 hover:bg-red-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                         >
                             <!-- 1. Date (Regular font weight) -->
-                            <td class="w-[9%] px-2 lg:px-4 py-2 text-left text-sm lg:text-base font-normal whitespace-nowrap text-black dark:text-white">
+                            <td class="w-[10%] px-2 lg:px-4 py-2 text-left text-sm lg:text-base font-normal whitespace-nowrap text-black dark:text-white">
                                 {{ formatDate(race.date) }}
                             </td>
 
                             <!-- 2. Event (font-bold) -->
-                            <td class="w-[31%] px-2 lg:px-4 py-2 text-left text-sm lg:text-base font-bold text-black dark:text-white">
+                            <td class="w-[32%] px-2 lg:px-4 py-2 text-left text-sm lg:text-base font-bold text-black dark:text-white">
                                 <div class="flex items-center gap-1.5 flex-wrap">
                                     <span v-if="race.organizerAbbr" :class="getAdminOrganizerStyle(race.organizerAbbr)">
                                         {{ race.organizerAbbr }}
@@ -993,23 +1142,13 @@
                                         {{ race.gameAbbr }}
                                     </span>
                                     <span class="hover:text-red-700 dark:hover:text-red-400 hover:underline">
-                                        {{ race.eventName }}
+                                        {{ getEventDisplay(race) }}
                                     </span>
                                 </div>
                             </td>
 
-                            <!-- 3. Season (Regular font weight) -->
-                            <td class="w-[5%] px-2 lg:px-4 py-2 text-center text-sm lg:text-base font-normal whitespace-nowrap text-black dark:text-white">
-                                {{ race.season || '-' }}
-                            </td>
-
-                            <!-- 4. Round (Regular font weight) -->
-                            <td class="w-[5%] px-2 lg:px-4 py-2 text-center text-sm lg:text-base font-normal whitespace-nowrap text-black dark:text-white">
-                                {{ race.round || '-' }}
-                            </td>
-
-                            <!-- 5. Circuit (Regular font weight) -->
-                            <td class="w-[23%] px-2 lg:px-4 py-2 text-left text-sm lg:text-base font-normal text-black dark:text-white">
+                            <!-- 3. Circuit (Regular font weight) -->
+                            <td class="w-[26%] px-2 lg:px-4 py-2 text-left text-sm lg:text-base font-normal text-black dark:text-white">
                                 <div class="flex items-center gap-1.5">
                                     <Icon
                                         v-if="race.country"
@@ -1023,62 +1162,54 @@
                                         mode="svg"
                                         class="rounded-sm shrink-0"
                                     />
-                                    <span>{{ race.circuit || '-' }}</span>
+                                    <span>{{ getCircuitDisplay(race) }}</span>
                                 </div>
                             </td>
 
-                            <!-- 6. Session (Regular font weight) -->
-                            <td class="w-[7%] px-2 lg:px-4 py-2 text-center text-sm lg:text-base font-normal whitespace-nowrap text-black dark:text-white">
-                                {{ $te(race.sessionLabelKey) ? $t(race.sessionLabelKey) : race.fallbackLabel }}
+                            <!-- 4. Class -->
+                            <td class="w-[8%] px-2 lg:px-4 py-2 text-center text-sm lg:text-base whitespace-nowrap text-black dark:text-white">
+                                <span v-if="race.className && race.className !== '-'">
+                                    {{ race.className }}
+                                </span>
+                                <span v-else></span>
                             </td>
 
-                            <!-- 7. Winner (font-bold, multiple classes separated by enter) -->
-                            <td class="w-[15%] px-2 lg:px-4 py-2 text-left text-sm lg:text-base font-bold text-black dark:text-white">
-                                <div v-if="race.winners && race.winners.length > 0" class="flex flex-col gap-1">
-                                    <div
-                                        v-for="(w, wIdx) in race.winners"
-                                        :key="wIdx"
-                                        class="flex items-center gap-1.5 min-w-0 truncate"
-                                        :title="w.isTeam ? (w.className ? `${w.className}: ${w.displayName}` : w.displayName) : (w.className ? `${w.className}: ${w.name}` : w.name)"
-                                    >
-                                        <!-- Class Name in regular font weight: "Class: " -->
-                                        <span
-                                            v-if="race.isMultiClass && w.className"
-                                            class="font-normal shrink-0"
+                            <!-- 5. Winner (font-bold) -->
+                            <td class="w-[18%] px-2 lg:px-4 py-2 text-left text-sm lg:text-base font-bold text-black dark:text-white">
+                                <div
+                                    v-if="race.winner"
+                                    class="flex items-center gap-1.5 min-w-0 truncate"
+                                    :title="race.winner.isTeam ? race.winner.displayName : race.winner.name"
+                                >
+                                    <!-- Team Winner: "3 - Red Bull Racing" -->
+                                    <div v-if="race.winner.isTeam" class="truncate">
+                                        {{ race.winner.displayName }}
+                                    </div>
+
+                                    <!-- Individual Winner: Flag + Name -->
+                                    <div v-else class="flex items-center gap-1.5 truncate">
+                                        <Icon
+                                            v-if="race.winner.countryCode"
+                                            :name="`flag-${race.winner.countryCode.toLowerCase()}-4x3`"
+                                            mode="svg"
+                                            class="rounded-sm shrink-0"
+                                        />
+                                        <NuxtLink
+                                            v-if="race.winner.id || race.winner.name"
+                                            :to="`/drivers/${race.winner.id || encodeURIComponent(race.winner.name)}`"
+                                            @click.stop
+                                            class="hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer truncate"
                                         >
-                                            {{ w.className }}:
-                                        </span>
-
-                                        <!-- Team Winner: "3 - Red Bull Racing" -->
-                                        <div v-if="w.isTeam" class="truncate">
-                                            {{ w.displayName }}
-                                        </div>
-
-                                        <!-- Individual Winner: Flag + Name -->
-                                        <div v-else class="flex items-center gap-1.5 truncate">
-                                            <Icon
-                                                v-if="w.countryCode"
-                                                :name="`flag-${w.countryCode.toLowerCase()}-4x3`"
-                                                mode="svg"
-                                                class="rounded-sm shrink-0"
-                                            />
-                                            <NuxtLink
-                                                v-if="w.id || w.name"
-                                                :to="`/drivers/${w.id || encodeURIComponent(w.name)}`"
-                                                @click.stop
-                                                class="hover:text-red-700 dark:hover:text-red-400 hover:underline cursor-pointer truncate"
-                                            >
-                                                {{ w.name }}
-                                            </NuxtLink>
-                                            <span v-else>{{ w.name }}</span>
-                                        </div>
+                                            {{ race.winner.name }}
+                                        </NuxtLink>
+                                        <span v-else>{{ race.winner.name }}</span>
                                     </div>
                                 </div>
                                 <span v-else class="text-gray-400 font-normal">-</span>
                             </td>
 
-                            <!-- 8. Status (Plain text, regular font weight) -->
-                            <td class="w-[5%] px-2 lg:px-4 py-2 text-center text-sm lg:text-base font-normal whitespace-nowrap text-black dark:text-white">
+                            <!-- 6. Status (Plain text, regular font weight) -->
+                            <td class="w-[6%] px-2 lg:px-4 py-2 text-center text-sm lg:text-base font-normal whitespace-nowrap text-black dark:text-white">
                                 {{ race.isProvisional ? $t('provisional') : $t('final') }}
                             </td>
                         </tr>
