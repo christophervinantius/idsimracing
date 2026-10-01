@@ -102,7 +102,7 @@
         }
 
         const raceCore = [eventWithOrg, seasonStr, roundStr].filter(Boolean).join(" ")
-        const circuit = scheduleItem.value.circuit?.trim() || ""
+        const circuit = cleanCircuit.value || scheduleItem.value.circuit?.trim() || ""
 
         if (circuit) {
             return raceCore ? `${raceCore} - ${circuit}` : circuit
@@ -1423,6 +1423,27 @@
         return style
     }
 
+    const cleanCircuit = computed(() => {
+        const raw = scheduleItem.value?.circuit
+        if (!raw || typeof raw !== "string") return ""
+        return raw
+            .replace(/\s*-\s*Race.*/i, "")
+            .replace(/\s*-\s*Qualifying.*/i, "")
+            .trim()
+    })
+
+    const watermarkCircuitName = computed(() => {
+        return cleanCircuit.value
+    })
+
+    const watermarkFontSizeClass = computed(() => {
+        const len = watermarkCircuitName.value.length
+        if (len <= 10) return "text-6xl sm:text-7xl md:text-8xl lg:text-9xl xl:text-[10rem]"
+        if (len <= 18) return "text-5xl sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl"
+        if (len <= 28) return "text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl"
+        return "text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl"
+    })
+
     const getCardStyle = (event) => {
         let style = "rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 p-4 lg:p-6 mb-8 text-black dark:text-white "
         if (!event) return style + "bg-red-50 dark:bg-slate-950"
@@ -1621,94 +1642,110 @@
         </div> -->
 
         <!-- Event Header Card (matches CardSchedule) -->
-        <div v-if="scheduleItem" :class="getCardStyle(scheduleItem.events?.name)">
-            <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-1.5 flex-wrap">
-                    <UModal v-if="scheduleItem.events?.organizers?.abbreviation" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
-                        <button
-                            type="button"
-                            :class="getOrganizerStyle(scheduleItem.events.organizers.abbreviation)"
-                            @click="setOrganizationData(
-                                scheduleItem.events.organizers.abbreviation,
-                                scheduleItem.events.organizers.name,
-                                scheduleItem.events.organizers.description_en,
-                                scheduleItem.events.organizers.description_id,
-                                scheduleItem.events.organizers.youtube,
-                                scheduleItem.events.organizers.discord,
-                                scheduleItem.events.organizers.instagram,
-                                scheduleItem.events.organizers.twitter,
-                                scheduleItem.events.organizers.facebook,
-                                scheduleItem.events.organizers.tiktok
-                            )"
-                        >
-                            {{ scheduleItem.events.organizers.abbreviation }}
-                        </button>
-                        <template #content>
-                            <ModalOrganization />
-                        </template>
-                    </UModal>
-                    <UModal v-if="scheduleItem.events?.games?.abbreviation" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
-                        <button
-                            type="button"
-                            :class="getGameStyle(scheduleItem.events.games.abbreviation)"
-                            @click="setGameData(
-                                scheduleItem.events.games.abbreviation,
-                                scheduleItem.events.games.name,
-                                scheduleItem.events.games.description_en,
-                                scheduleItem.events.games.description_id,
-                                scheduleItem.events.games.steam_link,
-                                scheduleItem.events.games.other_link
-                            )"
-                        >
-                            {{ scheduleItem.events.games.abbreviation }}
-                        </button>
-                        <template #content>
-                            <ModalGame />
-                        </template>
-                    </UModal>
-                </div>
-                <div v-if="scheduleItem.country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
-                    <Icon :name="`flag-${ scheduleItem.country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
-                    <Icon :name="`flag-${ scheduleItem.country_2 }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
-                </div>
-                <div v-else-if="scheduleItem.country" class="text-2xl lg:text-3xl">
-                    <Icon :name="`flag-${ scheduleItem.country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
-                </div>
-            </div>
-            <div class="text-base lg:text-xl">
-                {{ formatDate(scheduleItem.date) }}
-            </div>
-            <div :class="getTextStyle(scheduleItem.events?.name)">
-                <span class="font-bold text-base lg:text-xl">{{ scheduleItem.events?.name }} {{ scheduleItem.season && "(S" + scheduleItem.season + ")"}}</span>
-            </div>
-            <div class="text-sm lg:text-base">
-                <div v-if="scheduleItem.round === 'Invitation' || scheduleItem.round === 'Prologue'">
-                    {{ scheduleItem.round }} Round: {{ scheduleItem.circuit }}
-                </div>
-                <div v-else-if="scheduleItem.round !== null">
-                    Round {{ scheduleItem.round }}: {{ scheduleItem.circuit }}
-                </div>
-                <div v-else-if="scheduleItem.circuit !== null">
-                    {{ scheduleItem.circuit }}
-                </div>
-            </div>
-            <div class="flex flex-wrap gap-1 lg:gap-2 items-center mt-2">
-                <NuxtLink v-if="scheduleItem.stream_link" :to="scheduleItem.stream_link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 hover:bg-blue-400 px-2 py-1 rounded-md font-bold cursor-pointer">
-                    <div v-if="getStatus(scheduleItem.date, scheduleItem.finish_date, scheduleItem.is_postponed) === t('finished')">
-                        <span class="text-sm lg:text-base">{{ $t("watchReplay") }}</span>
-                    </div>
-                    <div v-else>
-                        <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
-                    </div>
-                </NuxtLink>
-
-                <button
-                    type="button"
-                    @click="sharePage"
-                    class="text-sm lg:text-base text-white bg-red-900 hover:bg-red-800 px-2.5 py-1 rounded-md font-bold cursor-pointer transition"
+        <div v-if="scheduleItem" :class="[getCardStyle(scheduleItem.events?.name), 'relative overflow-hidden']">
+            <!-- Background Circuit Watermark with Shadow Effect -->
+            <div
+                v-if="watermarkCircuitName"
+                aria-hidden="true"
+                class="absolute inset-y-0 right-4 sm:right-8 lg:right-12 flex items-center justify-end select-none pointer-events-none opacity-10 drop-shadow-2xl max-w-[95%] sm:max-w-[90%]"
+            >
+                <span
+                    :class="watermarkFontSizeClass"
+                    class="font-cursive leading-none whitespace-normal sm:whitespace-nowrap text-right pr-2 sm:pr-4"
                 >
-                    {{ isCopied ? $t('copied') : $t('share') }}
-                </button>
+                    {{ watermarkCircuitName }}
+                </span>
+            </div>
+
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <UModal v-if="scheduleItem.events?.organizers?.abbreviation" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                            <button
+                                type="button"
+                                :class="getOrganizerStyle(scheduleItem.events.organizers.abbreviation)"
+                                @click="setOrganizationData(
+                                    scheduleItem.events.organizers.abbreviation,
+                                    scheduleItem.events.organizers.name,
+                                    scheduleItem.events.organizers.description_en,
+                                    scheduleItem.events.organizers.description_id,
+                                    scheduleItem.events.organizers.youtube,
+                                    scheduleItem.events.organizers.discord,
+                                    scheduleItem.events.organizers.instagram,
+                                    scheduleItem.events.organizers.twitter,
+                                    scheduleItem.events.organizers.facebook,
+                                    scheduleItem.events.organizers.tiktok
+                                )"
+                            >
+                                {{ scheduleItem.events.organizers.abbreviation }}
+                            </button>
+                            <template #content>
+                                <ModalOrganization />
+                            </template>
+                        </UModal>
+                        <UModal v-if="scheduleItem.events?.games?.abbreviation" :ui="{ content: 'sm:max-w-2xl lg:max-w-3xl' }">
+                            <button
+                                type="button"
+                                :class="getGameStyle(scheduleItem.events.games.abbreviation)"
+                                @click="setGameData(
+                                    scheduleItem.events.games.abbreviation,
+                                    scheduleItem.events.games.name,
+                                    scheduleItem.events.games.description_en,
+                                    scheduleItem.events.games.description_id,
+                                    scheduleItem.events.games.steam_link,
+                                    scheduleItem.events.games.other_link
+                                )"
+                            >
+                                {{ scheduleItem.events.games.abbreviation }}
+                            </button>
+                            <template #content>
+                                <ModalGame />
+                            </template>
+                        </UModal>
+                    </div>
+                    <div v-if="scheduleItem.country_2" class="flex items-center gap-1 text-2xl lg:text-3xl">
+                        <Icon :name="`flag-${ scheduleItem.country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
+                        <Icon :name="`flag-${ scheduleItem.country_2 }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
+                    </div>
+                    <div v-else-if="scheduleItem.country" class="text-2xl lg:text-3xl">
+                        <Icon :name="`flag-${ scheduleItem.country }-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
+                    </div>
+                </div>
+                <div class="text-base lg:text-xl">
+                    {{ formatDate(scheduleItem.date) }}
+                </div>
+                <div :class="getTextStyle(scheduleItem.events?.name)">
+                    <span class="font-bold text-base lg:text-xl">{{ scheduleItem.events?.name }} {{ scheduleItem.season && "(S" + scheduleItem.season + ")"}}</span>
+                </div>
+                <div class="text-sm lg:text-base">
+                    <div v-if="scheduleItem.round === 'Invitation' || scheduleItem.round === 'Prologue'">
+                        {{ scheduleItem.round }} Round: {{ cleanCircuit || scheduleItem.circuit }}
+                    </div>
+                    <div v-else-if="scheduleItem.round !== null">
+                        Round {{ scheduleItem.round }}: {{ cleanCircuit || scheduleItem.circuit }}
+                    </div>
+                    <div v-else-if="scheduleItem.circuit !== null">
+                        {{ cleanCircuit || scheduleItem.circuit }}
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1 lg:gap-2 items-center mt-2">
+                    <NuxtLink v-if="scheduleItem.stream_link" :to="scheduleItem.stream_link" target="_blank" class="text-sm lg:text-base text-white bg-blue-500 hover:bg-blue-400 px-2 py-1 rounded-md font-bold cursor-pointer">
+                        <div v-if="getStatus(scheduleItem.date, scheduleItem.finish_date, scheduleItem.is_postponed) === t('finished')">
+                            <span class="text-sm lg:text-base">{{ $t("watchReplay") }}</span>
+                        </div>
+                        <div v-else>
+                            <span class="text-sm lg:text-base">{{ $t("watchLive") }}</span>
+                        </div>
+                    </NuxtLink>
+
+                    <button
+                        type="button"
+                        @click="sharePage"
+                        class="text-sm lg:text-base text-white bg-red-900 hover:bg-red-800 px-2.5 py-1 rounded-md font-bold cursor-pointer transition"
+                    >
+                        {{ isCopied ? $t('copied') : $t('share') }}
+                    </button>
+                </div>
             </div>
         </div>
 

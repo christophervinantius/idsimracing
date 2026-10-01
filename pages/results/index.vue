@@ -941,19 +941,28 @@
     }
 
     const getCircuitDisplay = (race) => {
-        let circuitName = race.circuit || "-"
+        const rawCircuit = race.circuit || "-"
+        const rawStr = typeof race.circuit === "string" ? race.circuit : ""
+        const circuitName = typeof race.circuit === "string"
+            ? race.circuit.replace(/\s*-\s*Race.*/i, "").replace(/\s*-\s*Qualifying.*/i, "").trim()
+            : rawCircuit
+
         let text = circuitName
         if (race.round !== null && race.round !== undefined && String(race.round).trim() !== "") {
             const r = String(race.round).trim()
             const roundNum = r.replace(/^round\s*/i, "").replace(/^r/i, "").trim()
             text = `R${roundNum}: ${circuitName}`
         }
+
         const st = String(race.sessionType || "").toLowerCase().trim()
         const sk = String(race.sessionLabelKey || "").toLowerCase().trim()
-        if (st === "race_1" || st === "race1" || st === "r1" || sk === "race1") {
-            text = `${text} (${t("race1") || "Race 1"})`
-        } else if (st === "race_2" || st === "race2" || st === "r2" || sk === "race2") {
-            text = `${text} (${t("race2") || "Race 2"})`
+        const isRace1 = st === "race_1" || st === "race1" || st === "r1" || sk === "race1" || /\bRace\s*1\b/i.test(rawStr)
+        const isRace2 = st === "race_2" || st === "race2" || st === "r2" || sk === "race2" || /\bRace\s*2\b/i.test(rawStr)
+
+        if (isRace1) {
+            text = `${text} (Race 1)`
+        } else if (isRace2) {
+            text = `${text} (Race 2)`
         }
         return text
     }

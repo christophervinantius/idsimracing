@@ -629,6 +629,19 @@
         return raw
     })
 
+    const driverNameParts = computed(() => {
+        const raw = driver.value?.name ? String(driver.value.name).trim() : ""
+        if (!raw) return { prefix: "", lastName: "" }
+        const words = raw.split(/\s+/)
+        if (words.length <= 1) {
+            return { prefix: "", lastName: raw }
+        }
+        return {
+            prefix: words.slice(0, -1).join(" "),
+            lastName: words[words.length - 1]
+        }
+    })
+
     // Card background & border matching driver rating from database.vue
     const getDriverCardStyle = (rating) => {
         let style = "rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 p-4 lg:p-6 shadow-sm transition "
@@ -815,7 +828,7 @@
                     gameAbbr: event?.games?.abbreviation || (Array.isArray(event?.games) ? event?.games[0]?.abbreviation : null),
                     organizerAbbr: event?.organizers?.abbreviation || (Array.isArray(event?.organizers) ? event?.organizers[0]?.abbreviation : null),
                     sessionType: sessType,
-                    sessionLabel: sessType === "qualifying" ? t("qualifying") : (sessType === "race_1" ? t("race1") : (sessType === "race_2" ? t("race2") : t("race"))),
+                    sessionLabel: sessType === "qualifying" ? t("qualifying") : (sessType === "race_1" ? "Race 1" : (sessType === "race_2" ? "Race 2" : t("race"))),
                     carNumber: entry.car_number,
                     carModel: entry.car_model || "-",
                     teamName: entry.teams?.name || "-",
@@ -1268,8 +1281,8 @@
 
     const getSessionLabel = (sessType) => {
         if (sessType === "qualifying" || sessType === "q") return t("qualifying")
-        if (sessType === "race_1" || sessType === "r1") return t("race1")
-        if (sessType === "race_2" || sessType === "r2") return t("race2")
+        if (sessType === "race_1" || sessType === "r1") return "Race 1"
+        if (sessType === "race_2" || sessType === "r2") return "Race 2"
         return t("race")
     }
 
@@ -1286,18 +1299,30 @@
 
     const getCircuitDisplay = (item) => {
         let circuitName = item.circuit || "-"
+        const rawStr = typeof item.circuit === "string" ? item.circuit : ""
+        if (typeof item.circuit === "string") {
+            circuitName = item.circuit
+                .replace(/\s*-\s*Race.*/i, "")
+                .replace(/\s*-\s*Qualifying.*/i, "")
+                .trim()
+        }
         let text = circuitName
         if (item.round !== null && item.round !== undefined && String(item.round).trim() !== "") {
             const r = String(item.round).trim()
             const roundNum = r.replace(/^round\s*/i, "").replace(/^r/i, "").trim()
             text = `R${roundNum}: ${circuitName}`
         }
+
         const st = String(item.sessionType || "").toLowerCase().trim()
-        if (st === "race_1" || st === "race1" || st === "r1") {
-            text = `${text} (${t("race1") || "Race 1"})`
-        } else if (st === "race_2" || st === "race2" || st === "r2") {
-            text = `${text} (${t("race2") || "Race 2"})`
+        const isRace1 = st === "race_1" || st === "race1" || st === "r1" || /\bRace\s*1\b/i.test(rawStr)
+        const isRace2 = st === "race_2" || st === "race2" || st === "r2" || /\bRace\s*2\b/i.test(rawStr)
+
+        if (isRace1) {
+            text = `${text} (Race 1)`
+        } else if (isRace2) {
+            text = `${text} (Race 2)`
         }
+
         return text
     }
 
@@ -1374,38 +1399,60 @@
 
         <!-- Driver Profile Content -->
         <div v-else class="space-y-8">
-            <div :class="getDriverCardStyle(driver.rating)">
-                <div class="flex items-center justify-between gap-4">
-                    <h1 class="text-2xl lg:text-4xl font-black">
-                        {{ driver.name }}
+            <div :class="[getDriverCardStyle(driver.rating), 'relative overflow-hidden']">
+                <!-- Background Name Watermark with Shadow Effect -->
+                <div
+                    v-if="driverNameParts.lastName"
+                    aria-hidden="true"
+                    class="absolute inset-y-0 right-6 sm:right-10 lg:right-16 flex items-center justify-end select-none pointer-events-none opacity-10 drop-shadow-2xl"
+                >
+                    <span class="font-cursive text-7xl sm:text-8xl md:text-9xl lg:text-[11rem] xl:text-[13rem] leading-none whitespace-nowrap text-right pr-3 lg:pr-6">
+                        {{ driverNameParts.lastName }}
+                    </span>
+                </div>
+
+                <div class="relative z-10">
+                    <h1 class="flex flex-col">
+                        <span
+                            v-if="driverNameParts.prefix"
+                            class="font-cursive text-4xl leading-none -mb-1 lg:-mb-2"
+                        >
+                            {{ driverNameParts.prefix }}
+                        </span>
+                        <span class="text-4xl font-black uppercase leading-tight tracking-wider">
+                            {{ driverNameParts.lastName }}
+                        </span>
                     </h1>
-                    <div v-if="countryCode" class="text-2xl lg:text-3xl shrink-0">
-                        <Icon :name="`flag-${countryCode}-4x3`" mode="svg" class="rounded-sm lg:rounded-md" />
-                    </div>
-                </div>
 
-                <div class="flex flex-col gap-1 mt-2">
-                    <div v-if="countryName" class="text-base lg:text-lg">
-                        <span>{{ countryName }}</span>
+                    <div class="flex flex-col gap-1 mt-2">
+                        <div v-if="countryName || countryCode" class="flex items-center gap-2 text-base lg:text-lg">
+                            <Icon
+                                v-if="countryCode"
+                                :name="`flag-${countryCode}-4x3`"
+                                mode="svg"
+                                class="rounded-sm lg:rounded-md shrink-0"
+                            />
+                            <span v-if="countryName">{{ countryName }}</span>
+                        </div>
+
+                        <div v-if="driver.teams?.name || driver.team" class="text-base lg:text-lg">
+                            <span>{{ driver.teams?.name || driver.team }}</span>
+                        </div>
+
+                        <div v-if="driver.rating" class="text-base lg:text-lg">
+                            <span>{{ driver.rating }}</span>
+                        </div>
                     </div>
 
-                    <div v-if="driver.teams?.name || driver.team" class="text-base lg:text-lg">
-                        <span>{{ driver.teams?.name || driver.team }}</span>
+                    <div class="flex flex-wrap gap-2 items-center mt-3">
+                        <button
+                            type="button"
+                            @click="sharePage"
+                            class="text-sm lg:text-base text-white bg-red-900 hover:bg-red-800 px-3 py-1 rounded-md font-bold cursor-pointer transition"
+                        >
+                            {{ isCopied ? $t('copied') : $t('share') }}
+                        </button>
                     </div>
-
-                    <div v-if="driver.rating" class="text-base lg:text-lg">
-                        <span>{{ driver.rating }}</span>
-                    </div>
-                </div>
-
-                <div class="flex flex-wrap gap-2 items-center mt-3">
-                    <button
-                        type="button"
-                        @click="sharePage"
-                        class="text-sm lg:text-base text-white bg-red-900 hover:bg-red-800 px-3 py-1 rounded-md font-bold cursor-pointer transition"
-                    >
-                        {{ isCopied ? $t('copied') : $t('share') }}
-                    </button>
                 </div>
             </div>
 
@@ -1454,7 +1501,7 @@
             <!-- Statistics Section -->
             <div class="w-full">
                 <!-- 6 Metric Cards Grid (Full Width) -->
-                <div class="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-4">
+                <div class="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4">
                     <!-- 1. Race Starts -->
                     <div class="bg-white dark:bg-slate-900 rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 border-red-700 dark:border-red-600 p-4 text-center shadow-xs">
                         <div class="text-base lg:text-lg text-black dark:text-white">
@@ -1502,6 +1549,16 @@
                         </div>
                         <div class="text-2xl lg:text-3xl font-black text-black dark:text-white">
                             {{ stats.podiums }}
+                        </div>
+                    </div>
+
+                    <!-- 6. Points Finishes -->
+                    <div class="bg-white dark:bg-slate-900 rounded-tr-3xl border-r-4 lg:border-r-6 border-t-4 lg:border-t-6 border-red-700 dark:border-red-600 p-4 text-center shadow-xs">
+                        <div class="text-base lg:text-lg text-black dark:text-white">
+                            {{ $t('pointsFinishes') }}
+                        </div>
+                        <div class="text-2xl lg:text-3xl font-black text-black dark:text-white">
+                            {{ stats.pointsFinishes }}
                         </div>
                     </div>
                 </div>
