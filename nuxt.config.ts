@@ -13,7 +13,8 @@ export default defineNuxtConfig({
         { name: 'theme-color', content: '#7f1d1d' },
       ],
       link: [
-        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }
       ]
     }
   },
@@ -35,7 +36,7 @@ export default defineNuxtConfig({
     }
   },
 
-  modules: ['@nuxt/icon', '@nuxtjs/i18n', '@nuxt/image', '@nuxt/ui'],
+  modules: ['@nuxt/icon', '@nuxtjs/i18n', '@nuxt/image', '@nuxt/ui', '@vite-pwa/nuxt'],
 
   ui: {
     fonts: false
@@ -50,5 +51,43 @@ export default defineNuxtConfig({
       { code: 'id', name: 'Bahasa Indonesia', file: 'id.json' },
       { code: 'en', name: 'English', file: 'en.json' }
     ]
+  },
+
+  pwa: {
+    registerType: 'autoUpdate',
+    manifest: {
+      name: 'ID Sim Racing',
+      short_name: 'ID Sim Racing',
+      description: 'Indonesian Sim Racing Community',
+      theme_color: '#7f1d1d',
+      background_color: '#09090b',
+      display: 'standalone',
+      orientation: 'portrait-primary',
+      icons: [
+        {
+          src: '/pwa-192x192.png',
+          sizes: '192x192',
+          type: 'image/png'
+        },
+        {
+          src: '/pwa-512x512.png',
+          sizes: '512x512',
+          type: 'image/png'
+        },
+        {
+          src: '/pwa-512x512.png',
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any maskable'
+        }
+      ]
+    },
+    workbox: {
+      navigateFallback: '/',
+      globPatterns: ['**/*.{js,css,html,png,svg,ico}']
+    },
+    client: {
+      installPrompt: true
+    }
   }
 })
