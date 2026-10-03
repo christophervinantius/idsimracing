@@ -77,7 +77,8 @@ export const isClassified = (result: ScoringResult): boolean => {
     if (!result) return false
     const status = String(result.status || "").toLowerCase().trim()
     if (status === "dnf" || status === "dns" || status === "dsq") return false
-    return result.classified_position !== null && result.classified_position !== undefined
+    return (result.classified_position !== null && result.classified_position !== undefined) ||
+           (result.scoring_position !== null && result.scoring_position !== undefined)
 }
 
 // Points for a finishing position from the system's rule table.
@@ -106,6 +107,9 @@ export const getBonusPoints = (
         : Boolean(result.fastest_lap)
 
     for (const bonus of bonuses) {
+        if (bonus.requires_classification && (!isScoringStatus(result.status) || !isClassified(result))) {
+            continue
+        }
         if (bonus.bonus_type === "fastest_lap" && isFastestLap) {
             total += Number(bonus.points) || 0
         } else if (bonus.bonus_type === "pole" && isPole) {
@@ -310,8 +314,26 @@ export const calculateStandings = (
         const system = pointsSystems.get(champEvent.points_system_id) || null
         const multiplier = champEvent.points_multiplier
 
-        // Determine pole keys: check session grid positions first; if not present, check qualifying session
+        const isSubsequentRace = (s?: string | null) => {
+            const clean = String(s || '').toLowerCase().trim()
+            return clean === 'race_2' || clean === 'race2' || clean === 'r2' ||
+                   clean === 'race_3' || clean === 'race3' || clean === 'r3' ||
+                   clean === 'race_4' || clean === 'race4' || clean === 'r4'
+        }
+
+        const isQualiSession = (s?: string | null) => {
+            const clean = String(s || '').toLowerCase().trim()
+            return clean === 'qualifying' || clean === 'q' || clean === 'quali'
+        }
+
+        const raceEventsForSchedule = championshipEvents.filter(
+            e => e.schedule_id === champEvent.schedule_id && !isQualiSession(e.session_type)
+        )
+        const isFirstRaceOfSchedule = raceEventsForSchedule.length === 0 || raceEventsForSchedule[0].id === champEvent.id
+        const isFirstRaceSession = !isSubsequentRace(champEvent.session_type) && isFirstRaceOfSchedule
+
         const hasGridInSession = session.results.some(r => !r.is_wildcard && Number(r.grid_position) === 1)
+        const hasAnyGridInSession = session.results.some(r => !r.is_wildcard && Number(r.grid_position) > 0)
 
         // Determine effective scoring mode:
         // - If event explicitly specifies "overall_strict", "overall", or "in_class", use that.
@@ -327,8 +349,7 @@ export const calculateStandings = (
         } else if (isClassChampionship) {
             effectiveScoringMode = "in_class"
         } else {
-            const isQualiSession = ['qualifying', 'q', 'quali'].includes(String(champEvent.session_type || '').toLowerCase().trim())
-            effectiveScoringMode = isQualiSession ? "in_class" : "overall"
+            effectiveScoringMode = isQualiSession(champEvent.session_type) ? "in_class" : "overall"
         }
 
         let poleKeys: Set<string> = new Set()
@@ -347,6 +368,25 @@ export const calculateStandings = (
                         : String(overallPole.team_id)
                     poleKeys.add(teamKey)
                 }
+            } else if (isFirstRaceSession && !hasAnyGridInSession) {
+                const qualifyingSession = sessions.find(
+                    s => s.schedule_id === champEvent.schedule_id && matchSessionType("qualifying", s.session_type)
+                )
+                if (qualifyingSession) {
+                    const eligibleQResults = qualifyingSession.results.filter(r => !r.is_wildcard)
+                    const qPole = eligibleQResults.find(r => (Number(r.classified_position) === 1 || Number(r.scoring_position) === 1))
+                    if (qPole) {
+                        const dIds = qPole.driver_ids && qPole.driver_ids.length > 0 ? qPole.driver_ids : (qPole.driver_id ? [qPole.driver_id] : [])
+                        if (entityType === "driver") {
+                            dIds.forEach(id => { if (id) poleKeys.add(String(id)) })
+                        } else if (qPole.team_id !== null && qPole.team_id !== undefined) {
+                            const teamKey = (qPole.car_number !== null && qPole.car_number !== undefined)
+                                ? `${qPole.team_id}::${qPole.car_number}`
+                                : String(qPole.team_id)
+                            poleKeys.add(teamKey)
+                        }
+                    }
+                }
             }
         } else if (hasGridInSession) {
             for (const r of session.results) {
@@ -363,7 +403,7 @@ export const calculateStandings = (
                     }
                 }
             }
-        } else {
+        } else if (isFirstRaceSession && !hasAnyGridInSession) {
             const qualifyingSession = sessions.find(
                 s => s.schedule_id === champEvent.schedule_id && matchSessionType("qualifying", s.session_type)
             )
@@ -417,6 +457,7 @@ export const calculateStandings = (
 
         // Aggregate points and best finish position for each entity in this session
         const sessionAgg = new Map<string, { points: number; bestPos: number | null }>()
+        const seenSessionEntities = new Set<string>()
 
         for (const result of session.results) {
             // Wildcard drivers are completely excluded from championship standings rankings
@@ -474,6 +515,9 @@ export const calculateStandings = (
             const effectivePos = effectivePosMap.get(result)
 
             for (const key of entityKeys) {
+                if (seenSessionEntities.has(key)) continue
+                seenSessionEntities.add(key)
+
                 const points = calculateResultPoints(system, result, {
                     isPole: poleKeys.has(key),
                     isFastestLap,

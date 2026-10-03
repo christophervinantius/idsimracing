@@ -754,7 +754,13 @@
                 const multiplier = Number(ce?.points_multiplier) || 1.0
 
                 // Pole calculation for this session
-                const isFirstRace = (sessType === "race_1" || sessType === "r1" || sessType === "race")
+                const isSubsequentRace = (s) => {
+                    const clean = String(s || '').toLowerCase().trim()
+                    return clean === 'race_2' || clean === 'race2' || clean === 'r2' ||
+                           clean === 'race_3' || clean === 'race3' || clean === 'r3' ||
+                           clean === 'race_4' || clean === 'race4' || clean === 'r4'
+                }
+                const isFirstRace = !isSubsequentRace(sessType) && (sessType === "race_1" || sessType === "r1" || sessType === "race")
                 const hasGridPos = Number(res.grid_position) > 0
                 const isPole = (isQuali && (Number(res.classified_position) === 1 || Number(res.scoring_position) === 1)) ||
                     (!isQuali && (hasGridPos ? Number(res.grid_position) === 1 : (isFirstRace && qualifyingPoleSchedules.has(entry.schedule_id))))

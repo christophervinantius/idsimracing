@@ -581,7 +581,8 @@
                 } else if (isClassChampionship) {
                     effectiveScoringMode = "in_class"
                 } else {
-                    effectiveScoringMode = round.session_type === "qualifying" ? "in_class" : "overall"
+                    const isQualiSession = ['qualifying', 'q', 'quali'].includes(String(round.session_type || '').toLowerCase().trim())
+                    effectiveScoringMode = isQualiSession ? "in_class" : "overall"
                 }
 
                 const session = sessions.find(
@@ -589,14 +590,14 @@
                 )
 
                 let overallFastestResult = null
-                if ((effectiveScoringMode === "overall" || effectiveScoringMode === "overall_strict") && session && session.results) {
-                    const candidatesWithTime = session.results.filter(r => (r.best_lap_ms ?? 0) > 0)
+                if (effectiveScoringMode === "overall_strict" && session?.results) {
+                    const candidatesWithTime = session.results.filter(r => !r.is_wildcard && (r.best_lap_ms ?? 0) > 0)
                     if (candidatesWithTime.length > 0) {
                         overallFastestResult = candidatesWithTime.reduce((best, cur) =>
                             (cur.best_lap_ms < best.best_lap_ms) ? cur : best
                         )
                     } else {
-                        const flCandidates = session.results.filter(r => r.fastest_lap)
+                        const flCandidates = session.results.filter(r => !r.is_wildcard && r.fastest_lap)
                         if (flCandidates.length > 0) {
                             overallFastestResult = flCandidates.reduce((best, cur) => {
                                 const posBest = best.classified_position ?? 9999
@@ -607,39 +608,100 @@
                     }
                 }
 
-                const qualifyingSession = sessions.find(
-                    s => s.schedule_id === round.schedule_id && matchSessionType("qualifying", s.session_type)
-                )
+                const classFastestMap = new Map()
+                const flCandidates = (session?.results || []).filter(r => !r.is_wildcard && r.fastest_lap)
+                if (flCandidates.length > 0) {
+                    for (const fl of flCandidates) {
+                        const classKey = fl.class_id ? String(fl.class_id) : "__overall__"
+                        classFastestMap.set(classKey, fl)
+                    }
+                } else {
+                    for (const sessR of session?.results || []) {
+                        if (sessR.is_wildcard || (sessR.best_lap_ms ?? 0) <= 0) continue
+                        const classKey = sessR.class_id ? String(sessR.class_id) : "__overall__"
+                        const currentBest = classFastestMap.get(classKey)
+                        if (!currentBest || (sessR.best_lap_ms < currentBest.best_lap_ms)) {
+                            classFastestMap.set(classKey, sessR)
+                        }
+                    }
+                }
 
-                const isFirstRaceSession = (
-                    String(round.session_type || 'race').toLowerCase().trim() === 'race' ||
-                    String(round.session_type || '').toLowerCase().trim() === 'race_1' ||
-                    String(round.session_type || '').toLowerCase().trim() === 'race1'
-                )
-                const hasGridPositionsInSession = Boolean(session?.results?.some(r => Number(r.grid_position) > 0))
+                const isSubsequentRace = (s) => {
+                    const clean = String(s || '').toLowerCase().trim()
+                    return clean === 'race_2' || clean === 'race2' || clean === 'r2' ||
+                           clean === 'race_3' || clean === 'race3' || clean === 'r3' ||
+                           clean === 'race_4' || clean === 'race4' || clean === 'r4'
+                }
 
-                const poleKeys = new Set()
-                // Only fall back to qualifying if this is the first race session AND the race session has no grid positions recorded at all
-                if (qualifyingSession && isFirstRaceSession && !hasGridPositionsInSession) {
-                    for (const qr of qualifyingSession.results || []) {
-                        if (targetClassId && qr.class_id && String(qr.class_id) !== targetClassId) continue
-                        const qpos = effectiveScoringMode === "overall_strict"
-                            ? (qr.classified_position ?? qr.scoring_position)
-                            : (qr.scoring_position ?? qr.classified_position)
-                        if (qpos === 1) {
-                            if (qr.driver_ids && qr.driver_ids.length > 0) {
-                                qr.driver_ids.forEach(id => { if (id) poleKeys.add(String(id)) })
-                            } else if (qr.driver_id) {
-                                poleKeys.add(String(qr.driver_id))
+                const isQualiSession = (s) => {
+                    const clean = String(s || '').toLowerCase().trim()
+                    return clean === 'qualifying' || clean === 'q' || clean === 'quali'
+                }
+
+                const raceRoundsForSchedule = (roundsData || []).filter(
+                    r => r.schedule_id === round.schedule_id && !isQualiSession(r.session_type)
+                )
+                const isFirstRaceOfSchedule = raceRoundsForSchedule.length === 0 || raceRoundsForSchedule[0].id === round.id
+                const isFirstRaceSession = !isSubsequentRace(round.session_type) && isFirstRaceOfSchedule
+
+                // Determine pole keys: check session grid positions first; if not present, check qualifying session
+                const hasGridInSession = session?.results?.some(r => !r.is_wildcard && Number(r.grid_position) === 1)
+                const hasAnyGridInSession = session?.results?.some(r => !r.is_wildcard && Number(r.grid_position) > 0)
+                let poleKeys = new Set()
+                if (effectiveScoringMode === "overall_strict") {
+                    const eligiblePoleResults = (session?.results || []).filter(r => !r.is_wildcard)
+                    const overallPole = eligiblePoleResults.find(r => Number(r.grid_position) === 1 && (Number(r.classified_position) === 1 || Number(r.scoring_position) === 1))
+                        || eligiblePoleResults.find(r => Number(r.grid_position) === 1)
+                    if (overallPole) {
+                        const dIds = overallPole.driver_ids && overallPole.driver_ids.length > 0 ? overallPole.driver_ids : (overallPole.driver_id ? [overallPole.driver_id] : [])
+                        if (entityType.value === "driver") {
+                            dIds.forEach(id => { if (id) poleKeys.add(String(id)) })
+                        } else if (overallPole.team_id !== null && overallPole.team_id !== undefined) {
+                            const teamKey = (overallPole.car_number !== null && overallPole.car_number !== undefined)
+                                ? `${overallPole.team_id}::${overallPole.car_number}`
+                                : String(overallPole.team_id)
+                            poleKeys.add(teamKey)
+                        }
+                    } else if (isFirstRaceSession && !hasAnyGridInSession) {
+                        const qualifyingSession = sessions.find(
+                            s => s.schedule_id === round.schedule_id && matchSessionType("qualifying", s.session_type)
+                        )
+                        if (qualifyingSession) {
+                            const eligibleQResults = (qualifyingSession.results || []).filter(r => !r.is_wildcard)
+                            const qPole = eligibleQResults.find(r => (Number(r.classified_position) === 1 || Number(r.scoring_position) === 1))
+                            if (qPole) {
+                                const dIds = qPole.driver_ids && qPole.driver_ids.length > 0 ? qPole.driver_ids : (qPole.driver_id ? [qPole.driver_id] : [])
+                                if (entityType.value === "driver") {
+                                    dIds.forEach(id => { if (id) poleKeys.add(String(id)) })
+                                } else if (qPole.team_id !== null && qPole.team_id !== undefined) {
+                                    const teamKey = (qPole.car_number !== null && qPole.car_number !== undefined)
+                                        ? `${qPole.team_id}::${qPole.car_number}`
+                                        : String(qPole.team_id)
+                                    poleKeys.add(teamKey)
+                                }
                             }
-                            if (qr.team_id !== null && qr.team_id !== undefined) {
-                                const teamKey = (qr.car_number !== null && qr.car_number !== undefined)
-                                    ? `${qr.team_id}::${qr.car_number}`
-                                    : String(qr.team_id)
+                        }
+                    }
+                } else if (hasGridInSession) {
+                    for (const r of session?.results || []) {
+                        if (r.is_wildcard) continue
+                        if (Number(r.grid_position) === 1) {
+                            if (entityType.value === "driver") {
+                                const dIds = r.driver_ids && r.driver_ids.length > 0 ? r.driver_ids : (r.driver_id ? [r.driver_id] : [])
+                                dIds.forEach(id => { if (id) poleKeys.add(String(id)) })
+                            } else if (r.team_id !== null && r.team_id !== undefined) {
+                                const teamKey = (r.car_number !== null && r.car_number !== undefined)
+                                    ? `${r.team_id}::${r.car_number}`
+                                    : String(r.team_id)
                                 poleKeys.add(teamKey)
                             }
                         }
                     }
+                } else if (isFirstRaceSession && !hasAnyGridInSession) {
+                    const qualifyingSession = sessions.find(
+                        s => s.schedule_id === round.schedule_id && matchSessionType("qualifying", s.session_type)
+                    )
+                    poleKeys = qualifyingSession ? findPoleEntityKeys(qualifyingSession.results, entityType.value) : new Set()
                 }
 
                 const hasResults = Boolean(session && session.results && session.results.length > 0)
@@ -665,6 +727,8 @@
                         inClassPosMap.set(res, resolvedClassPos)
                     }
 
+                    const seenEntitiesInSession = new Set()
+
                     for (const r of session.results) {
                         // Wildcard drivers do not participate in championship standings
                         if (r.is_wildcard) continue
@@ -685,24 +749,6 @@
                             }
                         }
 
-                        const classFastestMap = new Map()
-                        const flCandidates = (session?.results || []).filter(r => !r.is_wildcard && r.fastest_lap)
-                        if (flCandidates.length > 0) {
-                            for (const fl of flCandidates) {
-                                const classKey = fl.class_id ? String(fl.class_id) : "__overall__"
-                                classFastestMap.set(classKey, fl)
-                            }
-                        } else {
-                            for (const sessR of session?.results || []) {
-                                if (sessR.is_wildcard || (sessR.best_lap_ms ?? 0) <= 0) continue
-                                const classKey = sessR.class_id ? String(sessR.class_id) : "__overall__"
-                                const currentBest = classFastestMap.get(classKey)
-                                if (!currentBest || (sessR.best_lap_ms < currentBest.best_lap_ms)) {
-                                    classFastestMap.set(classKey, sessR)
-                                }
-                            }
-                        }
-
                         const classKey = r.class_id ? String(r.class_id) : "__overall__"
                         const isFastestLap = effectiveScoringMode === "overall_strict"
                             ? (overallFastestResult !== null && r === overallFastestResult)
@@ -720,7 +766,10 @@
                         const inClassPos = inClassPosMap.get(r) ?? (Number(r.scoring_position) > 0 ? Number(r.scoring_position) : r.classified_position)
 
                         for (const key of entityKeys) {
-                            const isPole = Number(r.grid_position) === 1 || poleKeys.has(key)
+                            if (seenEntitiesInSession.has(key)) continue
+                            seenEntitiesInSession.add(key)
+
+                            const isPole = poleKeys.has(key)
                             const pts = calculateResultPoints(system, r, {
                                 isPole,
                                 isFastestLap,
@@ -873,23 +922,27 @@
                     title: `Qualifying: P${qualiPos}${ptsText}`,
                     isPole: qualiPos === 1 || Boolean(qEntry?.isPole),
                     fastestLap: false,
+                    points: qualiPoints,
                     bgClass
                 }
             }
-            return { text: "", isBlank: true, bgClass: "bg-transparent" }
+            return { text: "", isBlank: true, points: 0, bgClass: "bg-transparent" }
         }
 
         const status = String(entry.status || "finished").toLowerCase().trim()
 
         if (status === "dsq" || status === "disqualified") {
+            const pts = (Number(entry.points) || 0) + (offersQPoints ? qualiPoints : 0)
+            const ptsText = pts > 0 ? ` • ${formatPoints(pts)} pts` : ''
             return {
                 text: "DSQ",
                 pos: null,
                 qualiPos: offersQPoints ? qualiPos : null,
                 hasQualiPoints: offersQPoints && Boolean(qualiPos),
-                title: "DSQ",
+                title: `DSQ${ptsText}`,
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
+                points: pts,
                 bgClass: "bg-black text-white font-medium"
             }
         }
@@ -906,6 +959,7 @@
                 title: `DNS${ptsText}${qInfo}`,
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
+                points: pts,
                 bgClass: "bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-medium"
             }
         }
@@ -922,6 +976,7 @@
                 title: `DNF${ptsText}${qInfo}`,
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
+                points: pts,
                 bgClass: "bg-purple-200 dark:bg-purple-900/60 text-purple-950 dark:text-purple-200 font-medium"
             }
         }
@@ -953,7 +1008,8 @@
             : (entry.scoring_position ?? entry.classified_position)
 
         if (pos === null || pos === undefined) {
-            return { text: "-", bgClass: "bg-transparent text-gray-400" }
+            const pts = (Number(entry.points) || 0) + (offersQPoints ? qualiPoints : 0)
+            return { text: "-", pos: null, points: pts, bgClass: "bg-transparent text-gray-400" }
         }
 
         const racePoints = Number(entry.points ?? entry.position_points ?? 0)
@@ -999,6 +1055,7 @@
             isPole: Boolean(entry.isPole),
             fastestLap: Boolean(entry.fastest_lap),
             noPoints: Boolean(entry.no_points),
+            points: totalRoundPoints,
             bgClass
         }
     }
@@ -1007,6 +1064,56 @@
         if (!rnd) return false
         const sessionData = progressionMap.value.get(rnd.id) || progressionMap.value.get(String(rnd.schedule_id))
         return Boolean(sessionData && sessionData.hasResults && (rnd.schedule_id || rnd.schedule?.id))
+    }
+
+    const getRoundPoints = (row, rnd) => {
+        const cell = getMatrixCellData(row, rnd)
+        return Number(cell?.points || 0)
+    }
+
+    const calculateRowTotalPoints = (row) => {
+        let total = 0
+        for (const rnd of sortedRounds.value || []) {
+            total += getRoundPoints(row, rnd)
+        }
+        // Also add any qualifying session that offers points and has no race in sortedRounds
+        for (const qRnd of allSortedRounds.value || []) {
+            if (!isQualifyingSession(qRnd.session_type)) continue
+            const hasRaceForSchedule = sortedRounds.value.some(r => r.schedule_id === qRnd.schedule_id)
+            if (!hasRaceForSchedule && qualifyingOffersPoints(qRnd)) {
+                const key = entityType.value === "driver"
+                    ? String(row.driver_id)
+                    : (row.car_number !== null && row.car_number !== undefined
+                        ? `${row.team_id}::${row.car_number}`
+                        : String(row.team_id))
+                const qSessionData = progressionMap.value.get(qRnd.id) ||
+                    progressionMap.value.get(`${qRnd.schedule_id}::qualifying`) ||
+                    progressionMap.value.get(`${qRnd.schedule_id}::q`)
+                const qEntry = qSessionData?.entries?.get(key)
+                if (qEntry) {
+                    total += (Number(qEntry.points) || 0)
+                }
+            }
+        }
+        return Number(total.toFixed(2))
+    }
+
+    const getRowWins = (row) => {
+        let wins = 0
+        for (const rnd of sortedRounds.value || []) {
+            const cell = getMatrixCellData(row, rnd)
+            if (!cell.isBlank && cell.pos === 1) wins += 1
+        }
+        return wins
+    }
+
+    const getRowPodiums = (row) => {
+        let podiums = 0
+        for (const rnd of sortedRounds.value || []) {
+            const cell = getMatrixCellData(row, rnd)
+            if (!cell.isBlank && cell.pos && typeof cell.pos === "number" && cell.pos >= 1 && cell.pos <= 3) podiums += 1
+        }
+        return podiums
     }
 
     watch(selectedChampionshipId, fetchStandings, { immediate: true })
@@ -1075,11 +1182,53 @@
     }
 
     const visibleStandings = computed(() => {
-        let list = standings.value.filter(r => r.entity_type === entityType.value)
+        let list = (standings.value || []).filter(r => r.entity_type === entityType.value).map(r => ({ ...r }))
 
-        // Self-healing fallback: if the database standings table currently has 0 rows
-        // synthesize the standings rows dynamically from progressionMap so users always see results.
-        if (list.length === 0 && progressionMap.value.size > 0 && selectedChampionship.value) {
+        const hasAnyResults = Boolean(allSortedRounds.value?.length && [...progressionMap.value.values()].some(v => v.hasResults))
+
+        // If progressionMap has results, merge in any entities with results that aren't yet in DB standings
+        if (hasAnyResults) {
+            const existingKeys = new Set(list.map(r =>
+                entityType.value === "driver"
+                    ? String(r.driver_id)
+                    : (r.car_number !== null && r.car_number !== undefined
+                        ? `${r.team_id}::${r.car_number}`
+                        : String(r.team_id))
+            ))
+
+            for (const round of allSortedRounds.value || []) {
+                const sessionData = progressionMap.value.get(round.id) ||
+                    progressionMap.value.get(`${round.schedule_id}::${round.session_type || 'race'}`) ||
+                    progressionMap.value.get(String(round.schedule_id))
+                if (!sessionData?.entries) continue
+
+                for (const [key, entry] of sessionData.entries.entries()) {
+                    if (!existingKeys.has(key)) {
+                        existingKeys.add(key)
+                        list.push({
+                            id: `synth_${key}`,
+                            entity_type: entityType.value,
+                            driver_id: entry.driver_id || (entityType.value === "driver" ? key : null),
+                            team_id: entityType.value === "team" ? (key.includes("::") ? Number(key.split("::")[0]) : Number(key)) : null,
+                            car_number: entityType.value === "team" && key.includes("::") ? Number(key.split("::")[1]) : null,
+                            drivers: entry.drivers || null,
+                            teams: entry.teams || null,
+                            points: 0,
+                            wins: 0,
+                            podiums: 0,
+                            position: 1
+                        })
+                    }
+                }
+            }
+
+            // TOTAL POINTS: always take total points as addition between all the points from the results!
+            list.forEach(row => {
+                row.points = calculateRowTotalPoints(row)
+                row.wins = getRowWins(row)
+                row.podiums = getRowPodiums(row)
+            })
+        } else if (list.length === 0 && progressionMap.value.size > 0 && selectedChampionship.value) {
             const synthMap = new Map()
             for (const round of allSortedRounds.value || []) {
                 const sessionData = progressionMap.value.get(round.id) ||
@@ -1096,12 +1245,14 @@
                         driver_id: entry.driver_id || (entityType.value === "driver" ? key : null),
                         team_id: entityType.value === "team" ? (key.includes("::") ? Number(key.split("::")[0]) : Number(key)) : null,
                         car_number: entityType.value === "team" && key.includes("::") ? Number(key.split("::")[1]) : null,
+                        drivers: entry.drivers || null,
+                        teams: entry.teams || null,
                         points: 0,
                         wins: 0,
                         podiums: 0,
                         position: 1
                     }
-                    cur.points += (Number(entry.points) || 0)
+                    cur.points = Number(((cur.points || 0) + (Number(entry.points) || 0)).toFixed(2))
                     if (isRace) {
                         const pos = entry.scoring_position ?? entry.classified_position
                         if (pos === 1) cur.wins += 1
@@ -1297,7 +1448,7 @@
         if (!leader.value || row.id === leader.value.id) return null
         const diff = Number(leader.value.points) - Number(row.points)
         if (diff <= 0) return null
-        return diff
+        return Number(diff.toFixed(2))
     }
 
     // Gap to the previous position (position ahead).
@@ -1306,7 +1457,7 @@
         const prev = visibleStandings.value[index - 1]
         if (!prev) return null
         const diff = Number(prev.points) - Number(row.points)
-        return Math.max(0, diff)
+        return Number(Math.max(0, diff).toFixed(2))
     }
 
     const showTopButton = ref(false)
