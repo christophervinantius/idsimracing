@@ -1,6 +1,6 @@
 <script setup>
-    import { calculateResultPoints, matchSessionType } from "~/composables/useStandings"
-    import { cleanTeamName, parseTeamInfo, formatLapTime } from "~/composables/useRaceResult"
+    import { calculateResultPoints, matchSessionType, buildSessionEffectivePointsPositions } from "~/composables/useStandings"
+    import { cleanTeamName, parseTeamInfo, formatLapTime, formatTotalTime, formatGapTime, parseAcsmResult } from "~/composables/useRaceResult"
 
     const route = useRoute()
     const router = useRouter()
@@ -64,6 +64,15 @@
             console.error("Fetch error:", e)
             return null
         }
+    })
+
+    const cleanCircuit = computed(() => {
+        const raw = scheduleItem.value?.circuit
+        if (!raw || typeof raw !== "string") return ""
+        return raw
+            .replace(/\s*-\s*Race.*/i, "")
+            .replace(/\s*-\s*Qualifying.*/i, "")
+            .trim()
     })
 
     // SEO Meta Tags & Structured Data for Race Detail
@@ -209,7 +218,7 @@
     const { data: dbEntries, pending: loadingEntries } = await useAsyncData(`schedule-entries-${scheduleId.value}`, async () => {
         if (!scheduleId.value) return []
         try {
-            const { data, error } = await $supabase
+            let { data, error } = await $supabase
                 .from("event_entries")
                 .select(`
                     id,
@@ -463,6 +472,13 @@
         return map
     })
 
+    // 3. Raw result fallback for legacy JSONs
+    const rawResultDataQ = ref(null)
+    const rawResultData1 = ref(null)
+    const rawResultData2 = ref(null)
+    const activeSessionTab = ref('r1')
+    const loadingResult = ref(true)
+
     const currentChampEvent = computed(() => {
         if (!champEvents.value || champEvents.value.length === 0) return null
         const currentTab = activeSessionTab.value
@@ -483,13 +499,6 @@
     const currentPointsSystem = computed(() => {
         return currentChampEvent.value?.points_system || null
     })
-
-    // 3. Raw result fallback for legacy JSONs
-    const rawResultDataQ = ref(null)
-    const rawResultData1 = ref(null)
-    const rawResultData2 = ref(null)
-    const activeSessionTab = ref('r1')
-    const loadingResult = ref(true)
 
     onMounted(async () => {
         if (!dbEntries.value || dbEntries.value.length === 0) {
@@ -1422,15 +1431,6 @@
         }
         return style
     }
-
-    const cleanCircuit = computed(() => {
-        const raw = scheduleItem.value?.circuit
-        if (!raw || typeof raw !== "string") return ""
-        return raw
-            .replace(/\s*-\s*Race.*/i, "")
-            .replace(/\s*-\s*Qualifying.*/i, "")
-            .trim()
-    })
 
     const watermarkCircuitName = computed(() => {
         return cleanCircuit.value
