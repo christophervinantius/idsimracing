@@ -125,6 +125,7 @@
                             country,
                             country_2,
                             season,
+                            custom_session_names,
                             events (
                                 id,
                                 name,
@@ -158,7 +159,7 @@
                     `)
                     .eq("driver_id", driverId.value)
 
-                if (error && (error.message?.includes("classes") || error.message?.includes("is_wildcard") || error.code === "PGRST204" || error.code === "42703")) {
+                if (error && (error.message?.includes("classes") || error.message?.includes("is_wildcard") || error.message?.includes("custom_session_names") || error.code === "PGRST204" || error.code === "42703")) {
                     const res = await $supabase
                         .from("event_entries")
                         .select(`
@@ -723,16 +724,91 @@
     }
 
     // 5. Flatten and process all driver session results
+    const isSessionNamedQualifying = (sessType, sched) => {
+        const sType = String(sessType || '').toLowerCase().trim()
+        const isUnderlyingQuali = sType === 'qualifying' || sType === 'q' || sType === 'quali'
+        if (!isUnderlyingQuali) return false
+
+        const customNames = sched?.custom_session_names
+        let customName = null
+        if (customNames && typeof customNames === 'object') {
+            customName = customNames[sessType] || customNames['qualifying'] || customNames['q']
+        }
+        if (!customName || typeof customName !== 'string' || !customName.trim()) {
+            return true
+        }
+
+        const clean = customName.trim().toLowerCase()
+        return clean === 'qualifying' || clean === 'kualifikasi' || clean === 'quali' || clean === 'q'
+    }
+
     const processedResults = computed(() => {
         if (!driverEntries.value || driverEntries.value.length === 0) return []
 
-        // Check if qualifying sessions had pole position for any schedules
+        // Check if qualifying sessions had pole position for any schedules (only if actually named qualifying)
         const qualifyingPoleSchedules = new Set()
+        const scheduleQualifyingMap = new Map()
+
         for (const entry of driverEntries.value) {
+            const sched = entry.schedule
             for (const res of (entry.results || [])) {
                 const sType = String(res.session_type || "").toLowerCase().trim()
-                if ((sType === "qualifying" || sType === "q") && (Number(res.classified_position) === 1 || Number(res.scoring_position) === 1)) {
+                const isQuali = sType === "qualifying" || sType === "q"
+                const isQualiNamed = isSessionNamedQualifying(sType, sched)
+                const isFirst = Number(res.classified_position) === 1 || Number(res.scoring_position) === 1
+
+                if (isQualiNamed && isFirst) {
                     qualifyingPoleSchedules.add(entry.schedule_id)
+                }
+
+                if (isQuali) {
+                    const qCe = pointsMap.value.get(`${entry.schedule_id}::${sType}`) || pointsMap.value.get(entry.schedule_id)
+                    const qPtsSystem = qCe?.points_system
+                    const qMultiplier = Number(qCe?.points_multiplier) || 1.0
+                    const qCustomName = sched?.custom_session_names?.[sType] || null
+                    const qSessionLabel = qCustomName || (sType === "qualifying" ? t("qualifying") : "Qualifying")
+                    const qIsPole = isQualiNamed && isFirst
+
+                    const qPoints = qPtsSystem
+                        ? calculateResultPoints(qPtsSystem, {
+                            driver_id: entry.driver_id,
+                            team_id: entry.team_id,
+                            car_number: entry.car_number,
+                            scoring_position: res.scoring_position,
+                            classified_position: res.classified_position,
+                            status: res.status,
+                            fastest_lap: Boolean(res.fastest_lap),
+                            grid_position: Number(res.grid_position) || null,
+                            no_points: Boolean(res.no_points),
+                            is_wildcard: Boolean(res.is_wildcard)
+                        }, {
+                            isPole: qIsPole,
+                            multiplier: qMultiplier,
+                            scoringMode: qCe?.scoring_mode === 'overall_strict' ? 'overall_strict' : (qCe?.scoring_mode === 'overall' ? 'overall' : 'in_class')
+                        })
+                        : 0
+
+                    let qPos = null
+                    const qStatus = String(res.status || "finished").toLowerCase().trim()
+                    if (qStatus !== "dns" && qStatus !== "dsq" && qStatus !== "disqualified") {
+                        // The superscript position refers to what class the driver is in (scoring_position),
+                        // exactly matching the standings page in-class display.
+                        const classPos = Number(res.scoring_position)
+                        const overallPos = Number(res.classified_position)
+                        if (classPos > 0) {
+                            qPos = classPos
+                        } else if (overallPos > 0) {
+                            qPos = overallPos
+                        }
+                    }
+
+                    scheduleQualifyingMap.set(entry.schedule_id, {
+                        points: qPoints,
+                        pos: qPos,
+                        sessionLabel: qSessionLabel,
+                        isPole: qIsPole,
+                        hasQualiPoints: Boolean(qPoints > 0 && qPos !== null)
+                    })
                 }
             }
         }
@@ -746,6 +822,8 @@
             for (const res of results) {
                 const sessType = res.session_type || "race"
                 const isQuali = sessType === "qualifying" || sessType === "q"
+                const isQualiNamed = isSessionNamedQualifying(sessType, sched)
+                const customSessionName = sched?.custom_session_names?.[sessType] || null
 
                 // Look up championship event / points system
                 const ce = pointsMap.value.get(`${entry.schedule_id}::${sessType}`) ||
@@ -753,7 +831,7 @@
                 const ptsSystem = ce?.points_system
                 const multiplier = Number(ce?.points_multiplier) || 1.0
 
-                // Pole calculation for this session
+                // Pole calculation for this session: only accredited if session is actually named qualifying
                 const isSubsequentRace = (s) => {
                     const clean = String(s || '').toLowerCase().trim()
                     return clean === 'race_2' || clean === 'race2' || clean === 'r2' ||
@@ -762,11 +840,11 @@
                 }
                 const isFirstRace = !isSubsequentRace(sessType) && (sessType === "race_1" || sessType === "r1" || sessType === "race")
                 const hasGridPos = Number(res.grid_position) > 0
-                const isPole = (isQuali && (Number(res.classified_position) === 1 || Number(res.scoring_position) === 1)) ||
+                const isPole = (isQuali && isQualiNamed && (Number(res.classified_position) === 1 || Number(res.scoring_position) === 1)) ||
                     (!isQuali && (hasGridPos ? Number(res.grid_position) === 1 : (isFirstRace && qualifyingPoleSchedules.has(entry.schedule_id))))
 
                 // Calculate points
-                const pts = ptsSystem
+                const basePts = ptsSystem
                     ? calculateResultPoints(ptsSystem, {
                         driver_id: entry.driver_id,
                         team_id: entry.team_id,
@@ -784,6 +862,14 @@
                         scoringMode: ce?.scoring_mode === 'overall_strict' ? 'overall_strict' : (ce?.scoring_mode === 'overall' ? 'overall' : 'in_class')
                     })
                     : 0
+
+                // Link qualifying/powerstage points & position to first race of schedule
+                const qData = isFirstRace ? scheduleQualifyingMap.get(entry.schedule_id) : null
+                const hasQualiPoints = Boolean(qData?.hasQualiPoints)
+                const qualiPos = hasQualiPoints ? qData.pos : null
+                const qualiPoints = hasQualiPoints ? qData.points : 0
+                const qualiSessionLabel = hasQualiPoints ? qData.sessionLabel : null
+                const pts = basePts + qualiPoints
 
                 // Resolve Multiclass & Class
                 const evId = event?.id
@@ -834,7 +920,11 @@
                     gameAbbr: event?.games?.abbreviation || (Array.isArray(event?.games) ? event?.games[0]?.abbreviation : null),
                     organizerAbbr: event?.organizers?.abbreviation || (Array.isArray(event?.organizers) ? event?.organizers[0]?.abbreviation : null),
                     sessionType: sessType,
-                    sessionLabel: sessType === "qualifying" ? t("qualifying") : (sessType === "race_1" ? "Race 1" : (sessType === "race_2" ? "Race 2" : t("race"))),
+                    sessionLabel: customSessionName || (sessType === "qualifying" ? t("qualifying") : (sessType === "race_1" ? "Race 1" : (sessType === "race_2" ? "Race 2" : t("race")))),
+                    customSessionName,
+                    customSessionNames: sched?.custom_session_names || null,
+                    isQuali,
+                    isQualiNamed,
                     carNumber: entry.car_number,
                     carModel: entry.car_model || "-",
                     teamName: entry.teams?.name || "-",
@@ -855,7 +945,11 @@
                     isPodium,
                     points: pts,
                     noPoints: Boolean(res.no_points),
-                    isWildcard: Boolean(res.is_wildcard)
+                    isWildcard: Boolean(res.is_wildcard),
+                    hasQualiPoints,
+                    qualiPos,
+                    qualiPoints,
+                    qualiSessionLabel
                 })
             }
         }
@@ -1323,7 +1417,9 @@
         const isRace1 = st === "race_1" || st === "race1" || st === "r1" || /\bRace\s*1\b/i.test(rawStr)
         const isRace2 = st === "race_2" || st === "race2" || st === "r2" || /\bRace\s*2\b/i.test(rawStr)
 
-        if (isRace1) {
+        if (item.customSessionName) {
+            text = `${text} (${item.customSessionName})`
+        } else if (isRace1) {
             text = `${text} (Race 1)`
         } else if (isRace2) {
             text = `${text} (Race 2)`
@@ -1867,12 +1963,31 @@
                                             <span v-else>-</span>
                                         </td> -->
 
-                                        <!-- Finish Position (with Pole Position 'P' and Fastest Lap 'F' superscripts) -->
+                                        <!-- Finish Position (with Quali/Powerstage position superscript, Pole Position 'P', and Fastest Lap 'F' superscripts) -->
                                         <td class="py-3 px-3 text-center whitespace-nowrap font-bold">
                                             <span :class="getPositionBadge(item).class" class="relative inline-flex items-center justify-center">
                                                 <span>{{ getPositionBadge(item).label }}</span>
-                                                <sup v-if="item.isPole" class="font-medium text-[10px] lg:text-xs ml-0.5">P</sup>
-                                                <sup v-if="item.isFastestLap" class="font-medium text-[10px] lg:text-xs ml-0.5">F</sup>
+                                                <sup
+                                                    v-if="item.hasQualiPoints && item.qualiPos"
+                                                    class="font-bold text-[10px] lg:text-xs ml-0.5"
+                                                    :title="`${item.qualiSessionLabel || 'Qualifying'}: P${item.qualiPos}${item.qualiPoints ? ` (+${item.qualiPoints} pts)` : ''}`"
+                                                >
+                                                    {{ item.qualiPos }}
+                                                </sup>
+                                                <sup
+                                                    v-if="item.isPole && !item.hasQualiPoints"
+                                                    class="font-medium text-[10px] lg:text-xs ml-0.5"
+                                                    :title="$t('polePosition') || 'Pole Position'"
+                                                >
+                                                    P
+                                                </sup>
+                                                <sup
+                                                    v-if="item.isFastestLap"
+                                                    class="font-medium text-[10px] lg:text-xs ml-0.5"
+                                                    :title="$t('fastestLap') || 'Fastest Lap'"
+                                                >
+                                                    F
+                                                </sup>
                                             </span>
                                         </td>
 
