@@ -909,11 +909,9 @@
         }
 
         if (!entry) {
-            if (offersQPoints && qualiPos) {
-                const bgClass = qualiPoints > 0
-                    ? "bg-emerald-100 dark:bg-emerald-800/60 text-emerald-950 dark:text-emerald-100 font-medium"
-                    : "bg-blue-100 dark:bg-blue-900/40 text-blue-950 dark:text-blue-200 font-medium"
-                const ptsText = qualiPoints > 0 ? ` • ${formatPoints(qualiPoints)} pts` : ''
+            if (offersQPoints && qualiPos && qualiPoints > 0) {
+                const bgClass = "bg-blue-100 dark:bg-blue-900/40 text-blue-950 dark:text-blue-200 font-medium"
+                const ptsText = ` • ${formatPoints(qualiPoints)} pts`
                 return {
                     text: "-",
                     pos: null,
@@ -937,8 +935,8 @@
             return {
                 text: "DSQ",
                 pos: null,
-                qualiPos: offersQPoints ? qualiPos : null,
-                hasQualiPoints: offersQPoints && Boolean(qualiPos),
+                qualiPos: (offersQPoints && qualiPoints > 0) ? qualiPos : null,
+                hasQualiPoints: Boolean(offersQPoints && qualiPos && qualiPoints > 0),
                 title: `DSQ${ptsText}`,
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
@@ -950,12 +948,12 @@
         if (status === "dns") {
             const pts = (Number(entry.points) || 0) + (offersQPoints ? qualiPoints : 0)
             const ptsText = pts > 0 ? ` • ${formatPoints(pts)} pts` : ''
-            const qInfo = offersQPoints && qualiPos ? ` (Qualifying: P${qualiPos}${qualiPoints > 0 ? `, ${formatPoints(qualiPoints)} pts` : ''})` : ''
+            const qInfo = (offersQPoints && qualiPos && qualiPoints > 0) ? ` (Qualifying: P${qualiPos}, ${formatPoints(qualiPoints)} pts)` : ''
             return {
                 text: "DNS",
                 pos: null,
-                qualiPos: offersQPoints ? qualiPos : null,
-                hasQualiPoints: offersQPoints && Boolean(qualiPos),
+                qualiPos: (offersQPoints && qualiPoints > 0) ? qualiPos : null,
+                hasQualiPoints: Boolean(offersQPoints && qualiPos && qualiPoints > 0),
                 title: `DNS${ptsText}${qInfo}`,
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
@@ -967,12 +965,12 @@
         if (status === "dnf" || status === "retired") {
             const pts = (Number(entry.points) || 0) + (offersQPoints ? qualiPoints : 0)
             const ptsText = pts > 0 ? ` • ${formatPoints(pts)} pts` : ''
-            const qInfo = offersQPoints && qualiPos ? ` (Qualifying: P${qualiPos}${qualiPoints > 0 ? `, ${formatPoints(qualiPoints)} pts` : ''})` : ''
+            const qInfo = (offersQPoints && qualiPos && qualiPoints > 0) ? ` (Qualifying: P${qualiPos}, ${formatPoints(qualiPoints)} pts)` : ''
             return {
                 text: "DNF",
                 pos: null,
-                qualiPos: offersQPoints ? qualiPos : null,
-                hasQualiPoints: offersQPoints && Boolean(qualiPos),
+                qualiPos: (offersQPoints && qualiPoints > 0) ? qualiPos : null,
+                hasQualiPoints: Boolean(offersQPoints && qualiPos && qualiPoints > 0),
                 title: `DNF${ptsText}${qInfo}`,
                 isPole: Boolean(entry.isPole),
                 fastestLap: Boolean(entry.fastest_lap),
@@ -1037,8 +1035,8 @@
         let title = ""
         if (entry.no_points) {
             title = 'Tanpa Poin (No points)'
-        } else if (offersQPoints && qualiPos) {
-            const qText = `Q: P${qualiPos}${qualiPoints > 0 ? ` (${formatPoints(qualiPoints)} pts)` : ''}`
+        } else if (offersQPoints && qualiPos && qualiPoints > 0) {
+            const qText = `Q: P${qualiPos} (${formatPoints(qualiPoints)} pts)`
             const rText = `R: P${pos}${overallText}${racePoints > 0 ? ` (${formatPoints(racePoints)} pts)` : ''}`
             title = `${rText} | ${qText} • Total: ${formatPoints(totalRoundPoints)} pts`
         } else {
@@ -1049,8 +1047,8 @@
         return {
             text: String(pos),
             pos,
-            qualiPos: offersQPoints ? qualiPos : null,
-            hasQualiPoints: offersQPoints && Boolean(qualiPos),
+            qualiPos: (offersQPoints && qualiPoints > 0) ? qualiPos : null,
+            hasQualiPoints: Boolean(offersQPoints && qualiPos && qualiPoints > 0),
             title,
             isPole: Boolean(entry.isPole),
             fastestLap: Boolean(entry.fastest_lap),

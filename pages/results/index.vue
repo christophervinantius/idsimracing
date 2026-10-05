@@ -130,7 +130,7 @@
     const { data: resultsData, pending: loading } = await useAsyncData("race-results-list", async () => {
         try {
             const fetchSchedule = async () => {
-                const res = await $supabase
+                let res = await $supabase
                     .from("schedule")
                     .select(`
                         id,
@@ -142,6 +142,7 @@
                         country_2,
                         season,
                         is_postponed,
+                        custom_session_names,
                         events (
                             id,
                             name,
@@ -186,6 +187,66 @@
                         )
                     `)
                     .order("date", { ascending: false })
+
+                if (res.error && (res.error.message?.includes("custom_session_names") || res.error.code === "PGRST204" || res.error.code === "42703")) {
+                    res = await $supabase
+                        .from("schedule")
+                        .select(`
+                            id,
+                            round,
+                            date,
+                            finish_date,
+                            circuit,
+                            country,
+                            country_2,
+                            season,
+                            is_postponed,
+                            events (
+                                id,
+                                name,
+                                games (
+                                    abbreviation,
+                                    name
+                                ),
+                                organizers (
+                                    abbreviation,
+                                    name
+                                )
+                            ),
+                            event_entries (
+                                id,
+                                entry_type,
+                                driver_id,
+                                team_id,
+                                car_number,
+                                car_model,
+                                class_id,
+                                drivers (
+                                    id,
+                                    name,
+                                    country,
+                                    countries (
+                                        code,
+                                        name
+                                    )
+                                ),
+                                teams (
+                                    id,
+                                    name
+                                ),
+                                results (
+                                    id,
+                                    session_type,
+                                    classified_position,
+                                    scoring_position,
+                                    status,
+                                    is_provisional
+                                )
+                            )
+                        `)
+                        .order("date", { ascending: false })
+                }
+
                 return res.data || []
             }
 
@@ -375,7 +436,7 @@
             // Determine if this event is a team event
             const isTeamEvent = entries.some(e => e.entry_type === 'team' || (!e.driver_id && e.team_id))
 
-            // Check which race session types exist (race, race 1, race 2 ONLY)
+            // Check which race session types exist (race, race 1, race 2, or standalone qualifying/powerstage)
             const hasRace1 = allResults.some(({ result: r }) => {
                 const st = String(r.session_type || '').toLowerCase().trim()
                 return st === 'race_1' || st === 'race1' || st === 'r1'
@@ -388,6 +449,12 @@
                 const st = String(r.session_type || '').toLowerCase().trim()
                 return st === 'race' || !r.session_type
             })
+            const hasQualifying = allResults.some(({ result: r }) => {
+                const st = String(r.session_type || '').toLowerCase().trim()
+                return st === 'qualifying' || st === 'quali' || st === 'q'
+            })
+
+            const customNames = sched.custom_session_names || {}
 
             // Sessions to process for this schedule
             const sessionsToProcess = []
@@ -396,7 +463,7 @@
                     type: 'race_2',
                     queryParam: 'race_2',
                     labelKey: 'race2',
-                    fallbackLabel: 'Race 2',
+                    fallbackLabel: customNames.race_2 || 'Race 2',
                     orderWeight: 2
                 })
             }
@@ -405,7 +472,7 @@
                     type: 'race_1',
                     queryParam: 'race_1',
                     labelKey: hasRace2 ? 'race1' : 'race',
-                    fallbackLabel: hasRace2 ? 'Race 1' : 'Race',
+                    fallbackLabel: customNames.race_1 || (hasRace2 ? 'Race 1' : (customNames.race || 'Race')),
                     orderWeight: 1
                 })
             }
@@ -414,7 +481,16 @@
                     type: 'race',
                     queryParam: 'race',
                     labelKey: 'race',
-                    fallbackLabel: 'Race',
+                    fallbackLabel: customNames.race || 'Race',
+                    orderWeight: 1
+                })
+            }
+            if (hasQualifying && !hasRace1 && !hasRace2 && !hasDefaultRace) {
+                sessionsToProcess.push({
+                    type: 'qualifying',
+                    queryParam: 'qualifying',
+                    labelKey: 'qualifying',
+                    fallbackLabel: customNames.qualifying || 'Qualifying',
                     orderWeight: 1
                 })
             }

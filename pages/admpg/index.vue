@@ -127,50 +127,59 @@
         loading.value = true
         errorMsg.value = ""
         try {
-            let query = $supabase
-                .from("schedule")
-                .select(`
-                    id,
-                    event_id,
-                    round,
-                    date,
-                    finish_date,
-                    circuit,
-                    stream_link,
-                    country,
-                    country_2,
-                    season,
-                    is_postponed,
-                    event_entries (
+            const runFetch = async (includeCustom = true) => {
+                let q = $supabase
+                    .from("schedule")
+                    .select(`
                         id,
-                        results (
-                            id
-                        )
-                    ),
-                    events (
-                        id,
-                        name,
-                        games (
-                            abbreviation,
-                            name
+                        event_id,
+                        round,
+                        date,
+                        finish_date,
+                        circuit,
+                        stream_link,
+                        country,
+                        country_2,
+                        season,
+                        is_postponed,
+                        ${includeCustom ? 'custom_session_names,' : ''}
+                        event_entries (
+                            id,
+                            results (
+                                id
+                            )
                         ),
-                        organizers (
-                            abbreviation,
-                            name
+                        events (
+                            id,
+                            name,
+                            games (
+                                abbreviation,
+                                name
+                            ),
+                            organizers (
+                                abbreviation,
+                                name
+                            )
                         )
-                    )
-                `)
-                .order("date", { ascending: true })
+                    `)
+                    .order("date", { ascending: true })
 
-            if (timeFilter.value === "week") {
-                const { start, end } = getWeekRange()
-                query = query.gte("date", start.toISOString()).lte("date", end.toISOString())
-            } else if (timeFilter.value === "month") {
-                const { start, end } = getMonthRange()
-                query = query.gte("date", start.toISOString()).lte("date", end.toISOString())
+                if (timeFilter.value === "week") {
+                    const { start, end } = getWeekRange()
+                    q = q.gte("date", start.toISOString()).lte("date", end.toISOString())
+                } else if (timeFilter.value === "month") {
+                    const { start, end } = getMonthRange()
+                    q = q.gte("date", start.toISOString()).lte("date", end.toISOString())
+                }
+                return await q
             }
 
-            const { data, error } = await query
+            let { data, error } = await runFetch(true)
+            if (error && (error.message?.includes("custom_session_names") || error.code === "PGRST204" || error.code === "42703")) {
+                const retry = await runFetch(false)
+                data = retry.data
+                error = retry.error
+            }
             if (error) throw error
             schedules.value = data || []
         } catch (err) {
@@ -1374,19 +1383,126 @@
         { value: "race_2", label: "Race 2" }
     ]
 
-    const filteredSessionTypeOptions = computed(() => {
-        if (hasMultipleRaces.value) {
-            return [
-                { value: "qualifying", label: "Qualifying" },
-                { value: "race_1", label: "Race 1" },
-                { value: "race_2", label: "Race 2" }
-            ]
-        }
-        return [
-            { value: "qualifying", label: "Qualifying" },
-            { value: "race", label: "Race" }
-        ]
+    // Custom session names / aliases per schedule (e.g. { qualifying: "Powerstage", race_1: "Sprint Race" })
+    const customSessionNames = ref({})
+    const isRenameSessionModalOpen = ref(false)
+    const editingCustomSessionNames = ref({ qualifying: "", race: "", race_1: "", race_2: "" })
+    const savingSessionNames = ref(false)
+
+    const hasCustomSessionNames = computed(() => {
+        return Boolean(customSessionNames.value && Object.values(customSessionNames.value).some(v => v && typeof v === "string" && v.trim()))
     })
+
+    const getSessionLabel = (sessionType) => {
+        if (customSessionNames.value && customSessionNames.value[sessionType]) {
+            return customSessionNames.value[sessionType]
+        }
+        const opt = sessionTypeOptions.find(o => o.value === sessionType)
+        return opt ? opt.label : sessionType
+    }
+
+    const filteredSessionTypeOptions = computed(() => {
+        const base = hasMultipleRaces.value
+            ? [
+                { value: "qualifying", defaultLabel: "Qualifying" },
+                { value: "race_1", defaultLabel: "Race 1" },
+                { value: "race_2", defaultLabel: "Race 2" }
+            ]
+            : [
+                { value: "qualifying", defaultLabel: "Qualifying" },
+                { value: "race", defaultLabel: "Race" }
+            ]
+
+        return base.map(opt => ({
+            value: opt.value,
+            label: (customSessionNames.value && customSessionNames.value[opt.value]) ? customSessionNames.value[opt.value] : opt.defaultLabel
+        }))
+    })
+
+    const openRenameSessionModal = () => {
+        editingCustomSessionNames.value = {
+            qualifying: customSessionNames.value?.qualifying || "",
+            race: customSessionNames.value?.race || "",
+            race_1: customSessionNames.value?.race_1 || "",
+            race_2: customSessionNames.value?.race_2 || ""
+        }
+        isRenameSessionModalOpen.value = true
+    }
+
+    const closeRenameSessionModal = () => {
+        isRenameSessionModalOpen.value = false
+        savingSessionNames.value = false
+    }
+
+    const applySessionPreset = (preset) => {
+        if (preset === 'rally') {
+            editingCustomSessionNames.value.qualifying = "Powerstage"
+            if (hasMultipleRaces.value) {
+                editingCustomSessionNames.value.race_1 = "Leg 1"
+                editingCustomSessionNames.value.race_2 = "Leg 2"
+            } else {
+                editingCustomSessionNames.value.race = "Main Rally"
+            }
+        } else if (preset === 'sprint_feature') {
+            editingCustomSessionNames.value.qualifying = "Qualifying"
+            editingCustomSessionNames.value.race_1 = "Sprint Race"
+            editingCustomSessionNames.value.race_2 = "Feature Race"
+        } else if (preset === 'reset') {
+            editingCustomSessionNames.value.qualifying = ""
+            editingCustomSessionNames.value.race = ""
+            editingCustomSessionNames.value.race_1 = ""
+            editingCustomSessionNames.value.race_2 = ""
+        }
+    }
+
+    const saveCustomSessionNames = async () => {
+        if (!selectedScheduleId.value) return
+        savingSessionNames.value = true
+        try {
+            const payload = {}
+            for (const [k, v] of Object.entries(editingCustomSessionNames.value)) {
+                if (v && typeof v === "string" && v.trim()) {
+                    payload[k] = v.trim()
+                }
+            }
+
+            customSessionNames.value = { ...payload }
+
+            if (selectedSchedule.value) {
+                selectedSchedule.value.custom_session_names = { ...payload }
+            }
+            const foundInAll = allSchedulesList.value.find(s => s.id === selectedScheduleId.value)
+            if (foundInAll) {
+                foundInAll.custom_session_names = { ...payload }
+            }
+            const foundInSchedules = schedules.value.find(s => s.id === selectedScheduleId.value)
+            if (foundInSchedules) {
+                foundInSchedules.custom_session_names = { ...payload }
+            }
+
+            const { error } = await $supabase
+                .from("schedule")
+                .update({ custom_session_names: payload })
+                .eq("id", selectedScheduleId.value)
+
+            if (error) {
+                if (error.message?.includes("custom_session_names") || error.code === "PGRST204" || error.code === "42703") {
+                    showToast("Nama sesi diperbarui di form! Jalankan SQL ini di Supabase untuk simpan permanen: ALTER TABLE schedule ADD COLUMN IF NOT EXISTS custom_session_names jsonb DEFAULT '{}'::jsonb;", "warning")
+                } else {
+                    throw error
+                }
+            } else {
+                showToast("Nama sesi berhasil disimpan!")
+            }
+
+            closeRenameSessionModal()
+        } catch (err) {
+            console.error("Error saving custom session names:", err)
+            showToast(err.message || "Gagal menyimpan nama sesi.", "error")
+        } finally {
+            savingSessionNames.value = false
+        }
+    }
 
     watch(hasMultipleRaces, (val) => {
         if (val) {
@@ -1399,11 +1515,6 @@
             }
         }
     })
-
-    const getSessionLabel = (sessionType) => {
-        const opt = sessionTypeOptions.find(o => o.value === sessionType)
-        return opt ? opt.label : sessionType
-    }
 
     const isMoveSessionModalOpen = ref(false)
     const targetMoveSessionType = ref("race_1")
@@ -1431,6 +1542,7 @@
                     country_2,
                     season,
                     is_postponed,
+                    custom_session_names,
                     event_entries (
                         id,
                         results (
@@ -1452,7 +1564,7 @@
                 `)
                 .order("date", { ascending: false })
 
-            if (error && (error.message?.includes("group") || error.code === "PGRST204" || error.code === "42703")) {
+            if (error && (error.message?.includes("custom_session_names") || error.message?.includes("group") || error.code === "PGRST204" || error.code === "42703")) {
                 const res = await $supabase
                     .from("schedule")
                     .select(`
@@ -1550,10 +1662,10 @@
     })
 
     const totalResultsColumns = computed(() => {
-        let count = 5 // Pos, Driver/Team, Poin, Gap/Waktu, Aksi
+        let count = 7 // Pos, Driver/Team, Poin, Gap/Waktu, WC, No Pts, Aksi
         if (isTeamEvent.value) count += 1 // No.
         if (isMulticlassEvent.value) count += 2 // Class, Pos Kelas
-        if (selectedSessionType.value !== 'qualifying') count += 4 // Status, Penalti, WC, No Pts (Laps omitted)
+        if (selectedSessionType.value !== 'qualifying') count += 2 // Status, Penalti
         return count
     })
 
@@ -2022,7 +2134,7 @@
     // GRID KEYBOARD NAVIGATION
     // ==========================================
     const getMaxGridCol = () => {
-        return selectedSessionType.value === 'qualifying' ? 4 : 8
+        return selectedSessionType.value === 'qualifying' ? 6 : 9
     }
 
     const getAvailableGridCols = () => {
@@ -2035,11 +2147,14 @@
         }
         if (selectedSessionType.value === 'qualifying') {
             cols.push(4) // Gap / Time
+            cols.push(5) // Wildcard
+            cols.push(6) // No Pts
         } else {
             cols.push(4) // Status
             cols.push(6) // Gap / Time
             cols.push(7) // Penalti
-            cols.push(8) // No Pts
+            cols.push(8) // Wildcard
+            cols.push(9) // No Pts
         }
         return cols
     }
@@ -3079,6 +3194,27 @@
                 hasMultipleRaces.value = true
             }
 
+            // Sync custom session names if available on schedule
+            if (selectedSchedule.value?.custom_session_names) {
+                customSessionNames.value = { ...selectedSchedule.value.custom_session_names }
+            } else {
+                try {
+                    const { data: sData } = await $supabase
+                        .from("schedule")
+                        .select("id, custom_session_names")
+                        .eq("id", selectedScheduleId.value)
+                        .maybeSingle()
+                    if (sData?.custom_session_names) {
+                        customSessionNames.value = { ...sData.custom_session_names }
+                        if (selectedSchedule.value) {
+                            selectedSchedule.value.custom_session_names = { ...sData.custom_session_names }
+                        }
+                    }
+                } catch {
+                    // Ignore column missing
+                }
+            }
+
             const validEntries = (entries || []).filter(e => 
                 e.results && e.results.some(r => r.session_type === selectedSessionType.value || (!r.session_type && selectedSessionType.value === 'race'))
             )
@@ -3798,8 +3934,8 @@
                     penalty_time_ns: sessType === 'qualifying' ? null : penNs,
                     fastest_lap: sessType === 'qualifying' ? false : Boolean(row.fastest_lap),
                     is_provisional: Boolean(isResultsProvisional.value),
-                    no_points: sessType === 'qualifying' ? false : Boolean(row.no_points),
-                    is_wildcard: sessType === 'qualifying' ? false : Boolean(row.is_wildcard)
+                    no_points: Boolean(row.no_points),
+                    is_wildcard: Boolean(row.is_wildcard)
                 }
 
                 const { data: existingResult } = await $supabase
@@ -3932,6 +4068,18 @@
                 await fetchScheduleChampionshipLinks()
             }
 
+            // Sync custom_session_names to schedule if set
+            if (selectedScheduleId.value && customSessionNames.value && Object.keys(customSessionNames.value).length > 0) {
+                try {
+                    await $supabase
+                        .from("schedule")
+                        .update({ custom_session_names: customSessionNames.value })
+                        .eq("id", selectedScheduleId.value)
+                } catch (e) {
+                    console.warn("Could not sync custom_session_names on results save:", e)
+                }
+            }
+
             showToast(`Hasil balapan (${validRows.length} posisi) berhasil disimpan!`)
             closeSaveResultsModal()
             await fetchSchedules()
@@ -3991,7 +4139,12 @@
     }
 
     const availableTargetSessions = computed(() => {
-        return sessionTypeOptions.filter(opt => opt.value !== selectedSessionType.value)
+        return sessionTypeOptions
+            .filter(opt => opt.value !== selectedSessionType.value)
+            .map(opt => ({
+                value: opt.value,
+                label: getSessionLabel(opt.value)
+            }))
     })
 
     const checkTargetSessionDbStatus = async (targetSess) => {
@@ -4318,7 +4471,7 @@
                 showToast(`Klasemen diperbarui: ${names}`)
             }
             if (selectedChampionshipId.value && summaries && summaries.some(s => s.championshipId === selectedChampionshipId.value)) {
-                await fetchStandings()
+                await fetchStandings(true)
             }
         } catch (err) {
             console.error("Error syncing standings:", err)
@@ -4330,6 +4483,7 @@
         hasMultipleRaces.value = false
         resultsClassFilter.value = "ALL"
         selectedEntryClassId.value = "ALL"
+        customSessionNames.value = { ...(selectedSchedule.value?.custom_session_names || {}) }
         fetchRaceResultsForSchedule()
         fetchScheduleChampionshipLinks()
     })
@@ -5108,7 +5262,7 @@
         }
     }
 
-    const fetchStandings = async () => {
+    const fetchStandings = async (skipAutoHeal = false) => {
         if (!selectedChampionshipId.value) {
             standingsRows.value = []
             return
@@ -5179,13 +5333,22 @@
             if (error) throw error
             standingsRows.value = data || []
 
-            // Auto-heal: If standings are empty in DB but this championship has rounds, recalculate automatically
-            if (standingsRows.value.length === 0 && selectedChampionship.value && championshipRounds.value.length > 0) {
-                setTimeout(() => {
-                    if (standingsRows.value.length === 0 && selectedChampionship.value) {
-                        handleRecalculateChampionship(true)
-                    }
-                }, 300)
+            // Auto-heal: Only recalculate if:
+            // 1. skipAutoHeal is false
+            // 2. Not currently recalculating
+            // 3. Standings are empty in DB
+            // 4. This championship has rounds
+            // 5. CRITICAL: At least one round ACTUALLY HAS RESULTS saved in DB!
+            // If none of the rounds have results yet, empty standings is the correct state and must NOT trigger a loop.
+            if (!skipAutoHeal && !recalculating.value && standingsRows.value.length === 0 && selectedChampionship.value && championshipRounds.value.length > 0) {
+                const hasAnyScoredRounds = championshipRounds.value.some(r => roundHasResults(r))
+                if (hasAnyScoredRounds) {
+                    setTimeout(() => {
+                        if (!recalculating.value && standingsRows.value.length === 0 && selectedChampionship.value) {
+                            handleRecalculateChampionship(true)
+                        }
+                    }, 300)
+                }
             }
         } catch (err) {
             console.error("Error fetching standings:", err)
@@ -5226,7 +5389,8 @@
         if (selectedChampionship.value) {
             standingsViewType.value = selectedChampionship.value.standings_type || "driver"
         }
-        await Promise.all([fetchStandings(), fetchRoundsResultStatus()])
+        await fetchRoundsResultStatus()
+        await fetchStandings()
     }
 
     // ---- Season CRUD ----
@@ -5633,7 +5797,8 @@
                 class_id: selectedChampionship.value.class_id,
                 season_id: selectedChampionship.value.season_id
             })
-            await fetchStandings()
+            await fetchRoundsResultStatus()
+            await fetchStandings(true)
             if (!silent) {
                 showToast(`Klasemen dihitung ulang: ${summary.rowsWritten} baris dari ${summary.roundsScored} ronde`)
             }
@@ -5664,7 +5829,7 @@
                 })
                 totalRows += summary.rowsWritten
             }
-            if (selectedChampionshipId.value) await fetchStandings()
+            if (selectedChampionshipId.value) await fetchStandings(true)
             showToast(`${list.length} championship berhasil dihitung ulang (${totalRows} total baris)!`)
         } catch (err) {
             console.error("Error recalculating all championships:", err)
@@ -5699,7 +5864,7 @@
             for (const champ of unique.values()) {
                 await recalculateChampionship($supabase, champ)
             }
-            if (selectedChampionshipId.value) await fetchStandings()
+            if (selectedChampionshipId.value) await fetchStandings(true)
             showToast(`${unique.size} championship dihitung ulang`)
         } catch (err) {
             console.error("Error recalculating affected championships:", err)
@@ -6783,7 +6948,26 @@
                         <!-- Session Type Selector -->
                         <div class="lg:col-span-3 flex flex-col gap-1.5">
                             <div class="flex items-center justify-between">
-                                <label class="text-xs sm:text-sm font-bold text-black dark:text-white">Sesi Balapan</label>
+                                <div class="flex items-center gap-2">
+                                    <label class="text-xs sm:text-sm font-bold text-black dark:text-white">Sesi Balapan</label>
+                                    <button
+                                        v-if="selectedScheduleId"
+                                        type="button"
+                                        @click="openRenameSessionModal"
+                                        class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 flex items-center gap-1 cursor-pointer transition"
+                                        title="Ubah nama tampilan sesi balapan untuk jadwal ini (misal: Powerstage untuk Rally)"
+                                    >
+                                        <Icon name="material-symbols:edit-note" class="text-sm" />
+                                        <span>Rename Sesi</span>
+                                    </button>
+                                    <span
+                                        v-if="hasCustomSessionNames"
+                                        class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                                        title="Jadwal ini memiliki nama sesi kustom"
+                                    >
+                                        Custom
+                                    </span>
+                                </div>
                                 <label
                                     class="text-[11px] font-semibold text-gray-600 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400 flex items-center gap-1.5 cursor-pointer select-none"
                                     title="Centang jika event memiliki lebih dari 1 race (menampilkan Race 1 & Race 2, selain Qualifying)"
@@ -7193,13 +7377,7 @@
                     v-if="!selectedScheduleId"
                     class="p-12 rounded-2xl border-2 border-dashed border-gray-300 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col items-center justify-center text-center gap-3"
                 >
-                    <div class="p-4 rounded-full bg-red-50 dark:bg-slate-900 text-red-700 dark:text-red-400">
-                        <Icon name="material-symbols:sports-score" class="text-4xl" />
-                    </div>
                     <h3 class="text-lg font-bold text-black dark:text-white">Pilih Jadwal Balapan Terlebih Dahulu</h3>
-                    <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 max-w-md">
-                        Silakan pilih jadwal balapan di menu dropdown atas untuk mulai mengisi data hasil balapan, driver, tim, dan catatan waktu per posisi.
-                    </p>
                 </div>
 
                 <!-- Results Table -->
@@ -7648,29 +7826,29 @@
                                 <thead class="bg-red-900 dark:bg-red-900 text-white text-xs">
                                     <tr v-if="!isTeamEvent">
                                         <th class="px-2 py-3 text-center w-[5%]">Pos</th>
-                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? (isMulticlassEvent ? 'w-[43%]' : 'w-[58%]') : (isMulticlassEvent ? 'w-[27%]' : 'w-[40%]')">Pembalap (Driver) <span class="text-red-300">*</span></th>
+                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? (isMulticlassEvent ? 'w-[35%]' : 'w-[50%]') : (isMulticlassEvent ? 'w-[27%]' : 'w-[40%]')">Pembalap (Driver) <span class="text-red-300">*</span></th>
                                         <th v-if="isMulticlassEvent" class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[15%]' : 'w-[10%]'">Kelas (Class)</th>
                                         <th v-if="isMulticlassEvent" class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[8%]' : 'w-[7%]'">Pos Kelas</th>
                                         <th class="px-2 py-3 text-center w-[7%]" title="Poin yang diperoleh berdasarkan sistem poin dan mode penilaian">Poin</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[8%]">Status</th>
                                         <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[13%]' : 'w-[13%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-1 py-3 text-center w-[4%]" title="Wildcard: Tidak berhak poin kejuaraan, poin digeser ke pembalap berikutnya">WC</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-1 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan (poin hangus)">No Pts</th>
+                                        <th class="px-1 py-3 text-center w-[4%]" title="Wildcard: Tidak berhak poin kejuaraan, poin digeser ke pembalap berikutnya">WC</th>
+                                        <th class="px-1 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan (poin hangus)">No Pts</th>
                                         <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[5%]' : 'w-[5%]'">Aksi</th>
                                     </tr>
                                     <tr v-else>
                                         <th class="px-2 py-3 text-center w-[5%]">Pos</th>
                                         <th class="px-2 py-3 text-center w-[5%]">No.</th>
-                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? (isMulticlassEvent ? 'w-[38%]' : 'w-[56%]') : (isMulticlassEvent ? 'w-[23%]' : 'w-[38%]')">Tim (Team Name) <span class="text-red-300">*</span></th>
+                                        <th class="px-3 py-3" :class="selectedSessionType === 'qualifying' ? (isMulticlassEvent ? 'w-[30%]' : 'w-[48%]') : (isMulticlassEvent ? 'w-[23%]' : 'w-[38%]')">Tim (Team Name) <span class="text-red-300">*</span></th>
                                         <th v-if="isMulticlassEvent" class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[18%]' : 'w-[12%]'">Kelas (Class)</th>
                                         <th v-if="isMulticlassEvent" class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[9%]' : 'w-[7%]'">Pos Kelas</th>
                                         <th class="px-2 py-3 text-center w-[7%]" title="Poin yang diperoleh berdasarkan sistem poin dan mode penilaian">Poin</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[8%]">Status</th>
                                         <th class="px-2 py-3" :class="selectedSessionType === 'qualifying' ? 'w-[13%]' : 'w-[13%]'">{{ selectedSessionType === 'qualifying' ? 'Waktu / Gap' : 'Gap / Waktu' }}</th>
                                         <th v-if="selectedSessionType !== 'qualifying'" class="px-2 py-3 text-center w-[9%]" title="Penalti dalam detik atau menit (contoh: 10.000 atau 1:15.000)">Penalti</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-1 py-3 text-center w-[4%]" title="Wildcard: Tidak berhak poin kejuaraan, poin digeser ke tim berikutnya">WC</th>
-                                        <th v-if="selectedSessionType !== 'qualifying'" class="px-1 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan (poin hangus)">No Pts</th>
+                                        <th class="px-1 py-3 text-center w-[4%]" title="Wildcard: Tidak berhak poin kejuaraan, poin digeser ke tim berikutnya">WC</th>
+                                        <th class="px-1 py-3 text-center w-[4%]" title="Centang jika tidak berhak mendapatkan poin kejuaraan (poin hangus)">No Pts</th>
                                         <th class="px-2 py-3 text-center" :class="selectedSessionType === 'qualifying' ? 'w-[5%]' : 'w-[5%]'">Aksi</th>
                                     </tr>
                                 </thead>
@@ -8170,10 +8348,13 @@
                                     </td>
 
                                     <!-- Wildcard Column -->
-                                    <td v-if="selectedSessionType !== 'qualifying'" class="px-1 py-2.5 text-center">
+                                    <td class="px-1 py-2.5 text-center">
                                         <input
                                             :id="`wc-${idx}`"
+                                            :data-grid-row="idx"
+                                            :data-grid-col="selectedSessionType === 'qualifying' ? 5 : 8"
                                             v-model="row.is_wildcard"
+                                            @keydown="handleResultsGridKeydown(idx, selectedSessionType === 'qualifying' ? 5 : 8, $event)"
                                             type="checkbox"
                                             class="w-4 h-4 accent-purple-600 rounded cursor-pointer"
                                             title="Centang jika pembalap/tim adalah wildcard (tidak berhak poin, poin digeser ke pembalap berikutnya)"
@@ -8181,13 +8362,13 @@
                                     </td>
 
                                     <!-- No Points Column -->
-                                    <td v-if="selectedSessionType !== 'qualifying'" class="px-1 py-2.5 text-center">
+                                    <td class="px-1 py-2.5 text-center">
                                         <input
                                             :id="`nopts-${idx}`"
                                             :data-grid-row="idx"
-                                            data-grid-col="8"
+                                            :data-grid-col="selectedSessionType === 'qualifying' ? 6 : 9"
                                             v-model="row.no_points"
-                                            @keydown="handleResultsGridKeydown(idx, 8, $event)"
+                                            @keydown="handleResultsGridKeydown(idx, selectedSessionType === 'qualifying' ? 6 : 9, $event)"
                                             type="checkbox"
                                             class="w-4 h-4 accent-amber-600 rounded cursor-pointer"
                                             title="Centang jika pembalap/tim tidak berhak mendapatkan poin kejuaraan pada sesi ini (poin hangus)"
@@ -8260,7 +8441,17 @@
                             </span>
                         </div> -->
 
-                        <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+                        <div class="flex items-center gap-3 w-full sm:w-auto justify-end flex-wrap">
+                            <button
+                                v-if="selectedScheduleId"
+                                type="button"
+                                @click="openRenameSessionModal"
+                                class="px-3.5 py-2.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer border border-blue-200 dark:border-blue-800 flex items-center gap-1.5"
+                                title="Ubah nama tampilan sesi balapan (misal: Powerstage untuk Rally)"
+                            >
+                                <Icon name="material-symbols:edit-note" class="text-base" />
+                                <span>Rename Sesi</span>
+                            </button>
                             <button
                                 v-if="hasExistingDbResults || resultsRows.some(r => isTeamEvent ? r.team_id : r.driver_id)"
                                 type="button"
@@ -8583,12 +8774,7 @@
                     v-if="!selectedChampionshipId"
                     class="py-16 flex flex-col items-center justify-center gap-3 bg-white dark:bg-slate-950 rounded-2xl border border-gray-200 dark:border-slate-800"
                 >
-                    <Icon name="material-symbols:emoji-events" class="text-5xl text-gray-300 dark:text-slate-700" />
                     <p class="font-bold text-black dark:text-white">Pilih championship untuk melihat klasemen</p>
-                    <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 text-center max-w-md">
-                        Alur: buat <span class="font-bold">Season</span> → buat <span class="font-bold">Championship</span> →
-                        tambahkan <span class="font-bold">Ronde</span> beserta sistem poinnya → simpan hasil balapan.
-                    </p>
                 </div>
 
                 <template v-else>
@@ -8600,9 +8786,6 @@
                                     <Icon name="material-symbols:list-alt" class="text-lg text-red-700" />
                                     <span>Ronde Championship ({{ championshipRounds.length }})</span>
                                 </h3>
-                                <p class="text-[11px] text-gray-500 dark:text-gray-400">
-                                    Setiap ronde memakai sistem poin sendiri. Ubah pengali untuk ronde double points.
-                                </p>
                             </div>
                             <div class="flex items-center gap-2">
                                 <div v-if="championshipRounds.length > 0" class="relative">
@@ -8635,9 +8818,7 @@
                         </div>
 
                         <div v-else-if="championshipRounds.length === 0" class="py-10 flex flex-col items-center justify-center gap-2">
-                            <Icon name="material-symbols:playlist-add" class="text-4xl text-gray-300 dark:text-slate-700" />
                             <p class="text-sm font-bold text-black dark:text-white">Belum ada ronde</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Tambahkan jadwal balapan sebagai ronde championship ini.</p>
                         </div>
 
                         <div v-else class="overflow-x-auto">
@@ -8799,21 +8980,7 @@
                         </div>
 
                         <div v-else-if="visibleStandings.length === 0" class="py-10 flex flex-col items-center justify-center gap-2 px-4">
-                            <Icon name="material-symbols:leaderboard" class="text-4xl text-gray-300 dark:text-slate-700" />
                             <p class="text-sm font-bold text-black dark:text-white">Belum ada klasemen</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 text-center max-w-md">
-                                <template v-if="standingsViewType !== selectedChampionship?.standings_type">
-                                    Championship ini bertipe
-                                    <span class="font-bold">{{ selectedChampionship?.standings_type === 'driver' ? 'Pembalap' : 'Tim' }}</span>,
-                                    jadi klasemen {{ standingsViewType === 'driver' ? 'pembalap' : 'tim' }} tidak dihitung.
-                                </template>
-                                <template v-else-if="standingsSummary.scoredRounds === 0">
-                                    Belum ada ronde dengan hasil balapan. Simpan hasil di tab Hasil Balapan, klasemen akan otomatis terhitung.
-                                </template>
-                                <template v-else>
-                                    Klik "Hitung Ulang Klasemen" untuk menghitung dari hasil yang sudah ada.
-                                </template>
-                            </p>
                         </div>
 
                         <div v-else class="overflow-x-auto">
@@ -9772,6 +9939,171 @@
                         >
                             <Icon v-if="deleting" name="material-symbols:refresh" class="animate-spin" />
                             <span>{{ deleting ? 'Menghapus...' : 'Hapus Hasil' }}</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- RACE RESULTS RENAME SESSION MODAL -->
+        <div
+            v-if="isRenameSessionModalOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
+        >
+            <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-slate-800 my-8">
+                <div class="flex items-center justify-between border-b border-gray-200 dark:border-slate-800 pb-4 mb-4">
+                    <h2 class="text-lg sm:text-xl font-bold text-black dark:text-white flex items-center gap-2">
+                        <div class="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                            <Icon name="material-symbols:edit-note" class="text-2xl" />
+                        </div>
+                        <span>Rename Sesi Balapan</span>
+                    </h2>
+                    <button @click="closeRenameSessionModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer">
+                        <Icon name="material-symbols:close" class="text-2xl" />
+                    </button>
+                </div>
+
+                <form @submit.prevent="saveCustomSessionNames" class="flex flex-col gap-4">
+                    <!-- Schedule summary -->
+                    <div class="p-3 rounded-xl bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 text-xs sm:text-sm">
+                        <p class="font-bold text-black dark:text-white">
+                            {{ selectedSchedule?.events?.name }} - Round {{ selectedSchedule?.round }}
+                        </p>
+                        <p class="text-gray-500 dark:text-gray-400 mt-0.5">
+                            {{ selectedSchedule?.circuit || 'Circuit' }}
+                        </p>
+                    </div>
+
+                    <!-- Explanatory Banner -->
+                    <div class="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 flex items-start gap-2.5 text-xs text-blue-800 dark:text-blue-300">
+                        <Icon name="material-symbols:info" class="text-lg shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+                        <div>
+                            <p class="font-bold">Kustomisasi Nama Tampilan Sesi</p>
+                            <p class="mt-0.5 opacity-90 leading-relaxed">
+                                Beri nama khusus untuk sesi balapan (misal: <strong>Powerstage</strong> untuk rally, atau <strong>Sprint Race & Feature Race</strong>). Nama baru akan otomatis tampil pada tombol form admin dan tab di halaman hasil publik.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Preset Buttons -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Preset Cepat</label>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button
+                                type="button"
+                                @click="applySessionPreset('rally')"
+                                class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 transition cursor-pointer border border-gray-200 dark:border-slate-700 flex items-center gap-1.5"
+                            >
+                                <span>🏔️ Rally (Qualifying ➔ Powerstage)</span>
+                            </button>
+                            <button
+                                v-if="hasMultipleRaces"
+                                type="button"
+                                @click="applySessionPreset('sprint_feature')"
+                                class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 transition cursor-pointer border border-gray-200 dark:border-slate-700 flex items-center gap-1.5"
+                            >
+                                <span>🏁 Sprint & Feature</span>
+                            </button>
+                            <button
+                                type="button"
+                                @click="applySessionPreset('reset')"
+                                class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 transition cursor-pointer border border-rose-200 dark:border-rose-800 flex items-center gap-1"
+                            >
+                                <Icon name="material-symbols:restart-alt" class="text-sm" />
+                                <span>Reset Default</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Input Fields -->
+                    <div class="flex flex-col gap-3">
+                        <!-- Qualifying / Powerstage -->
+                        <div class="flex flex-col gap-1">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
+                                    <span class="w-2 h-2 rounded-full bg-red-600"></span>
+                                    <span>Sesi Qualifying</span>
+                                </label>
+                                <span class="text-[11px] text-gray-400">Default: Qualifying</span>
+                            </div>
+                            <input
+                                v-model="editingCustomSessionNames.qualifying"
+                                type="text"
+                                placeholder="Contoh: Powerstage / Shakedown"
+                                class="w-full text-xs sm:text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-xl p-2.5 text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                            />
+                        </div>
+
+                        <!-- Race sessions -->
+                        <template v-if="hasMultipleRaces">
+                            <div class="flex flex-col gap-1">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
+                                        <span class="w-2 h-2 rounded-full bg-red-600"></span>
+                                        <span>Sesi Race 1</span>
+                                    </label>
+                                    <span class="text-[11px] text-gray-400">Default: Race 1</span>
+                                </div>
+                                <input
+                                    v-model="editingCustomSessionNames.race_1"
+                                    type="text"
+                                    placeholder="Contoh: Sprint Race / Leg 1"
+                                    class="w-full text-xs sm:text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-xl p-2.5 text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                                />
+                            </div>
+
+                            <div class="flex flex-col gap-1">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
+                                        <span class="w-2 h-2 rounded-full bg-red-600"></span>
+                                        <span>Sesi Race 2</span>
+                                    </label>
+                                    <span class="text-[11px] text-gray-400">Default: Race 2</span>
+                                </div>
+                                <input
+                                    v-model="editingCustomSessionNames.race_2"
+                                    type="text"
+                                    placeholder="Contoh: Feature Race / Leg 2"
+                                    class="w-full text-xs sm:text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-xl p-2.5 text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                                />
+                            </div>
+                        </template>
+
+                        <template v-else>
+                            <div class="flex flex-col gap-1">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
+                                        <span class="w-2 h-2 rounded-full bg-red-600"></span>
+                                        <span>Sesi Race</span>
+                                    </label>
+                                    <span class="text-[11px] text-gray-400">Default: Race</span>
+                                </div>
+                                <input
+                                    v-model="editingCustomSessionNames.race"
+                                    type="text"
+                                    placeholder="Contoh: Main Race / Special Stage"
+                                    class="w-full text-xs sm:text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-xl p-2.5 text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                                />
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Modal Actions -->
+                    <div class="flex items-center justify-end gap-3 pt-3 border-t border-gray-200 dark:border-slate-800">
+                        <button
+                            type="button"
+                            @click="closeRenameSessionModal"
+                            class="px-4 py-2 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition font-medium text-xs sm:text-sm cursor-pointer"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="savingSessionNames"
+                            class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50 text-xs sm:text-sm shadow-md"
+                        >
+                            <Icon v-if="savingSessionNames" name="material-symbols:refresh" class="animate-spin text-base" />
+                            <span>{{ savingSessionNames ? 'Menyimpan...' : 'Simpan Nama Sesi' }}</span>
                         </button>
                     </div>
                 </form>

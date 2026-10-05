@@ -13,7 +13,7 @@
     const { data: scheduleItem, pending: loadingSchedule } = await useAsyncData(`schedule-item-${scheduleId.value}`, async () => {
         if (!scheduleId.value) return null
         try {
-            const { data, error } = await $supabase
+            let { data, error } = await $supabase
                 .from("schedule")
                 .select(`
                     id,
@@ -27,6 +27,7 @@
                     season,
                     event_id,
                     is_postponed,
+                    custom_session_names,
                     events (
                         id,
                         name,
@@ -54,6 +55,52 @@
                 `)
                 .eq("id", scheduleId.value)
                 .single()
+
+            if (error && (error.message?.includes("custom_session_names") || error.code === "PGRST204" || error.code === "42703")) {
+                const res = await $supabase
+                    .from("schedule")
+                    .select(`
+                        id,
+                        round,
+                        date,
+                        finish_date,
+                        circuit,
+                        stream_link,
+                        country,
+                        country_2,
+                        season,
+                        event_id,
+                        is_postponed,
+                        events (
+                            id,
+                            name,
+                            games (
+                                abbreviation,
+                                name,
+                                description_en,
+                                description_id,
+                                steam_link,
+                                other_link
+                            ),
+                            organizers (
+                                abbreviation,
+                                name,
+                                description_en,
+                                description_id,
+                                discord,
+                                youtube,
+                                instagram,
+                                twitter,
+                                facebook,
+                                tiktok
+                            )
+                        )
+                    `)
+                    .eq("id", scheduleId.value)
+                    .single()
+                data = res.data
+                error = res.error
+            }
 
             if (error) {
                 console.warn("Supabase fetch error:", error)
@@ -564,46 +611,63 @@
     // 4. Available session tabs with per-session provisional state
     const availableSessions = computed(() => {
         const list = []
+        const customNames = scheduleItem.value?.custom_session_names || {}
+
         if (hasDbResults.value) {
             const allResults = dbEntries.value.flatMap(e => e.results || [])
             const sessionTypes = new Set(allResults.map(r => r.session_type || 'race'))
 
             if (sessionTypes.has('qualifying')) {
                 const isProv = allResults.some(r => (r.session_type === 'qualifying' || r.session_type === 'quali' || r.session_type === 'q') && r.is_provisional)
-                list.push({ id: 'qualifying', label: t('qualifying'), isProvisional: isProv })
+                const label = customNames.qualifying || t('qualifying')
+                list.push({ id: 'qualifying', label, isProvisional: isProv })
             }
             if (sessionTypes.has('race_1')) {
                 const isProv = allResults.some(r => (r.session_type === 'race_1' || r.session_type === 'race1') && r.is_provisional)
-                list.push({ id: 'race_1', label: sessionTypes.has('race_2') ? t('race1') : t('race'), isProvisional: isProv })
+                const defaultLabel = sessionTypes.has('race_2') ? t('race1') : t('race')
+                const label = customNames.race_1 || defaultLabel
+                list.push({ id: 'race_1', label, isProvisional: isProv })
             }
             if (sessionTypes.has('race_2')) {
                 const isProv = allResults.some(r => (r.session_type === 'race_2' || r.session_type === 'race2') && r.is_provisional)
-                list.push({ id: 'race_2', label: t('race2'), isProvisional: isProv })
+                const label = customNames.race_2 || t('race2')
+                list.push({ id: 'race_2', label, isProvisional: isProv })
             }
             if (sessionTypes.has('race') && !sessionTypes.has('race_1')) {
                 const isProv = allResults.some(r => (r.session_type === 'race' || !r.session_type) && r.is_provisional)
-                list.push({ id: 'race', label: t('race'), isProvisional: isProv })
+                const label = customNames.race || t('race')
+                list.push({ id: 'race', label, isProvisional: isProv })
             }
         } else {
             if (rawResultDataQ.value) {
-                list.push({ id: 'q', label: t('qualifying'), isProvisional: false })
+                const label = customNames.qualifying || t('qualifying')
+                list.push({ id: 'q', label, isProvisional: false })
             }
             if (rawResultData1.value) {
+                const defaultLabel = rawResultData2.value ? t('race1') : (rawResultDataQ.value ? t('race') : t('race1'))
+                const label = customNames.race_1 || customNames.race || defaultLabel
                 list.push({
                     id: 'r1',
-                    label: rawResultData2.value ? t('race1') : (rawResultDataQ.value ? t('race') : t('race1')),
+                    label,
                     isProvisional: false
                 })
             }
             if (rawResultData2.value) {
-                list.push({ id: 'r2', label: t('race2'), isProvisional: false })
+                const label = customNames.race_2 || t('race2')
+                list.push({ id: 'r2', label, isProvisional: false })
             }
         }
         return list
     })
 
+    const currentActiveSession = computed(() => {
+        return availableSessions.value.find(s => s.id === activeSessionTab.value) || null
+    })
+
     const hasMultipleSessions = computed(() => {
-        return availableSessions.value.length > 1
+        const customNames = scheduleItem.value?.custom_session_names || {}
+        const hasCustom = Object.values(customNames).some(v => v && typeof v === 'string' && v.trim())
+        return availableSessions.value.length > 1 || (availableSessions.value.length === 1 && hasCustom)
     })
 
     // Auto-select session: respect route.query.session if valid, otherwise fallback to first available session
@@ -1284,7 +1348,6 @@
 
     // Note column: displayed only if at least one driver in the current view has wildcard or noPoints
     const hasNoteColumn = computed(() => {
-        if (isQualifyingSession.value) return false
         const rows = filteredRows.value.length > 0 ? filteredRows.value : parsedRows.value
         return rows.some(r => Boolean(r.isWildcard || r.noPoints))
     })
@@ -1760,7 +1823,7 @@
             <!-- Results Title & Race Tabs -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div class="flex flex-col gap-1">
-                    <h1 class="text-xl lg:text-2xl font-extrabold text-black dark:text-white">
+                    <h1 class="text-xl lg:text-2xl font-extrabold text-black dark:text-white flex items-center gap-2 flex-wrap">
                         <span v-if="!filteredRows.length">
                             {{ $t('noResultsYet') }}
                         </span>

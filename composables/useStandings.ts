@@ -96,7 +96,7 @@ export const getBonusPoints = (
     result: ScoringResult,
     isPoleOrOptions: boolean | { isPole?: boolean; isFastestLap?: boolean } = false
 ): number => {
-    if (!system || result.is_wildcard) return 0
+    if (!system || result.is_wildcard || result.no_points) return 0
     const bonuses = system.points_bonuses || []
     if (bonuses.length === 0) return 0
 
@@ -248,7 +248,7 @@ export const matchSessionType = (roundType?: string | null, sessType?: string | 
 export const findPoleEntityKeys = (results: ScoringResult[], entityType: StandingsEntityType): Set<string> => {
     const keys = new Set<string>()
     for (const r of results) {
-        if (r.is_wildcard) continue
+        if (r.is_wildcard || r.no_points) continue
         if (Number(r.grid_position) === 1 || Number(r.scoring_position) === 1 || Number(r.classified_position) === 1) {
             if (entityType === "driver") {
                 const dIds = r.driver_ids && r.driver_ids.length > 0 ? r.driver_ids : (r.driver_id ? [r.driver_id] : [])
@@ -373,7 +373,7 @@ export const calculateStandings = (
                     s => s.schedule_id === champEvent.schedule_id && matchSessionType("qualifying", s.session_type)
                 )
                 if (qualifyingSession) {
-                    const eligibleQResults = qualifyingSession.results.filter(r => !r.is_wildcard)
+                    const eligibleQResults = qualifyingSession.results.filter(r => !r.is_wildcard && !r.no_points)
                     const qPole = eligibleQResults.find(r => (Number(r.classified_position) === 1 || Number(r.scoring_position) === 1))
                     if (qPole) {
                         const dIds = qPole.driver_ids && qPole.driver_ids.length > 0 ? qPole.driver_ids : (qPole.driver_id ? [qPole.driver_id] : [])
@@ -390,7 +390,7 @@ export const calculateStandings = (
             }
         } else if (hasGridInSession) {
             for (const r of session.results) {
-                if (r.is_wildcard) continue
+                if (r.is_wildcard || r.no_points) continue
                 if (Number(r.grid_position) === 1) {
                     if (entityType === "driver") {
                         const dIds = r.driver_ids && r.driver_ids.length > 0 ? r.driver_ids : (r.driver_id ? [r.driver_id] : [])
