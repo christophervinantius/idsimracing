@@ -28,6 +28,12 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL,
+    discordWebhookStreamUrl: process.env.DISCORD_WEBHOOK_STREAM_URL,
+    discordWebhookResultsUrl: process.env.DISCORD_WEBHOOK_RESULTS_URL,
+    discordWebhookScheduleUrl: process.env.DISCORD_WEBHOOK_SCHEDULE_URL,
+    discordCronSecret: process.env.DISCORD_CRON_SECRET || process.env.PASS_ADM,
+    siteUrl: process.env.SITE_URL || 'https://idsimracing.com',
     public: {
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseKey: process.env.SUPABASE_KEY,

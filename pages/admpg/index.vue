@@ -50,6 +50,49 @@
         }, 4000)
     }
 
+    // Discord Webhook Notifications
+    const discord = useDiscordNotification()
+    const discordLoading = discord.isSending
+    const notifyDiscordOnResultsSave = ref(false)
+
+    const handleSendStreamDiscord = async (scheduleId) => {
+        if (!scheduleId) return
+        try {
+            await discord.sendStreamAlert(scheduleId)
+            showToast("Notifikasi siaran langsung berhasil dikirim ke Discord!", "success")
+        } catch (err) {
+            showToast(err?.message || "Gagal mengirim notifikasi stream ke Discord", "error")
+        }
+    }
+
+    const handleSendWeeklyScheduleDiscord = async () => {
+        try {
+            const res = await discord.sendWeeklySchedule()
+            showToast(`Jadwal balapan minggu ini (${res.count} balapan) berhasil dikirim ke Discord!`, "success")
+        } catch (err) {
+            showToast(err?.message || "Gagal mengirim jadwal minggu ini ke Discord", "error")
+        }
+    }
+
+    const handleSendOfficialResultsDiscord = async (scheduleId, sessionType) => {
+        if (!scheduleId) return
+        try {
+            await discord.sendRaceResults(scheduleId, sessionType || "race")
+            showToast("Hasil resmi balapan berhasil dikirim ke Discord!", "success")
+        } catch (err) {
+            showToast(err?.message || "Gagal mengirim hasil balapan ke Discord", "error")
+        }
+    }
+
+    const handleTestDiscordWebhook = async () => {
+        try {
+            await discord.testDiscordConnection()
+            showToast("Koneksi Discord Webhook berhasil! Periksa channel Discord Anda.", "success")
+        } catch (err) {
+            showToast(err?.message || "Gagal menghubungi Discord Webhook", "error")
+        }
+    }
+
     // Admin Access Gate state
     const ADM_PASS = config.public?.passAdm
     const isAuthenticated = ref(false)
@@ -4081,6 +4124,9 @@
             }
 
             showToast(`Hasil balapan (${validRows.length} posisi) berhasil disimpan!`)
+            if (notifyDiscordOnResultsSave.value && !isResultsProvisional.value) {
+                handleSendOfficialResultsDiscord(schedId, sessType)
+            }
             closeSaveResultsModal()
             await fetchSchedules()
             await fetchRaceResultsForSchedule()
@@ -6130,14 +6176,12 @@
                         :disabled="loading"
                         class="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-black dark:text-white rounded-lg font-bold transition disabled:opacity-50 cursor-pointer"
                     >
-                        <Icon name="material-symbols:refresh" :class="{ 'animate-spin': loading }" class="text-lg" />
                         <span>Refresh</span>
                     </button>
                     <button
                         @click="handleCreateCurrentTab"
                         class="flex items-center gap-2 px-4 py-2 bg-red-900 hover:bg-red-950 dark:bg-red-900 dark:hover:bg-red-950 text-white rounded-lg font-bold transition cursor-pointer shadow-md"
                     >
-                        <Icon name="material-symbols:add-circle-outline" class="text-lg" />
                         <span>{{ getCreateButtonLabel() }}</span>
                     </button>
                     <button
@@ -6145,7 +6189,6 @@
                         class="flex items-center gap-2 px-3.5 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-black dark:text-white rounded-lg font-bold transition cursor-pointer"
                         title="Keluar dari Admin"
                     >
-                        <Icon name="material-symbols:logout" class="text-lg" />
                         <span>Keluar</span>
                     </button>
                 </div>
@@ -6156,26 +6199,16 @@
                 <div class="flex items-center gap-3 w-full sm:w-auto">
                     <label class="text-xs sm:text-sm font-bold text-gray-500 dark:text-gray-400 shrink-0">Pilih Menu:</label>
                     <div class="relative w-full sm:w-80">
-                        <div class="absolute left-3 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-red-900 dark:text-red-400">
-                            <Icon :name="adminTabs.find(t => t.id === activeTab)?.icon || 'material-symbols:menu'" class="text-xl" />
-                        </div>
                         <select
                             v-model="activeTab"
-                            class="w-full pl-10 pr-10 py-2.5 appearance-none rounded-xl border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-900 text-black dark:text-white text-xs sm:text-sm font-bold shadow-xs focus:outline-none cursor-pointer"
+                            class="w-full pl-4 pr-10 py-2.5 appearance-none rounded-xl border-2 border-red-900 dark:border-red-900 bg-white dark:bg-slate-900 text-black dark:text-white text-xs sm:text-sm font-bold shadow-xs focus:outline-none cursor-pointer"
                         >
                             <option v-for="tab in adminTabs" :key="tab.id" :value="tab.id">
-                                {{ tab.label }} ({{ tab.count !== null && tab.count !== undefined ? tab.count : 0 }})
+                                {{ tab.label }}
                             </option>
                         </select>
                         <Icon name="material-symbols:keyboard-arrow-down-rounded" class="absolute right-3 top-1/2 -translate-y-1/2 text-xl text-gray-400 pointer-events-none" />
                     </div>
-                </div>
-
-                <div class="hidden sm:flex items-center gap-2">
-                    <span class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800 flex items-center gap-2 shadow-xs">
-                        <Icon :name="adminTabs.find(t => t.id === activeTab)?.icon || ''" class="text-base" />
-                        <span>{{ adminTabs.find(t => t.id === activeTab)?.label }}</span>
-                    </span>
                 </div>
             </div>
 
@@ -6210,6 +6243,16 @@
                                 : 'bg-white dark:bg-slate-900 text-black dark:text-gray-300 border-gray-300 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-800'"
                         >
                             Semua Data
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="handleSendWeeklyScheduleDiscord"
+                            :disabled="discordLoading"
+                            class="px-3 py-1.5 text-xs lg:text-sm font-bold rounded-lg transition cursor-pointer border flex items-center gap-1.5 bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] dark:text-[#7983F5] border-[#5865F2]/30 disabled:opacity-50"
+                            title="Kirim pengumuman jadwal balapan minggu ini ke channel Discord"
+                        >
+                            <span>Jadwal Minggu Ini ke Discord</span>
                         </button>
                     </div>
 
@@ -8449,7 +8492,6 @@
                                 class="px-3.5 py-2.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer border border-blue-200 dark:border-blue-800 flex items-center gap-1.5"
                                 title="Ubah nama tampilan sesi balapan (misal: Powerstage untuk Rally)"
                             >
-                                <Icon name="material-symbols:edit-note" class="text-base" />
                                 <span>Rename Sesi</span>
                             </button>
                             <button
@@ -8459,7 +8501,6 @@
                                 class="px-4 py-2.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-300 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer border border-amber-300 dark:border-amber-800 flex items-center gap-1.5"
                                 title="Pindahkan atau tukar hasil balapan ke sesi lain"
                             >
-                                <Icon name="material-symbols:swap-horiz" class="text-base" />
                                 <span>Pindahkan Sesi</span>
                             </button>
                             <button
@@ -8471,13 +8512,21 @@
                                 Hapus Hasil Sesi
                             </button>
                             <button
+                                v-if="hasExistingDbResults"
+                                type="button"
+                                @click="handleSendOfficialResultsDiscord(selectedScheduleId, selectedSessionType)"
+                                :disabled="discordLoading"
+                                class="px-4 py-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-xl font-bold text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+                                title="Kirim pengumuman hasil balapan ke channel Discord"
+                            >
+                                <span>Broadcast Hasil ke Discord</span>
+                            </button>
+                            <button
                                 type="button"
                                 @click="openSaveResultsModal"
                                 :disabled="savingResults || (isTeamEvent ? resultsRows.filter(r => r.team_id).length === 0 : resultsRows.filter(r => r.driver_id).length === 0)"
                                 class="px-6 py-2.5 bg-red-900 hover:bg-red-950 dark:bg-red-900 dark:hover:bg-red-950 text-white rounded-xl font-bold text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
                             >
-                                <Icon v-if="savingResults" name="material-symbols:refresh" class="animate-spin text-lg" />
-                                <Icon v-else name="material-symbols:save" class="text-lg" />
                                 <span>Simpan Hasil Balapan</span>
                             </button>
                         </div>
@@ -9141,7 +9190,19 @@
                     </div>
 
                     <div class="flex flex-col gap-1">
-                        <label class="text-black dark:text-white text-sm font-medium">Stream Link (YouTube URL)</label>
+                        <div class="flex items-center justify-between">
+                            <label class="text-black dark:text-white text-sm font-medium">Stream Link (YouTube URL)</label>
+                            <button
+                                v-if="scheduleFormData.stream_link && scheduleModalMode === 'edit'"
+                                type="button"
+                                @click="handleSendStreamDiscord(editingScheduleId)"
+                                :disabled="discordLoading"
+                                class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-[#5865F2] hover:bg-[#4752C4] text-white transition cursor-pointer disabled:opacity-50"
+                                title="Kirim alert siaran langsung ke Discord sekarang"
+                            >
+                                <span>Broadcast Stream ke Discord</span>
+                            </button>
+                        </div>
                         <input
                             v-model="scheduleFormData.stream_link"
                             type="url"
@@ -9877,6 +9938,19 @@
                         <p v-if="selectedEntryClassId !== 'ALL'" class="text-[11px] text-blue-600 dark:text-blue-400">
                             *Hasil kelas lain pada sesi ini tidak akan terhapus dan tetap terjaga di database.
                         </p>
+                    </div>
+
+                    <div v-if="!isResultsProvisional" class="flex items-center gap-2.5 p-3 rounded-xl bg-[#5865F2]/10 border border-[#5865F2]/30">
+                        <input
+                            id="discord-results-notify-checkbox"
+                            v-model="notifyDiscordOnResultsSave"
+                            type="checkbox"
+                            class="w-4 h-4 accent-[#5865F2] rounded cursor-pointer shrink-0"
+                        />
+                        <label for="discord-results-notify-checkbox" class="text-xs font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5 cursor-pointer select-none">
+                            <Icon name="simple-icons:discord" class="text-sm text-[#5865F2] shrink-0" />
+                            <span>Kirim notifikasi otomatis ke Discord saat hasil resmi disimpan</span>
+                        </label>
                     </div>
 
                     <div class="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-slate-800 pt-4 mt-2">
