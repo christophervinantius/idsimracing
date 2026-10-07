@@ -68,7 +68,11 @@
     const handleSendWeeklyScheduleDiscord = async () => {
         try {
             const res = await discord.sendWeeklySchedule()
-            showToast(`Jadwal balapan minggu ini (${res.count} balapan) berhasil dikirim ke Discord!`, "success")
+            if (res?.posted === false || !res?.count) {
+                showToast("Tidak ada balapan yang dijadwalkan minggu ini. Pengiriman ke Discord dilewati.", "info")
+            } else {
+                showToast(`Jadwal balapan minggu ini (${res.count} balapan) berhasil dikirim ke Discord!`, "success")
+            }
         } catch (err) {
             showToast(err?.message || "Gagal mengirim jadwal minggu ini ke Discord", "error")
         }

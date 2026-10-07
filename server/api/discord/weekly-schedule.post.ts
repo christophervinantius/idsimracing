@@ -73,22 +73,11 @@ export default defineEventHandler(async (event) => {
     const endFormatted = endOfWeek.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
 
     if (!schedules || schedules.length === 0) {
-        const emptyEmbed: DiscordEmbed = {
-            title: `🏁 THIS WEEK ON idsimracing.com (${startFormatted} - ${endFormatted})`,
-            description: "No races are scheduled for this week. Practice hard and see you next round!",
-            color: BRAND_COLOR,
-            footer: {
-                text: "idsimracing.com",
-                icon_url: `${siteUrl}/pwa-192x192.png`
-            },
-            timestamp: new Date().toISOString()
-        }
-
-        const res = await sendDiscordWebhook("schedule", { embeds: [emptyEmbed] })
         return {
-            success: res.success,
+            success: true,
+            posted: false,
             count: 0,
-            message: "No races found. Posted empty weekly notice."
+            message: "No races scheduled for this week. Skipped posting to Discord."
         }
     }
 
@@ -170,6 +159,7 @@ export default defineEventHandler(async (event) => {
 
     return {
         ...result,
+        posted: true,
         count: schedules.length
     }
 })
